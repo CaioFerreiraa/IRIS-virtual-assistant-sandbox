@@ -7,5 +7,15 @@ __pycache__/
 *.pyo
 *.pyd
 
+.idea/
+
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+.env
+.env.*
+
 .DS_Store
 Thumbs.db
