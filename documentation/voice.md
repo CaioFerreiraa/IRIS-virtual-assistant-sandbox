@@ -2,187 +2,70 @@
 
 ## Objetivo
 
-A voz será uma das principais formas de interação com a IRIS.
-
-O usuário poderá falar um comando e acompanhar o texto aparecendo no input enquanto ainda está falando.
-
-A transcrição parcial permitirá que a lista de módulos seja filtrada progressivamente.
+A IRIS oferece reconhecimento local de voz em dois níveis de desempenho. Os dois modos reutilizam o mesmo fluxo visual e o mesmo processador dos comandos digitados.
 
 ## Estado atual
 
-O reconhecimento de voz ainda não está implementado.
-
-O arquivo `services/speech_service.py` contém apenas métodos provisórios que lançam `NotImplementedError`.
-
-As tecnologias descritas neste documento representam a direção planejada e precisam ser validadas no projeto.
-
-## Tecnologias planejadas
-
-### RealtimeSTT
-
-O RealtimeSTT será responsável por organizar a captura contínua e fornecer callbacks de transcrição parcial e final.
-
-Ele será a camada de tempo real.
-
-Responsabilidades esperadas:
-
-- acessar o microfone;
-- detectar início de fala;
-- detectar silêncio;
-- gerar atualizações parciais;
-- estabilizar transcrição;
-- acionar callbacks;
-- coordenar o Faster-Whisper.
-
-### Faster-Whisper
-
-O Faster-Whisper será o mecanismo local de reconhecimento.
-
-Ele utiliza CTranslate2 para executar modelos Whisper de forma otimizada.
-
-Responsabilidades:
-
-- converter áudio em texto;
-- reconhecer português;
-- aplicar contexto inicial;
-- melhorar nomes próprios;
-- produzir transcrição final;
-- funcionar em CPU ou GPU conforme configuração.
-
-O Faster-Whisper sozinho não oferece a experiência completa de streaming palavra por palavra. O RealtimeSTT realizará a orquestração necessária.
-
-### VAD
-
-VAD significa detecção de atividade de voz.
-
-Ele ajuda a identificar:
-
-- quando a pessoa começou;
-- quando está falando;
-- quando parou;
-- quais trechos são silêncio.
-
-A IRIS também poderá usar limiar de volume e tempo de silêncio.
-
-### Wake word
-
-A palavra de ativação será:
+O código possui dois serviços funcionais:
 
 ```text
-IRIS
+SpeechService
+├── FasterWhisperSpeechService
+└── RealtimeSpeechService
 ```
 
-No primeiro MVP, ela poderá ser identificada pela transcrição parcial.
+- `FasterWhisperSpeechService`: modo básico, com captura por `sounddevice`, detecção simples de volume e transcrição ao final da frase;
+- `RealtimeSpeechService`: modo avançado, com RealtimeSTT, Faster-Whisper, VAD e atualizações parciais;
+- `SpeechServiceManager`: mantém uma única instância ativa, distribui eventos e encerra o microfone junto com a aplicação;
+- `VoiceSettingsService`: carrega e salva a configuração persistida.
 
-No futuro, poderá ser criado um modelo específico de wake word.
+As bibliotecas e modelos precisam estar instalados. O primeiro uso de um modelo pode exigir internet para download. A precisão e o desempenho ainda dependem de validação em diferentes microfones e computadores.
 
-## Experiência planejada
+## Modos
 
-Usuário fala:
+### Básico
 
-```text
-IRIS, abrir app Spotify
-```
+O modo básico é o padrão quando a voz é habilitada.
 
-Atualizações possíveis:
+Fluxo:
 
-```text
-IRIS
-IRIS abrir
-IRIS abrir app
-IRIS abrir app Spotify
-```
+1. o microfone entrega blocos de áudio;
+2. o limiar de volume identifica o início da fala;
+3. o tempo de silêncio encerra a frase;
+4. o áudio completo é enviado ao modelo Faster-Whisper já carregado;
+5. o texto final é interpretado como ativação ou comando.
 
-Após detectar “IRIS”, a interface deverá retirar a palavra de ativação da consulta.
+Esse modo usa menos componentes e não produz texto parcial.
 
-O input exibirá:
+### Tempo real
 
-```text
-abrir app Spotify
-```
+O modo avançado usa o RealtimeSTT com Faster-Whisper como mecanismo de transcrição.
 
-## Filtragem progressiva
+Por padrão, podem ser carregados:
 
-### Após “IRIS”
+- um modelo principal para o resultado final;
+- um modelo menor para atualizações parciais.
 
-O dropdown mostra todos os módulos, como quando o usuário clica no campo vazio.
+O intervalo parcial, o modelo em tempo real e o `beam size` permitem equilibrar latência e consumo. Intervalos muito baixos ou modelos grandes podem aumentar significativamente CPU, GPU e memória.
 
-### Após “abrir”
+## Palavra de ativação
 
-Mostra módulos e caminhos compatíveis com “abrir”.
+A palavra de ativação é “IRIS”. A implementação reconhece também a grafia “Íris”.
 
-### Após “abrir app”
+Ela é detectada na transcrição, sem exigir Porcupine, OpenWakeWord ou um modelo adicional. Portanto, a detecção depende da qualidade do Whisper e pode apresentar falsos positivos ou não reconhecer a palavra em ambientes ruidosos.
 
-Prioriza caminhos que contenham os dois termos.
+Antes da ativação, transcrições comuns são ignoradas. Depois da ativação:
 
-### Após “abrir app Spotify”
+- a palavra “IRIS” é retirada da consulta;
+- o input recebe foco;
+- a borda e a sombra ficam roxas;
+- o texto parcial substitui o texto provisório anterior;
+- as recomendações são recalculadas;
+- a dica “Enviar para concluir” fica visível.
 
-Prioriza caminhos com todos os termos.
+## Conclusão por voz
 
-## Comando direto
-
-Usuário fala:
-
-```text
-IRIS, Spotify
-```
-
-A consulta será:
-
-```text
-Spotify
-```
-
-A lista deve retornar módulos ou submódulos compatíveis.
-
-## Resultado parcial
-
-A transcrição parcial pode mudar.
-
-Exemplo:
-
-```text
-abrir a
-abrir app
-abrir app spot
-abrir app Spotify
-```
-
-Por isso, a interface deve substituir o texto provisório inteiro.
-
-Não deve fazer:
-
-```python
-input.value += partial_text
-```
-
-Deve fazer:
-
-```python
-input.value = partial_text
-```
-
-## Seleção
-
-O primeiro item do dropdown ficará pré-selecionado.
-
-Ele será executado quando:
-
-- o usuário falar “enviar”;
-- o VAD detectar fim da fala;
-- o usuário confirmar manualmente.
-
-Ter apenas um resultado não deve disparar imediatamente enquanto há fala ativa.
-
-## Palavra “enviar”
-
-Quando “enviar” aparecer no fim do comando:
-
-1. a palavra é retirada;
-2. a transcrição anterior é validada;
-3. o primeiro módulo é selecionado;
-4. a execução começa;
-5. o modo de voz é encerrado.
+O comando somente é executado automaticamente quando “enviar” aparece no final da fala.
 
 Exemplo:
 
@@ -190,188 +73,126 @@ Exemplo:
 IRIS abrir app Spotify enviar
 ```
 
-Comando utilizado:
+O fluxo separa:
 
 ```text
+Módulo: Abrir / App
+Argumento: Spotify
+```
+
+O silêncio produz uma transcrição final, mas mantém o modo de voz ativo. Isso permite conferir a recomendação e falar “enviar” em seguida. O usuário também pode confirmar manualmente pelo botão.
+
+## Recomendações progressivas
+
+O texto de voz passa pelo mesmo filtro visual usado na digitação. Quando o início da frase corresponde a um módulo executável, o restante é tratado como argumento.
+
+Exemplo progressivo:
+
+```text
+abrir
+abrir app
 abrir app Spotify
 ```
 
-## Visual planejado
+No último estado, a IRIS mantém `Abrir / App` como caminho e pesquisa `Spotify` no dropdown de argumentos. Um resultado único não é executado durante a fala.
 
-Ao ativar por voz:
+## Prompt e nomes próprios
 
-- o input recebe foco;
-- a borda fica roxa pastel;
-- a sombra aumenta;
-- ocorre animação de brilho;
-- aparece “‘Enviar’ para concluir”;
-- o texto é atualizado;
-- o dropdown permanece visível.
+Um prompt interno com o nome “IRIS” é sempre aplicado. Ele não aparece no formulário e não pode ser removido pelo usuário.
 
-Esse estado deve acontecer somente para voz.
-
-## Arquitetura recomendada
-
-```text
-services/voice/
-├── microphone_service.py
-├── realtime_transcription_service.py
-├── faster_whisper_service.py
-└── voice_settings.py
-
-core/
-├── voice_controller.py
-└── voice_events.py
-```
-
-Responsabilidades:
-
-```text
-MicrophoneService
-    captura áudio
-
-RealtimeTranscriptionService
-    produz texto parcial e final
-
-FasterWhisperService
-    configura e reutiliza o modelo
-
-VoiceController
-    controla estados, wake word e conclusão
-
-UI
-    apresenta eventos
-```
-
-## Estados
-
-Estados recomendados:
-
-- iniciando;
-- aguardando palavra de ativação;
-- escutando comando;
-- transcrevendo;
-- finalizando;
-- erro;
-- parado.
-
-## Ciclo de vida
-
-Ao iniciar:
-
-1. carregar configurações;
-2. inicializar worker;
-3. carregar modelo;
-4. abrir microfone;
-5. entrar em espera.
-
-Ao fechar:
-
-1. interromper captura;
-2. cancelar callbacks;
-3. encerrar worker;
-4. liberar microfone;
-5. liberar recursos.
-
-## Configurações previstas
-
-### Básicas
-
-- ativar voz;
-- idioma;
-- modelo;
-- modelo em tempo real;
-- dispositivo;
-- tipo de computação;
-- microfone.
-
-### Captura
-
-- limiar de volume;
-- tempo de silêncio;
-- tempo máximo;
-- intervalo parcial;
-- VAD.
-
-### Reconhecimento
+As configurações permitem acrescentar:
 
 - nomes próprios;
 - contexto;
-- hotwords;
-- beam size;
-- temperatura;
-- texto anterior.
+- palavras importantes.
 
-Nem toda opção precisa ser exibida ao usuário comum.
+Esses valores são combinados com o prompt fixo. No modo básico, palavras importantes também são encaminhadas como `hotwords` do Faster-Whisper.
 
-## Prompt fixo
+## Configurações disponíveis
 
-O prompt sempre deverá conter contexto para reconhecer “Íris” e “IRIS”.
+A rota de configurações possui as abas:
 
-Esse trecho será interno e não editável.
+- configurações gerais;
+- configuração de voz;
+- senhas.
 
-O usuário poderá acrescentar nomes próprios e contexto sem remover a base.
+Somente voz possui formulário completo nesta etapa.
 
-## Desempenho
+Grupos configuráveis:
 
-Estratégia inicial:
+- ativação, modo, idioma e microfone;
+- modelo final e modelo em tempo real;
+- CPU, CUDA e tipo de computação;
+- taxa de amostragem, limiar, silêncio e duração mínima;
+- VAD, Silero e WebRTC;
+- intervalo parcial e `beam size`;
+- temperatura e uso de texto anterior no modo básico;
+- nomes próprios, contexto e palavras importantes.
 
-- modelo pequeno para parcial;
-- modelo maior para final;
-- CPU com `int8`;
-- GPU opcional;
-- intervalo parcial moderado.
+O padrão seguro mantém a voz desativada. Ao habilitar, o padrão de baixo custo é CPU, `int8`, modelo `small` para o resultado final e `tiny` para tempo real.
 
-Atualizações frequentes demais podem aumentar consumo e travar a interface.
+## Ciclo de vida
 
-## Threads
+Ao iniciar a aplicação:
 
-Callbacks de áudio não devem atualizar controles Flet diretamente sem encaminhamento seguro.
+1. as configurações são carregadas do SQLite;
+2. o gerenciador de voz é criado;
+3. se a voz estiver habilitada, o backend é iniciado em uma thread;
+4. o modelo é carregado uma vez e reutilizado;
+5. o microfone entra em espera.
 
-O modelo não deve ser carregado dentro de cada transcrição.
+Ao salvar alterações, o backend anterior é encerrado e a nova configuração é preparada. Ao fechar ou desconectar a página Flet, o microfone e o worker são encerrados.
 
-A UI não deve bloquear enquanto o reconhecimento trabalha.
+## Threads e interface
+
+Captura, carregamento de modelo e transcrição ficam em serviços, fora da camada visual. Eventos vindos dos workers são encaminhados pelo agendador da página Flet antes de modificar controles.
+
+A interface não recebe áudio bruto e os serviços não importam componentes visuais.
 
 ## Privacidade
 
-O objetivo é processar áudio localmente.
+O áudio é processado localmente e não é salvo em logs ou arquivos pela IRIS.
 
-Isso reduz a necessidade de enviar voz para terceiros.
+Internet ainda pode ser necessária para:
 
-Ainda assim:
+- instalar dependências;
+- baixar um modelo pela primeira vez.
 
-- modelos podem precisar ser baixados;
-- módulos executados podem usar internet;
-- logs não devem guardar áudio bruto;
-- gravações temporárias devem ser removidas;
-- o usuário deve poder desativar o microfone.
+Módulos executados depois da transcrição podem possuir integrações externas próprias.
 
-## Erros
+## Erros tratados
 
-A interface deve tratar:
+O fluxo apresenta mensagens para:
 
-- microfone não encontrado;
+- dependências ausentes;
+- microfone indisponível;
 - permissão negada;
-- modelo ausente;
-- falha no download;
-- memória insuficiente;
-- dispositivo incompatível;
-- worker encerrado;
-- áudio inválido;
-- transcrição vazia.
+- falha ao carregar ou baixar o modelo;
+- configuração inválida;
+- comando falado sem módulo compatível.
+
+Falhas são apresentadas por toaster e não devem derrubar a janela.
+
+## Limitações atuais
+
+- a palavra de ativação é reconhecida pela transcrição, não por um detector dedicado;
+- o modo básico não mostra texto durante a fala;
+- a enumeração visual dos microfones ainda usa índice informado manualmente;
+- CUDA depende das bibliotecas compatíveis instaladas na máquina;
+- modelos podem consumir vários gigabytes;
+- precisão, latência e falsos positivos ainda precisam de testes práticos ampliados;
+- não há síntese de voz.
 
 ## Validação
 
-Testes futuros devem medir:
+Os testes automatizados cobrem:
 
-- tempo até texto parcial;
-- tempo até texto final;
-- precisão de “IRIS”;
-- falsos positivos;
-- ruído;
-- nomes próprios;
-- comando curto;
-- comando longo;
-- CPU;
-- encerramento;
-- impacto na interface.
+- remoção da palavra de ativação;
+- bloqueio antes de “IRIS”;
+- conclusão por “enviar”;
+- preservação do último comando;
+- prompt fixo combinado com contexto;
+- validação e persistência das configurações;
+- separação entre caminho de módulo e argumento.
+
+Testes com microfone e modelos reais são manuais, pois dependem de hardware, permissões e downloads.

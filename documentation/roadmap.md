@@ -27,7 +27,7 @@ Montagem da interface
 Carregamento da rota inicial
 ```
 
-A voz, o scheduler e processos HTTP externos ainda não são iniciados automaticamente.
+O gerenciador de voz é preparado automaticamente e inicia o backend quando a preferência está habilitada. O scheduler e processos HTTP externos ainda não são iniciados automaticamente.
 
 ## Fluxo atual de comando
 
@@ -164,7 +164,7 @@ Um contrato futuro deverá definir:
 - inicialização;
 - encerramento.
 
-## Fluxo planejado de voz
+## Fluxo atual de voz
 
 ```text
 Microfone
@@ -215,18 +215,20 @@ A palavra “IRIS” ativa a interação e é retirada do comando enviado para p
 
 ## Próximo marco: voz
 
-- [ ] Instalar e validar RealtimeSTT.
-- [ ] Instalar Faster-Whisper.
-- [ ] Criar serviço de captura.
-- [ ] Criar transcrição parcial.
-- [ ] Detectar “IRIS”.
-- [ ] Atualizar input por callback.
-- [ ] Atualizar dropdown progressivamente.
-- [ ] Concluir por silêncio.
-- [ ] Concluir por “enviar”.
-- [ ] Criar configurações de voz.
-- [ ] Tratar desligamento do microfone.
+- [x] Integrar RealtimeSTT.
+- [x] Integrar Faster-Whisper.
+- [x] Criar serviço de captura básico.
+- [x] Criar transcrição parcial em tempo real.
+- [x] Detectar “IRIS” pela transcrição.
+- [x] Atualizar input por callback seguro.
+- [x] Atualizar dropdown progressivamente.
+- [x] Estabilizar transcrição por silêncio.
+- [x] Concluir por “enviar”.
+- [x] Criar configurações de voz persistidas.
+- [x] Tratar desligamento do microfone.
 - [ ] Testar desempenho em CPU.
+- [ ] Medir precisão da ativação e falsos positivos com usuários.
+- [ ] Listar microfones disponíveis no formulário.
 
 ## Próximo marco: módulos HTTP
 

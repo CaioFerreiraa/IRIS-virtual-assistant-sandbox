@@ -133,9 +133,7 @@ A plataforma deverá apresentar essas dependências, mas o contrato definitivo d
 
 ## Reconhecimento de voz
 
-O reconhecimento de voz em tempo real ainda não está implementado no código atual.
-
-A proposta utiliza RealtimeSTT com Faster-Whisper, mas a experiência final dependerá de validação prática.
+O reconhecimento de voz possui modo básico com Faster-Whisper e modo em tempo real com RealtimeSTT. A experiência final ainda depende de validação prática em diferentes máquinas.
 
 Limitações esperadas:
 
@@ -146,6 +144,8 @@ Limitações esperadas:
 - consumo de CPU ou GPU;
 - necessidade de configurar o microfone;
 - risco de falsos positivos na palavra de ativação.
+
+A voz vem desativada por padrão. O primeiro uso pode baixar modelos grandes. A lista de microfones ainda não é descoberta pela interface; um índice pode ser informado manualmente.
 
 ## Rotinas
 

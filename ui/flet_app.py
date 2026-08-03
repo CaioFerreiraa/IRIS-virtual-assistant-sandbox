@@ -12,6 +12,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from database.db import SessionLocal
 from repositories.module_repository import ModuleRepository
+from services.speech_service_manager import SpeechServiceManager
+from services.voice_settings_service import VoiceSettingsService
 from ui.shared.components.header import build_header
 from ui.shared.components.sidebar import build_sidebar
 from ui.shared.components.toaster_handler import ToasterHandler
@@ -57,15 +59,23 @@ def get_default_page(page: ft.Page):
     toaster_handler.mount()
     fatal_error_handler = FatalErrorHandler(page, toaster_handler)
     fatal_error_handler.install()
+    speech_manager = SpeechServiceManager()
 
     app_container = fatal_error_handler.guard_call(
         get_app_container,
         page,
         fatal_error_handler,
         toaster_handler,
+        speech_manager,
         fallback=ft.Container(expand=True, bgcolor=APP_BACKGROUND),
     )
     fatal_error_handler.guard_call(page.add, app_container)
+    page.on_disconnect = lambda _: speech_manager.shutdown()
+    page.on_close = lambda _: speech_manager.shutdown()
+    fatal_error_handler.guard_call(
+        speech_manager.prepare,
+        VoiceSettingsService(speech_manager).load(),
+    )
     return page
 
 
@@ -73,6 +83,7 @@ def get_app_container(
     page: ft.Page,
     fatal_error_handler: FatalErrorHandler,
     toaster_handler: ToasterHandler,
+    speech_manager: SpeechServiceManager,
 ):
     header_slot = ft.Container()
     sidebar_slot = ft.Container()
@@ -96,6 +107,7 @@ def get_app_container(
     def render_layout(e=None):
         current_route = page.route or "/"
         module_options = load_module_options()
+        speech_manager.clear_subscribers()
         header_slot.content = build_header(
             current_route=current_route,
             on_navigate=fatal_error_handler.guard_callback(navigate),
@@ -109,6 +121,7 @@ def get_app_container(
             current_route,
             module_options=module_options,
             toaster_handler=toaster_handler,
+            speech_manager=speech_manager,
         )
 
         if page.controls:

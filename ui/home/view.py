@@ -1,9 +1,12 @@
+import asyncio
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import flet as ft
 import ui.home as ui
 from services.home_service import HomeService
+from services.speech_service import SpeechEvent, SpeechEventKind
+from services.speech_service_manager import SpeechServiceManager
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, SURFACE
 from ui.theme.fonts import TITLE_FONT
@@ -16,9 +19,10 @@ DROPDOWN_HEIGHT = 360
 def build_home_view(
     module_options: Sequence[ui.dropdowns.ModuleOption] | None = None,
     toaster_handler: ToasterHandler | None = None,
+    speech_manager: SpeechServiceManager | None = None,
 ) -> ft.Container:
     # Cria a tela home conectando view, dropdowns e servico.
-    return HomeViewState(module_options, toaster_handler).build()
+    return HomeViewState(module_options, toaster_handler, speech_manager).build()
 
 
 class HomeViewState:
@@ -26,13 +30,17 @@ class HomeViewState:
         self,
         module_options: Sequence[ui.dropdowns.ModuleOption] | None = None,
         toaster_handler: ToasterHandler | None = None,
+        speech_manager: SpeechServiceManager | None = None,
     ):
         # Guarda dependencias gerais da home.
         self.module_options = tuple(ui.dropdowns.sort_modules(module_options or ()))
         self.executable_lookup = ui.dropdowns.module_executable_lookup(self.module_options)
         self.home_service = HomeService()
         self.toaster_handler = toaster_handler
+        self.speech_manager = speech_manager
         self.is_loading = False
+        self.is_voice_active = False
+        self._argument_capability_cache: dict[str, bool] = {}
         self.controls: HomeViewControls | None = None
         self.dropdowns: ui.dropdowns.HomeDropdowns | None = None
 
@@ -64,6 +72,8 @@ class HomeViewState:
             update_control=self.update_if_ready,
             dropdown_height=DROPDOWN_HEIGHT,
         )
+        if self.speech_manager is not None:
+            self.speech_manager.subscribe(self.on_speech_event)
         return self.controls.root
 
     def _controls(self) -> "HomeViewControls":
@@ -102,6 +112,84 @@ class HomeViewState:
         self.hide_dropdowns()
         self.update_if_ready(controls.command_input_field)
         self.update_if_ready(controls.argument_input_field)
+        if self.speech_manager is not None:
+            self.speech_manager.deactivate_command()
+
+    def on_speech_event(self, event: SpeechEvent) -> None:
+        controls = self._controls()
+        try:
+            page = controls.root.page
+        except RuntimeError:
+            return
+        if page is not None:
+            page.run_task(self._apply_speech_event, event)
+
+    async def _apply_speech_event(self, event: SpeechEvent) -> None:
+        controls = self._controls()
+        if event.kind == SpeechEventKind.ACTIVATED:
+            self.is_voice_active = True
+            controls.voice_hint.visible = True
+            ui.input.set_input_shell_voice_active(controls.input_shell, True, pulse=True)
+            self.update_if_ready(controls.input_shell)
+            self.update_if_ready(controls.voice_hint)
+            await controls.command_input_field.focus()
+            await asyncio.sleep(0.35)
+            if self.is_voice_active:
+                ui.input.set_input_shell_voice_active(controls.input_shell, True)
+                self.update_if_ready(controls.input_shell)
+            return
+
+        if event.kind in {SpeechEventKind.PARTIAL, SpeechEventKind.FINAL}:
+            self._apply_voice_text(event.text)
+            if event.should_submit:
+                self._submit_voice_command(event.text)
+            return
+
+        if event.kind in {SpeechEventKind.DEACTIVATED, SpeechEventKind.ERROR, SpeechEventKind.STOPPED}:
+            self.is_voice_active = False
+            controls.voice_hint.visible = False
+            ui.input.set_input_shell_voice_active(controls.input_shell, False)
+            self.update_if_ready(controls.voice_hint)
+            self.update_if_ready(controls.input_shell)
+            if event.kind == SpeechEventKind.ERROR and self.toaster_handler:
+                self.toaster_handler.show_error(event.message, title="Voz indisponível")
+
+    def _apply_voice_text(self, text: str) -> None:
+        controls = self._controls()
+        controls.command_input_field.value = text
+        self._dropdowns().clear_selected_module()
+        self.sync_clear_button_visibility()
+        self.update_if_ready(controls.command_input_field)
+
+        resolved = ui.dropdowns.resolve_voice_module(text, self.module_options)
+        if resolved is None:
+            self._dropdowns().show_module_suggestions(text)
+            return
+
+        module_path, argument = resolved
+        if argument and self._module_has_arguments(module_path):
+            self._dropdowns().open_argument_dropdown(module_path)
+            controls.argument_input_field.value = argument
+            self._dropdowns().show_argument_suggestions(argument)
+            self.update_if_ready(controls.argument_input_field)
+            return
+
+        self._dropdowns().show_module_suggestions(module_path)
+
+    def _submit_voice_command(self, text: str) -> None:
+        resolved = ui.dropdowns.resolve_voice_module(text, self.module_options)
+        if resolved is None:
+            self.show_module_error("Não encontrei um módulo compatível com o comando falado.")
+            return
+
+        module_path, argument = resolved
+        self._dropdowns().selected_module_path = module_path
+        self.send_request(argument=argument or None)
+
+    def _module_has_arguments(self, module_path: str) -> bool:
+        if module_path not in self._argument_capability_cache:
+            self._argument_capability_cache[module_path] = self.home_service.module_has_arguments(module_path)
+        return self._argument_capability_cache[module_path]
 
     def keep_dropdowns_open(self, e=None) -> None:
         # Mantem cliques internos dos dropdowns sem fechar nada.
@@ -138,6 +226,17 @@ class HomeViewState:
         if self.is_loading:
             return
 
+        if self.is_voice_active:
+            resolved = ui.dropdowns.resolve_voice_module(
+                controls.command_input_field.value or "",
+                self.module_options,
+            )
+            if resolved is not None:
+                module_path, spoken_argument = resolved
+                self._dropdowns().selected_module_path = module_path
+                if argument is None and spoken_argument:
+                    argument = spoken_argument
+
         try:
             module_path = self.validate_module_request()
         except Exception as error:
@@ -170,6 +269,8 @@ class HomeViewState:
             self.is_loading = False
             ui.input.set_send_button_loading(controls.send_button, self.is_loading)
             self.update_if_ready(controls.send_button)
+            if self.speech_manager is not None:
+                self.speech_manager.deactivate_command()
 
     def show_module_success(self, result: dict) -> None:
         if self.toaster_handler is None:
@@ -235,7 +336,8 @@ class HomeViewState:
     def on_input_shell_hover(self, e) -> None:
         # Atualiza o visual do shell quando o mouse entra ou sai.
         controls = self._controls()
-        ui.input.set_input_shell_hovered(controls.input_shell, str(e.data).lower() == "true")
+        if not self.is_voice_active:
+            ui.input.set_input_shell_hovered(controls.input_shell, str(e.data).lower() == "true")
         self.update_if_ready(controls.input_shell)
 
     def sync_clear_button_visibility(self) -> None:
@@ -271,6 +373,7 @@ class HomeViewControls:
     send_button: ft.Container
     clear_button: ft.Container
     input_shell: ft.Container
+    voice_hint: ft.Container
     module_panel: ft.Container
     argument_panel: ft.Container
     dropdown_stack: ft.Stack
@@ -303,8 +406,9 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
         on_tap_outside=callbacks.on_command_tap_outside,
     )
     send_button = ui.input.build_send_button(callbacks.on_send)
+    voice_hint = ui.input.build_voice_hint()
     clear_button = ui.input.build_clear_button(callbacks.on_clear_command)
-    command_input = ui.input.build_command_input(command_input_field, clear_button, send_button)
+    command_input = ui.input.build_command_input(command_input_field, clear_button, send_button, voice_hint)
     input_shell = ui.input.build_input_shell(command_input)
     input_shell.on_click = callbacks.on_input_shell_click
     input_shell.on_hover = callbacks.on_input_shell_hover
@@ -323,6 +427,7 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
         send_button=send_button,
         clear_button=clear_button,
         input_shell=input_shell,
+        voice_hint=voice_hint,
         module_panel=module_panel,
         argument_panel=argument_panel,
         dropdown_stack=dropdown_stack,

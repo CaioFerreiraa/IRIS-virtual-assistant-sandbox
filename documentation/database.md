@@ -124,6 +124,22 @@ Campos:
 
 O log pode representar uma execução manual ou uma ação vinculada a rotina.
 
+### VoiceSetting
+
+Armazena a configuração local do reconhecimento de voz em um registro singleton de ID `1`.
+
+Grupos de campos:
+
+- ativação e modo;
+- modelos final e em tempo real;
+- idioma, dispositivo e precisão;
+- microfone e captura;
+- VAD e sensibilidades;
+- parâmetros de reconhecimento;
+- nomes próprios, contexto e palavras importantes.
+
+O prompt interno da palavra “IRIS” não é persistido. Ele permanece fixo no código e é combinado em memória com o contexto configurável.
+
 ## Relacionamentos
 
 ```text
@@ -220,9 +236,9 @@ Logs não devem armazenar:
 - conteúdo sensível desnecessário;
 - cabeçalhos de autenticação.
 
-## Configurações futuras
+## Configurações
 
-A tela de configurações exigirá persistência para recursos como:
+A tela de voz já persiste:
 
 - idioma de voz;
 - modelo de transcrição;
@@ -231,9 +247,9 @@ A tela de configurações exigirá persistência para recursos como:
 - tempo de silêncio;
 - nomes próprios;
 - opções de desempenho;
-- preferências visuais.
+- opções de desempenho e reconhecimento.
 
-Esses modelos ainda não estão definidos.
+Preferências visuais e outras configurações gerais ainda não possuem modelo definido.
 
 ## Credenciais
 

@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import flet as ft
 
-from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, SURFACE, SURFACE_MUTED, TEXT_PRIMARY, TEXT_SECONDARY
+from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE, SURFACE_MUTED, TEXT_PRIMARY, TEXT_SECONDARY
 
 
 INPUT_SHELL_HOVER_BG = "#F5F5F5"
@@ -107,10 +107,29 @@ def set_input_shell_hovered(input_shell: ft.Container, is_hovered: bool) -> None
         input_shell.border = ft.Border.all(1, BORDER)
 
 
+def set_input_shell_voice_active(input_shell: ft.Container, is_active: bool, *, pulse: bool = False) -> None:
+    # Indica visualmente que o texto atual veio do comando de voz.
+    if not is_active:
+        input_shell.bgcolor = SURFACE
+        input_shell.border = ft.Border.all(1, BORDER)
+        input_shell.shadow = ft.BoxShadow(blur_radius=24, color="#16000000", offset=ft.Offset(0, 10))
+        return
+
+    input_shell.bgcolor = SURFACE
+    input_shell.border = ft.Border.all(2 if pulse else 1.5, PASTEL_PURPLE)
+    input_shell.shadow = ft.BoxShadow(
+        spread_radius=3 if pulse else 1,
+        blur_radius=42 if pulse else 26,
+        color="#70C3A0DE" if pulse else "#45C3A0DE",
+        offset=ft.Offset(0, 7),
+    )
+
+
 def build_command_input(
     command_input_field: ft.TextField,
     clear_button: ft.Container,
     send_button: ft.Container,
+    voice_hint: ft.Container | None = None,
 ) -> ft.Container:
     # Agrupa icone, campo principal e botao de envio.
     return ft.Container(
@@ -125,7 +144,20 @@ def build_command_input(
                 ft.Icon(icon=ft.Icons.EXPLORE, color=PASTEL_DARK_PURPLE, size=28),
                 command_input_field,
                 clear_button,
-                send_button,
+                ft.Stack(
+                    width=150,
+                    height=56,
+                    clip_behavior=ft.ClipBehavior.NONE,
+                    controls=[
+                        ft.Container(right=0, top=10, content=send_button),
+                        voice_hint
+                        or ft.Container(
+                            visible=False,
+                            right=0,
+                            top=-20,
+                        ),
+                    ],
+                ),
             ],
         ),
     )
@@ -140,5 +172,20 @@ def build_input_shell(command_input: ft.Container) -> ft.Container:
         border=ft.Border.all(1, BORDER),
         border_radius=28,
         shadow=ft.BoxShadow(blur_radius=24, color="#16000000", offset=ft.Offset(0, 10)),
+        animate=ft.Animation(280, ft.AnimationCurve.EASE_OUT),
         content=command_input,
+    )
+
+
+def build_voice_hint() -> ft.Container:
+    # Overlay absoluto acima do botão de envio, exibido somente durante voz.
+    return ft.Container(
+        visible=False,
+        right=0,
+        top=-20,
+        padding=ft.Padding(left=10, top=5, right=10, bottom=5),
+        bgcolor=PASTEL_DARK_PURPLE,
+        border_radius=12,
+        shadow=ft.BoxShadow(blur_radius=12, color="#28000000", offset=ft.Offset(0, 4)),
+        content=ft.Text("“Enviar” para concluir", size=11, color=ft.Colors.WHITE, no_wrap=True),
     )

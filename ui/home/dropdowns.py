@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
+import re
 
 import flet as ft
 import ui.home as ui
@@ -176,6 +177,37 @@ def filter_modules(query: str, module_options: Sequence[ModuleOption]) -> list[M
             matches.append(module_option)
 
     return matches[:6]
+
+
+def resolve_voice_module(
+    query: str,
+    module_options: Sequence[ModuleOption],
+) -> tuple[str, str] | None:
+    """Encontra o caminho executável no começo da fala e separa seu argumento."""
+    original_words = [word for word in re.split(r"\s+", query.strip()) if word]
+    normalized_words = [ui.text_utils.normalize(word).strip(".,!?;:") for word in original_words]
+    candidates: list[tuple[int, str, str]] = []
+
+    for module_option in module_options:
+        if not option_is_executable(module_option):
+            continue
+        module_path = option_path(module_option)
+        path_words = [
+            word
+            for word in ui.text_utils.normalize(module_path.replace("/", " ")).split()
+            if word
+        ]
+        if len(path_words) > len(normalized_words):
+            continue
+        if normalized_words[: len(path_words)] != path_words:
+            continue
+        argument = " ".join(original_words[len(path_words):]).strip(" ,.!?;:")
+        candidates.append((len(path_words), module_path, argument))
+
+    if not candidates:
+        return None
+    _, module_path, argument = max(candidates, key=lambda candidate: candidate[0])
+    return module_path, argument
 
 
 def module_executable_lookup(module_options: Sequence[ModuleOption]) -> dict[str, bool]:

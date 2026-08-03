@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from database.db import Base
@@ -82,3 +82,34 @@ class Log(Base):
 
     module = relationship("Module", back_populates="logs")
     routine = relationship("Routine", back_populates="logs")
+
+
+class VoiceSetting(Base):
+    __tablename__ = "voice_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    enabled = Column(Boolean, nullable=False, default=False)
+    mode = Column(String(20), nullable=False, default="basic")
+    language = Column(String(10), nullable=False, default="pt")
+    model_size = Column(String(100), nullable=False, default="small")
+    realtime_model_size = Column(String(100), nullable=False, default="tiny")
+    device = Column(String(20), nullable=False, default="cpu")
+    compute_type = Column(String(30), nullable=False, default="int8")
+    input_device_index = Column(Integer, nullable=True)
+    sample_rate = Column(Integer, nullable=False, default=16000)
+    audio_threshold = Column(Float, nullable=False, default=0.025)
+    silence_duration = Column(Float, nullable=False, default=1.2)
+    min_recording_duration = Column(Float, nullable=False, default=0.5)
+    realtime_processing_pause = Column(Float, nullable=False, default=0.3)
+    beam_size = Column(Integer, nullable=False, default=5)
+    realtime_beam_size = Column(Integer, nullable=False, default=3)
+    batch_size = Column(Integer, nullable=False, default=0)
+    realtime_batch_size = Column(Integer, nullable=False, default=0)
+    vad_filter = Column(Boolean, nullable=False, default=True)
+    silero_sensitivity = Column(Float, nullable=False, default=0.4)
+    webrtc_sensitivity = Column(Integer, nullable=False, default=3)
+    proper_names = Column(Text, nullable=False, default="")
+    context = Column(Text, nullable=False, default="")
+    hotwords = Column(Text, nullable=False, default="")
+    condition_on_previous_text = Column(Boolean, nullable=False, default=True)
+    temperature = Column(Float, nullable=False, default=0.0)

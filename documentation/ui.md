@@ -166,7 +166,7 @@ A ausência de feedback não deve ser usada como indicação de sucesso.
 
 ## Voz na interface
 
-Quando a voz for implementada:
+Quando a voz está habilitada:
 
 1. “IRIS” ativa o input;
 2. o campo recebe foco;
@@ -174,7 +174,7 @@ Quando a voz for implementada:
 4. o texto parcial aparece;
 5. o dropdown é atualizado;
 6. a dica “‘Enviar’ para concluir” aparece sobre o botão;
-7. o fim da fala dispara validação;
+7. a palavra “enviar” dispara a validação, enquanto o silêncio estabiliza o texto;
 8. o visual retorna ao normal.
 
 Esse brilho deve acontecer apenas na ativação por voz.
@@ -200,7 +200,9 @@ A tela será dividida em:
 - configuração de voz;
 - senhas.
 
-A primeira seção com conteúdo completo deverá ser voz.
+A seção de voz possui o primeiro formulário completo. Configurações gerais e senhas permanecem como placeholders explícitos.
+
+O formulário de voz permite escolher modo básico ou tempo real, modelos, idioma, microfone, CPU ou CUDA, precisão, captura, VAD e opções de reconhecimento. O prompt fixo de “IRIS” não é exibido.
 
 Salvamentos devem usar toaster para indicar sucesso ou erro.
 

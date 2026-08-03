@@ -164,7 +164,7 @@ def _build_user_button(
 ) -> ft.Container:
     is_active = current_route == "/settings"
 
-    icon_control = ft.Icon( icon=ft.Icons.PERSON_OUTLINE_ROUNDED,size=21,color=PASTEL_DARK_PURPLE)
+    icon_control = ft.Icon( icon=ft.Icons.SETTINGS_OUTLINED,size=21,color=PASTEL_DARK_PURPLE)
 
     def on_hover(e: ft.ControlEvent):
         hovering = bool(e.data)
@@ -173,9 +173,6 @@ def _build_user_button(
             PASTEL_PURPLE
             if hovering or is_active
             else ft.Colors.with_opacity(0.45, PASTEL_PURPLE)
-        )
-        icon_control.color = (
-            ft.Colors.WHITE if hovering else TEXT_PRIMARY
         )
 
         e.control.update()

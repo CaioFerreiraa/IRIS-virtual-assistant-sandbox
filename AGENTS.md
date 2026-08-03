@@ -54,6 +54,10 @@ Atualize a documentação quando uma alteração modificar comportamento, arquit
 
 ## 5. Documentos obrigatórios por área
 
+Atenção a documentação pode ser alterada ou estar incompleta, ou desatualizada na fase atual de desenvolvimento.
+Caso seja relevante, e tenha mudanças de regras no meio do desenvolvimento altere a documentação.
+
+
 Leia os documentos relacionados antes de trabalhar:
 
 - Visão geral: [`documentation/introduction.md`](documentation/introduction.md)

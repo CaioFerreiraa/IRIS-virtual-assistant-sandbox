@@ -26,9 +26,9 @@ O fluxo atual de inicialização é:
 4. o Flet inicia a aplicação;
 5. `ui/flet_app.py` monta janela, tema, header, sidebar e área de conteúdo;
 6. a rota inicial carrega a tela principal;
-7. módulos registrados no banco são transformados em opções de pesquisa.
-
-Atualmente o reconhecimento de voz e serviços externos persistentes não são iniciados junto com a aplicação.
+7. módulos registrados no banco são transformados em opções de pesquisa;
+8. configurações de voz são carregadas;
+9. o gerenciador de voz fica pronto e inicia o backend em uma thread quando a voz está habilitada.
 
 ## Camadas e responsabilidades
 
@@ -180,19 +180,21 @@ O fluxo atual de um comando digitado é:
 10. a interface apresenta um toaster;
 11. o histórico pode exibir a execução.
 
-## Fluxo planejado de voz
+## Fluxo atual de voz
 
-O fluxo planejado é:
+O fluxo implementado é:
 
 1. o serviço de voz permanece aguardando a palavra “IRIS”;
 2. a palavra de ativação coloca a interface em modo de escuta;
 3. a transcrição parcial atualiza o input;
 4. cada atualização filtra os módulos;
 5. o primeiro resultado é pré-selecionado;
-6. o usuário encerra falando “enviar” ou ficando em silêncio;
+6. o silêncio estabiliza o texto e o usuário encerra falando “enviar” ou confirmando manualmente;
 7. o texto final é validado;
 8. o mesmo fluxo de execução manual é reutilizado;
 9. a interface volta ao estado de espera.
+
+O modo básico entrega somente texto final. O modo em tempo real também entrega texto parcial. A palavra de ativação é identificada pela transcrição e ainda não usa um detector dedicado.
 
 A voz não deve criar um segundo processador de comandos. Entrada manual e entrada por voz devem convergir para o mesmo fluxo.
 
