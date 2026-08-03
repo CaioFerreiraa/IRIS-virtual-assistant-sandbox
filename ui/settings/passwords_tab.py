@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import flet as ft
 
-from ui.theme.colors import BORDER, SURFACE_MUTED, TEXT_PRIMARY, TEXT_SECONDARY
+from ui.theme.colors import BORDER, BLUE_GREY, TEXT_PRIMARY, TEXT_SECONDARY
 
 
 def build_passwords_tab() -> ft.Container:
     return ft.Container(
         padding=24,
-        bgcolor=SURFACE_MUTED,
+        bgcolor=BLUE_GREY,
         border=ft.Border.all(1, BORDER),
         border_radius=8,
         content=ft.Column(

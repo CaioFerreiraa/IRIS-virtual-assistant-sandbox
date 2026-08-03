@@ -13,7 +13,7 @@ from ui.theme.colors import (
     BORDER,
     PASTEL_DARK_PURPLE,
     PASTEL_PURPLE,
-    SURFACE_MUTED,
+    BLUE_GREY,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
@@ -165,7 +165,7 @@ class VoiceSettingsTab:
     def _build_status_card(self) -> ft.Container:
         return ft.Container(
             padding=ft.Padding(left=14, top=10, right=14, bottom=10),
-            bgcolor=SURFACE_MUTED,
+            bgcolor=BLUE_GREY,
             border=ft.Border.all(1, BORDER),
             border_radius=8,
             content=ft.Row(

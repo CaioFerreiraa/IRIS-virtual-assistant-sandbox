@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import flet as ft
 
-from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE, SURFACE_MUTED, TEXT_PRIMARY, TEXT_SECONDARY
+from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE, BLUE_GREY, TEXT_PRIMARY, TEXT_SECONDARY
 
 
 INPUT_SHELL_HOVER_BG = "#F5F5F5"
@@ -49,7 +49,7 @@ def build_argument_field(on_submit: Callable, on_change: Callable, on_tap_outsid
         on_submit=on_submit,
         on_change=on_change,
         on_tap_outside=on_tap_outside,
-        bgcolor=SURFACE_MUTED,
+        bgcolor=BLUE_GREY,
         border_radius=12,
     )
 

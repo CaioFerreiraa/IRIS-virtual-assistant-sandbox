@@ -84,6 +84,7 @@ A base atual já possui:
 - abertura de URLs de teste;
 - registro de sucesso e erro;
 - tela de histórico;
+- tela interna de documentação com leitura de Markdown;
 - componentes compartilhados, como toaster, tabela e diálogo;
 - estrutura inicial para rotinas;
 - estrutura inicial para FastAPI;
@@ -97,8 +98,7 @@ Ainda estão em desenvolvimento ou planejamento:
 - scheduler de rotinas;
 - cofre de credenciais;
 - distribuição de módulos da comunidade;
-- versões para outros sistemas operacionais;
-- tela interna de documentação.
+- versões para outros sistemas operacionais.
 
 ## Navegação
 

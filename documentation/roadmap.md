@@ -207,9 +207,11 @@ A palavra “IRIS” ativa a interação e é retirada do comando enviado para p
 ## Próximo marco: documentação
 
 - [x] Criar documentação Markdown.
-- [ ] Criar rota visual de documentação.
-- [ ] Renderizar Markdown na interface.
-- [ ] Adicionar navegação lateral.
+- [x] Criar rota visual de documentação.
+- [x] Renderizar Markdown na interface.
+- [x] Adicionar navegação lateral.
+- [x] Permitir busca em modal.
+- [ ] Refinar navegação por âncoras internas.
 - [ ] Definir atualização e cache.
 - [ ] Permitir acesso dos agentes aos mesmos arquivos.
 

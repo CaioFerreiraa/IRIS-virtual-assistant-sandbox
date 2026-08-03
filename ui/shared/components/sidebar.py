@@ -7,7 +7,7 @@ from ui.theme.colors import (
     PASTEL_BLUE,
     PASTEL_PURPLE,
     SURFACE,
-    SURFACE_MUTED,
+    BLUE_GREY,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
@@ -31,7 +31,7 @@ def _module_item(
         height=44,
         padding=ft.Padding(left=12, top=0, right=12, bottom=0),
         alignment=ft.Alignment.CENTER_LEFT,
-        bgcolor=PASTEL_BLUE if is_active else SURFACE_MUTED,
+        bgcolor=PASTEL_BLUE if is_active else BLUE_GREY,
         border=ft.Border.all(1, PASTEL_PURPLE if is_active else BORDER),
         border_radius=8,
         ink=True,

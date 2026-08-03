@@ -7,7 +7,7 @@ from ui.theme.colors import (
     BORDER,
     PRIMARY_SOFT,
     SURFACE,
-    SURFACE_MUTED,
+    BLUE_GREY,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
@@ -117,7 +117,7 @@ def _build_row(
 ) -> ft.Container:
     return ft.Container(
         height=54,
-        bgcolor=SURFACE_MUTED if row_index % 2 else SURFACE,
+        bgcolor=BLUE_GREY if row_index % 2 else SURFACE,
         border=ft.Border.only(bottom=ft.BorderSide(1, BORDER)),
         content=ft.Row(
             spacing=0,

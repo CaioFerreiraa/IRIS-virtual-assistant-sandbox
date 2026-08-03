@@ -1,4 +1,5 @@
 import flet as ft
+import ui.documentation as documentation_ui
 import ui.history as history_ui
 import ui.home as ui
 import ui.settings as settings_ui
@@ -13,6 +14,7 @@ DEFAULT_ROUTES = {
     "/community": "Comunidade",
     "/routines": "Rotinas",
     "/history": "Histórico",
+    "/documentation": "Documentação",
     "/settings": "Configurações",
 }
 
@@ -31,6 +33,9 @@ def build_route_content(
 
     if route == "/history":
         return history_ui.view.build_history_view()
+
+    if route == "/documentation":
+        return documentation_ui.view.build_documentation_view()
 
     if route == "/settings" and speech_manager is not None and isinstance(toaster_handler, ToasterHandler):
         return settings_ui.build_settings_view(speech_manager, toaster_handler)

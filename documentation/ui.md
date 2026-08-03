@@ -181,16 +181,18 @@ Esse brilho deve acontecer apenas na ativação por voz.
 
 ## Documentação na interface
 
-A futura tab de documentação deverá:
+A aba de documentação atual:
 
-- ler os arquivos Markdown da pasta `documentation/`;
-- apresentar navegação por títulos;
-- manter links entre documentos;
-- evitar cópias de texto em código;
-- permitir atualização sem editar controles visuais;
-- funcionar também para agentes.
+- lê os arquivos Markdown da pasta `documentation/`;
+- renderiza o conteúdo Markdown na interface;
+- lista os documentos disponíveis em uma navegação lateral;
+- abre `introduction.md` como documento inicial;
+- mantém links relativos entre documentos Markdown;
+- evita cópias de texto em código;
+- permite atualização dos textos sem editar controles visuais;
+- oferece busca em modal por documentos, títulos e trechos.
 
-`introduction.md` será o documento inicial.
+A navegação por âncoras internas de títulos ainda pode ser refinada em versões futuras.
 
 ## Configurações
 

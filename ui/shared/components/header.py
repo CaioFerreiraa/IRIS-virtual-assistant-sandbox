@@ -22,6 +22,7 @@ NAV_ITEMS = (
     ("Comunidade", "/community"),
     ("Rotinas", "/routines"),
     ("Histórico", "/history"),
+    ("Documentação", "/documentation"),
 )
 
 
@@ -46,7 +47,7 @@ def build_header(
 
     nav_section = ft.Row(
         height=HEADER_HEIGHT,
-        spacing=20,
+        spacing=8,
         alignment=ft.MainAxisAlignment.CENTER,
         vertical_alignment=ft.CrossAxisAlignment.END,
         controls=[
@@ -132,7 +133,7 @@ def _nav_button(
 
     return ft.Container(
         height=HEADER_HEIGHT,
-        padding=ft.Padding(left=12, top=0, right=12, bottom=0),
+        padding=ft.Padding(left=8, top=0, right=8, bottom=0),
         alignment=ft.Alignment.BOTTOM_CENTER,
         bgcolor=ft.Colors.TRANSPARENT,
         on_click=lambda _: on_navigate(route),
@@ -141,7 +142,7 @@ def _nav_button(
         ink_color=ft.Colors.with_opacity(0.08, PASTEL_PURPLE),
         content=ft.Container(
             height=50,
-            padding=ft.Padding(left=4, top=0, right=4, bottom=12),
+            padding=ft.Padding(left=2, top=0, right=2, bottom=12),
             alignment=ft.Alignment.BOTTOM_CENTER,
             border=ft.Border.only(
                 bottom=ft.BorderSide(
