@@ -121,6 +121,7 @@ Ao implementar uma funcionalidade:
 8. não bloqueie a thread da interface com operações demoradas;
 9. atualize a documentação relacionada;
 10. teste o fluxo principal e os caminhos de erro.
+11. Não altere nada e não leia a pasta voice_tests
 
 Prefira código explícito, legível e direto. Não crie interfaces, factories, adapters ou abstrações sem necessidade concreta.
 
