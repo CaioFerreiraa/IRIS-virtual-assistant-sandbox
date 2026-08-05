@@ -4,6 +4,7 @@ import logging
 import queue
 import re
 import threading
+import time
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable
@@ -29,6 +30,8 @@ class SpeechEventKind(StrEnum):
     DEACTIVATED = "deactivated"
     STOPPED = "stopped"
     ERROR = "error"
+    AUDIO_LEVEL = "audio_level"
+    TRANSCRIPTION = "transcription"
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +40,9 @@ class SpeechEvent:
     text: str = ""
     message: str = ""
     should_submit: bool = False
+    source: str = ""
+    is_partial: bool = False
+    audio_level: float = 0.0
 
 
 SpeechEventCallback = Callable[[SpeechEvent], None]
@@ -50,6 +56,8 @@ class SpeechService(ABC):
         self._on_event = on_event
         self._stop_event = threading.Event()
         self._worker: threading.Thread | None = None
+        self._command_enabled = True
+        self._last_audio_event_at = 0.0
         self._voice_active = False
         self._last_command = ""
         self._committed_command = ""
@@ -89,8 +97,17 @@ class SpeechService(ABC):
         self._committed_command = ""
         self._emit(SpeechEventKind.DEACTIVATED)
 
+    def set_command_enabled(self, enabled: bool) -> None:
+        """Permite a palavra de ativação somente no contexto visual autorizado."""
+        self._command_enabled = enabled
+        if not enabled:
+            self.deactivate_command()
+
     def process_transcription(self, text: str, *, is_partial: bool) -> None:
         """Converte transcrições do backend em eventos de comando da IRIS."""
+        if not self._command_enabled:
+            return
+
         cleaned_text = " ".join((text or "").strip().split())
         if not cleaned_text:
             return
@@ -152,9 +169,41 @@ class SpeechService(ABC):
         text: str = "",
         message: str = "",
         should_submit: bool = False,
+        source: str = "",
+        is_partial: bool = False,
+        audio_level: float = 0.0,
     ) -> None:
         if self._on_event is not None:
-            self._on_event(SpeechEvent(kind, text, message, should_submit))
+            self._on_event(
+                SpeechEvent(
+                    kind=kind,
+                    text=text,
+                    message=message,
+                    should_submit=should_submit,
+                    source=source,
+                    is_partial=is_partial,
+                    audio_level=audio_level,
+                )
+            )
+
+    def _emit_transcription(self, text: str, *, source: str, is_partial: bool) -> None:
+        cleaned_text = " ".join((text or "").strip().split())
+        if cleaned_text:
+            self._emit(
+                SpeechEventKind.TRANSCRIPTION,
+                text=cleaned_text,
+                source=source,
+                is_partial=is_partial,
+            )
+
+    def _emit_audio_level(self, volume: float, *, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last_audio_event_at < 0.08:
+            return
+        self._last_audio_event_at = now
+        reference = max(self.settings.audio_threshold * 2, 0.02)
+        normalized_level = max(0.0, min(1.0, float(volume) / reference))
+        self._emit(SpeechEventKind.AUDIO_LEVEL, audio_level=normalized_level)
 
     def _friendly_error(self, error: Exception) -> str:
         message = str(error).strip()
@@ -212,6 +261,7 @@ class FasterWhisperSpeechService(SpeechService):
             recording_duration = 0.0
             is_speaking = False
             is_transcribing = True
+            self._emit_audio_level(0.0, force=True)
             try:
                 self._transcribe_audio(audio)
             finally:
@@ -251,6 +301,7 @@ class FasterWhisperSpeechService(SpeechService):
                     continue
 
                 volume = float(np.sqrt(np.mean(data**2)))
+                self._emit_audio_level(volume)
                 if volume > self.settings.audio_threshold:
                     if not is_speaking:
                         audio_buffer = list(pre_roll)
@@ -287,6 +338,7 @@ class FasterWhisperSpeechService(SpeechService):
             vad_filter=self.settings.vad_filter,
         )
         text = "".join(segment.text for segment in segments).strip()
+        self._emit_transcription(text, source="faster_whisper", is_partial=False)
         self.process_transcription(text, is_partial=False)
 
 
@@ -324,6 +376,7 @@ class RealtimeSpeechService(SpeechService):
             webrtc_sensitivity=self.settings.webrtc_sensitivity,
             faster_whisper_vad_filter=self.settings.vad_filter,
             on_realtime_transcription_update=self._on_partial,
+            on_recorded_chunk=self._on_audio_chunk,
             ensure_sentence_ends_with_period=False,
             spinner=False,
             no_log_file=True,
@@ -335,11 +388,30 @@ class RealtimeSpeechService(SpeechService):
 
     def _on_partial(self, text: str) -> None:
         if not self._stop_event.is_set():
+            self._emit_transcription(text, source="realtime_stt", is_partial=True)
             self.process_transcription(text, is_partial=True)
 
     def _on_final(self, text: str) -> None:
         if not self._stop_event.is_set():
+            self._emit_transcription(text, source="faster_whisper", is_partial=False)
             self.process_transcription(text, is_partial=False)
+
+    def _on_audio_chunk(self, data: Any) -> None:
+        if self._stop_event.is_set():
+            return
+        try:
+            import numpy as np
+
+            if isinstance(data, (bytes, bytearray, memoryview)):
+                samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+            else:
+                samples = np.asarray(data)
+                if np.issubdtype(samples.dtype, np.integer):
+                    samples = samples.astype(np.float32) / max(float(np.iinfo(samples.dtype).max), 1.0)
+            if samples.size:
+                self._emit_audio_level(float(np.sqrt(np.mean(samples.astype(np.float32) ** 2))))
+        except Exception:
+            logging.debug("Não foi possível calcular o nível do áudio do RealtimeSTT.", exc_info=True)
 
     def _request_backend_stop(self) -> None:
         recorder = self._recorder

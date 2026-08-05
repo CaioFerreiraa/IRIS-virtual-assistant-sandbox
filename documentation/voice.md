@@ -54,6 +54,8 @@ A palavra de ativação é “IRIS”. A implementação reconhece também a gra
 
 Ela é detectada na transcrição, sem exigir Porcupine, OpenWakeWord ou um modelo adicional. Portanto, a detecção depende da qualidade do Whisper e pode apresentar falsos positivos ou não reconhecer a palavra em ambientes ruidosos.
 
+A aceitação da palavra de ativação fica habilitada na rota Início e na rota de teste do microfone. Nas demais rotas, o backend pode continuar carregado e pronto, mas as transcrições não ativam comandos e qualquer interação de voz em andamento é encerrada.
+
 Antes da ativação, transcrições comuns são ignoradas. Depois da ativação:
 
 - a palavra “IRIS” é retirada da consulta;
@@ -108,6 +110,8 @@ As configurações permitem acrescentar:
 
 Esses valores são combinados com o prompt fixo. No modo básico, palavras importantes também são encaminhadas como `hotwords` do Faster-Whisper.
 
+Os valores atuais de `Module.call_name` e `Module.custom_call_name` são acrescentados dinamicamente ao prompt interno. Esse contexto não aparece nem é persistido no campo editável, evitando que a configuração fique desatualizada quando módulos forem adicionados ou alterados.
+
 ## Configurações disponíveis
 
 A rota de configurações possui as abas:
@@ -130,6 +134,17 @@ Grupos configuráveis:
 - nomes próprios, contexto e palavras importantes.
 
 O padrão seguro mantém a voz desativada. Ao habilitar, o padrão de baixo custo é CPU, `int8`, modelo `small` para o resultado final e `tiny` para tempo real.
+
+O microfone é escolhido por uma lista das entradas de áudio disponíveis. A opção padrão delega a escolha ao Windows. Quando o modo básico é selecionado, o formulário oculta os parâmetros exclusivos do RealtimeSTT, pois eles não alteram esse backend.
+
+Quando o serviço está pronto, a configuração de voz apresenta o botão “Testar microfone”. A rota `/settings/voice_checking` abre um modal de diagnóstico no qual não é necessário dizer “IRIS”:
+
+- o visualizador confirma se há sinal chegando do dispositivo selecionado;
+- o modo básico apresenta cada resultado final do Faster-Whisper;
+- o modo completo apresenta separadamente o texto parcial do RealtimeSTT e o resultado final do Faster-Whisper;
+- as frases reconhecidas ficam visíveis apenas durante a sessão da tela e não são persistidas.
+
+O nível do áudio também aparece abaixo do cartão de estado na configuração de voz. Somente o nível normalizado é encaminhado à interface; o áudio bruto permanece no serviço.
 
 ## Ciclo de vida
 
@@ -177,7 +192,7 @@ Falhas são apresentadas por toaster e não devem derrubar a janela.
 
 - a palavra de ativação é reconhecida pela transcrição, não por um detector dedicado;
 - o modo básico não mostra texto durante a fala;
-- a enumeração visual dos microfones ainda usa índice informado manualmente;
+- a enumeração de microfones depende do PortAudio e das permissões disponíveis no sistema;
 - CUDA depende das bibliotecas compatíveis instaladas na máquina;
 - modelos podem consumir vários gigabytes;
 - precisão, latência e falsos positivos ainda precisam de testes práticos ampliados;

@@ -24,6 +24,20 @@ class ModuleRepository:
             for module in self.list_modules()
         ]
 
+    def list_call_names(self) -> list[str]:
+        """Retorna nomes de chamada e aliases sem duplicatas para contexto de voz."""
+        rows = self.db.query(Module.call_name, Module.custom_call_name).all()
+        names: list[str] = []
+        seen: set[str] = set()
+        for call_name, custom_call_name in rows:
+            for value in (call_name, custom_call_name):
+                normalized = (value or "").strip()
+                lookup_key = normalized.casefold()
+                if normalized and lookup_key not in seen:
+                    seen.add(lookup_key)
+                    names.append(normalized)
+        return names
+
     def list_root_module_paths(self) -> list[str]:
         modules = self.db.query(Module).filter(Module.parent_module_id.is_(None)).all()
         return [self.get_module_path(module) for module in sorted(modules, key=self.get_module_path)]

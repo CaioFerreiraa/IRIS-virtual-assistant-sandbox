@@ -18,6 +18,25 @@ class SpeechServiceTests(unittest.TestCase):
         self.service.process_transcription("abrir aplicativo", is_partial=True)
         self.assertEqual([], self.events)
 
+    def test_publishes_raw_transcription_for_microphone_diagnostics(self) -> None:
+        self.service._emit_transcription("fala de teste", source="faster_whisper", is_partial=False)
+
+        self.assertEqual(SpeechEventKind.TRANSCRIPTION, self.events[-1].kind)
+        self.assertEqual("fala de teste", self.events[-1].text)
+        self.assertEqual("faster_whisper", self.events[-1].source)
+
+    def test_publishes_normalized_audio_level(self) -> None:
+        self.service._emit_audio_level(0.025, force=True)
+
+        self.assertEqual(SpeechEventKind.AUDIO_LEVEL, self.events[-1].kind)
+        self.assertAlmostEqual(0.5, self.events[-1].audio_level)
+
+    def test_ignores_wake_word_when_command_is_disabled_for_route(self) -> None:
+        self.service.set_command_enabled(False)
+        self.service.process_transcription("Iris abrir aplicativo", is_partial=False)
+
+        self.assertEqual([], self.events)
+
     def test_wake_word_is_removed_from_progressive_text(self) -> None:
         self.service.process_transcription("Íris abrir", is_partial=True)
         self.service.process_transcription("Íris abrir app", is_partial=True)

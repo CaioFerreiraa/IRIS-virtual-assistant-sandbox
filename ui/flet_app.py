@@ -14,7 +14,7 @@ from database.db import SessionLocal
 from repositories.module_repository import ModuleRepository
 from services.speech_service_manager import SpeechServiceManager
 from services.voice_settings_service import VoiceSettingsService
-from ui.shared.components.header import build_header
+from ui.shared.components.header import VOICE_ACTIVE_ROUTES, build_header
 from ui.shared.components.sidebar import build_sidebar
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import APP_BACKGROUND
@@ -45,7 +45,7 @@ def get_default_page(page: ft.Page):
     page.window.title_bar_buttons_hidden = True
     page.window.resizable = True
     page.window.shadow = True
-    page.window.icon = "assets/icons/favicon.ico"
+    page.window.icon = "assets/images/logo_transparent.png"
 
     page.window.width = 1400
     page.window.height = 900
@@ -74,7 +74,7 @@ def get_default_page(page: ft.Page):
     page.on_close = lambda _: speech_manager.shutdown()
     fatal_error_handler.guard_call(
         speech_manager.prepare,
-        VoiceSettingsService(speech_manager).load(),
+        VoiceSettingsService(speech_manager).load_for_runtime(),
     )
     return page
 
@@ -108,9 +108,11 @@ def get_app_container(
         current_route = page.route or "/"
         module_options = load_module_options()
         speech_manager.clear_subscribers()
+        speech_manager.set_command_enabled(current_route in VOICE_ACTIVE_ROUTES)
         header_slot.content = build_header(
             current_route=current_route,
             on_navigate=fatal_error_handler.guard_callback(navigate),
+            speech_manager=speech_manager,
         )
         sidebar_slot.content = build_sidebar(
             active_module=active_module["name"],

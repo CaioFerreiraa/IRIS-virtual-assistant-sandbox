@@ -13,12 +13,19 @@ class FakeSpeechService:
         self.settings = settings
         self.on_event = on_event
         self.stopped = False
+        self.command_enabled = True
 
     def start(self) -> None:
         self.started.set()
 
     def stop(self) -> None:
         self.stopped = True
+
+    def set_command_enabled(self, enabled: bool) -> None:
+        self.command_enabled = enabled
+
+    def deactivate_command(self) -> None:
+        return
 
 
 class SpeechServiceManagerTests(unittest.TestCase):
@@ -43,6 +50,19 @@ class SpeechServiceManagerTests(unittest.TestCase):
         ):
             manager.prepare(VoiceSettings(enabled=False))
             self.assertFalse(FakeSpeechService.started.wait(timeout=0.1))
+        manager.shutdown()
+
+    def test_route_command_state_is_applied_before_backend_starts(self) -> None:
+        manager = SpeechServiceManager()
+        manager.set_command_enabled(False)
+        with patch(
+            "services.speech_service_manager.FasterWhisperSpeechService",
+            FakeSpeechService,
+        ):
+            manager.prepare(VoiceSettings(enabled=True))
+            self.assertTrue(FakeSpeechService.started.wait(timeout=1))
+            self.assertIsNotNone(manager._service)
+            self.assertFalse(manager._service.command_enabled)
         manager.shutdown()
 
 

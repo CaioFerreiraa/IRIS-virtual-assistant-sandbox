@@ -2,11 +2,17 @@ from collections.abc import Callable
 
 import flet as ft
 
+from services.speech_service import SpeechEvent, SpeechEventKind
+from services.speech_service_manager import SpeechServiceManager
 from ui.theme.colors import (
+    BLUE_GREY,
     CANCEL,
     PASTEL_BLUE,
     PASTEL_DARK_PURPLE,
+    PASTEL_GREEN,
     PASTEL_PURPLE,
+    PASTEL_RED,
+    PASTEL_YELLOW,
     SURFACE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
@@ -16,6 +22,7 @@ from ui.theme.fonts import TITLE_FONT
 
 HEADER_HEIGHT = 74
 WINDOW_BUTTON_WIDTH = 46
+VOICE_ACTIVE_ROUTES = {"", "/", "/home", "/settings/voice_checking"}
 
 NAV_ITEMS = (
     ("Início", "/home"),
@@ -29,6 +36,7 @@ NAV_ITEMS = (
 def build_header(
     current_route: str,
     on_navigate: Callable[[str], None],
+    speech_manager: SpeechServiceManager | None = None,
 ) -> ft.Container:
 
     logo_section = ft.Container(
@@ -61,6 +69,7 @@ def build_header(
         alignment=ft.MainAxisAlignment.END,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
         controls=[
+            _build_voice_status(current_route, speech_manager),
             _build_user_button(current_route=current_route,on_navigate=on_navigate),
             ft.Container(
                 height=42,
@@ -89,17 +98,131 @@ def build_header(
             color=ft.Colors.with_opacity(0.45, PASTEL_BLUE),
             offset=ft.Offset(0, 4),
         ),
-
         content=ft.Row(
             spacing=0,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                ft.Container(expand=1,content=logo_section),
-                ft.Container(expand=2,content=nav_section, height=HEADER_HEIGHT,alignment=ft.Alignment.BOTTOM_CENTER),
-                ft.Container(expand=1, content=window_section, height=HEADER_HEIGHT,alignment=ft.Alignment.CENTER_RIGHT),
+                ft.Container(expand=1, content=logo_section),
+                ft.Container(expand=2, content=nav_section, height=HEADER_HEIGHT, alignment=ft.Alignment.BOTTOM_CENTER),
+                ft.Container(expand=1, content=window_section, height=HEADER_HEIGHT, alignment=ft.Alignment.CENTER_RIGHT),
             ],
         ),
     )
+
+
+class VoiceStatusIndicator:
+    """Indicador visual do backend de voz e da disponibilidade por rota."""
+
+    def __init__(self, current_route: str, speech_manager: SpeechServiceManager):
+        self.current_route = current_route
+        self.speech_manager = speech_manager
+        self.is_voice_active = False
+        self.icon = ft.Icon(ft.Icons.MIC_OFF_ROUNDED, size=21, color=PASTEL_DARK_PURPLE)
+        self.container = ft.Container(
+            width=42,
+            height=42,
+            border_radius=21,
+            alignment=ft.Alignment.CENTER,
+            content=self.icon,
+            animate=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
+        )
+
+    def build(self) -> ft.Container:
+        self.speech_manager.subscribe(self.on_speech_event)
+        self._sync_visual()
+        return self.container
+
+    def on_speech_event(self, event: SpeechEvent) -> None:
+        if event.kind == SpeechEventKind.ACTIVATED:
+            self.is_voice_active = True
+        elif event.kind in {
+            SpeechEventKind.DEACTIVATED,
+            SpeechEventKind.ERROR,
+            SpeechEventKind.STOPPED,
+        }:
+            self.is_voice_active = False
+        elif event.kind not in {SpeechEventKind.READY, SpeechEventKind.STARTING}:
+            return
+
+        try:
+            page = self.container.page
+        except RuntimeError:
+            return
+        if page is not None:
+            page.run_task(self._apply_speech_event)
+
+    async def _apply_speech_event(self) -> None:
+        self._sync_visual()
+        try:
+            if self.container.page is not None:
+                self.container.update()
+        except RuntimeError:
+            return
+
+    def _sync_visual(self) -> None:
+        icon, background, tooltip = self._status_style()
+        self.icon.icon = icon
+        self.container.bgcolor = background
+        self.container.tooltip = tooltip
+        self.container.shadow = (
+            ft.BoxShadow(
+                spread_radius=3,
+                blur_radius=18,
+                color=ft.Colors.with_opacity(0.9, background),
+                offset=ft.Offset(0, 0),
+            )
+            if self.is_voice_active
+            else None
+        )
+
+    def _status_style(self):
+        settings = self.speech_manager.current_settings
+        is_voice_route = self.current_route in VOICE_ACTIVE_ROUTES
+        if not is_voice_route:
+            return (
+                ft.Icons.MIC_OFF_ROUNDED,
+                BLUE_GREY,
+                "Comando de voz pausado. Use a rota Início ou o teste de microfone.",
+            )
+        if not settings.enabled:
+            return (
+                ft.Icons.MIC_OFF_ROUNDED,
+                BLUE_GREY,
+                "Comando de voz desativado nas configurações.",
+            )
+        if self.speech_manager.backend_error:
+            message = self.speech_manager.last_event.message if self.speech_manager.last_event else ""
+            return (
+                ft.Icons.EMERGENCY_RECORDING_ROUNDED,
+                PASTEL_RED,
+                message or "O reconhecimento de voz encontrou um erro.",
+            )
+        if not self.speech_manager.backend_ready:
+            return (
+                ft.Icons.SETTINGS_VOICE_ROUNDED,
+                PASTEL_YELLOW,
+                "O reconhecimento de voz está carregando.",
+            )
+        if settings.mode == "realtime":
+            return (
+                ft.Icons.MIC_SHARP,
+                PASTEL_GREEN,
+                "Voz pronta no modo completo: RealtimeSTT + Faster-Whisper.",
+            )
+        return (
+            ft.Icons.MIC_ROUNDED,
+            PASTEL_BLUE,
+            "Voz pronta no modo básico: Faster-Whisper.",
+        )
+
+
+def _build_voice_status(
+    current_route: str,
+    speech_manager: SpeechServiceManager | None,
+) -> ft.Control:
+    if speech_manager is None:
+        return ft.Container(visible=False)
+    return VoiceStatusIndicator(current_route, speech_manager).build()
 
 
 def _nav_button(
@@ -163,7 +286,7 @@ def _build_user_button(
     current_route: str,
     on_navigate: Callable[[str], None],
 ) -> ft.Container:
-    is_active = current_route == "/settings"
+    is_active = current_route.startswith("/settings")
 
     icon_control = ft.Icon( icon=ft.Icons.SETTINGS_OUTLINED,size=21,color=PASTEL_DARK_PURPLE)
 

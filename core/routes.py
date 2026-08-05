@@ -37,6 +37,9 @@ def build_route_content(
     if route == "/documentation":
         return documentation_ui.view.build_documentation_view()
 
+    if route == "/settings/voice_checking" and speech_manager is not None and isinstance(toaster_handler, ToasterHandler):
+        return settings_ui.build_voice_checking_view(speech_manager, toaster_handler)
+
     if route == "/settings" and speech_manager is not None and isinstance(toaster_handler, ToasterHandler):
         return settings_ui.build_settings_view(speech_manager, toaster_handler)
 
