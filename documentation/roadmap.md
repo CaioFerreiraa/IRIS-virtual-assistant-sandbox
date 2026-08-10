@@ -230,7 +230,7 @@ A palavra “IRIS” ativa a interação e é retirada do comando enviado para p
 - [x] Tratar desligamento do microfone.
 - [ ] Testar desempenho em CPU.
 - [ ] Medir precisão da ativação e falsos positivos com usuários.
-- [ ] Listar microfones disponíveis no formulário.
+- [x] Listar microfones disponíveis no formulário.
 
 ## Próximo marco: módulos HTTP
 

@@ -48,6 +48,10 @@ class SpeechEvent:
 SpeechEventCallback = Callable[[SpeechEvent], None]
 
 
+class NoInputDeviceError(RuntimeError):
+    """Indica que não existe uma entrada de áudio utilizável."""
+
+
 class SpeechService(ABC):
     """Contrato comum para captura e transcrição local de voz."""
 
@@ -156,7 +160,10 @@ class SpeechService(ABC):
         try:
             self._run()
         except Exception as error:
-            logging.exception("Falha no serviço de voz")
+            if isinstance(error, NoInputDeviceError):
+                logging.warning("Serviço de voz interrompido: %s", error)
+            else:
+                logging.exception("Falha no serviço de voz")
             if not self._stop_event.is_set():
                 self._emit(SpeechEventKind.ERROR, message=self._friendly_error(error))
         finally:
@@ -214,6 +221,46 @@ class SpeechService(ABC):
             return "Não foi possível acessar o microfone. Verifique o dispositivo e as permissões do Windows."
         return message or "Não foi possível iniciar o reconhecimento de voz."
 
+    def _resolve_input_device_index(self) -> int:
+        """Retorna o dispositivo salvo ou o padrão, se houver uma entrada válida."""
+        import sounddevice as sd
+
+        input_device_index = self.settings.input_device_index
+        if input_device_index is not None:
+            try:
+                device_info = sd.query_devices(input_device_index)
+                if int(device_info.get("max_input_channels", 0)) > 0:
+                    return input_device_index
+                raise ValueError("O dispositivo salvo não possui entrada de áudio.")
+            except Exception as error:
+                logging.warning(
+                    "Microfone salvo indisponível (%s). Usando o microfone padrão do sistema.",
+                    error,
+                )
+
+        default_device = sd.default.device
+        if isinstance(default_device, (list, tuple)):
+            default_device = default_device[0] if default_device else None
+        try:
+            default_index = int(default_device)
+        except (TypeError, ValueError):
+            default_index = -1
+
+        if default_index < 0:
+            raise NoInputDeviceError(
+                "Nenhum microfone disponível. Conecte um microfone ou selecione um dispositivo válido."
+            )
+
+        try:
+            device_info = sd.query_devices(default_index)
+            if int(device_info.get("max_input_channels", 0)) <= 0:
+                raise ValueError("O dispositivo padrão não possui entrada de áudio.")
+            return default_index
+        except Exception as error:
+            raise NoInputDeviceError(
+                "Nenhum microfone disponível. Conecte um microfone ou selecione um dispositivo válido."
+            ) from error
+
     def _request_backend_stop(self) -> None:
         return
 
@@ -235,6 +282,7 @@ class FasterWhisperSpeechService(SpeechService):
         import sounddevice as sd
         from faster_whisper import WhisperModel
 
+        input_device_index = self._resolve_input_device_index()
         if self._model is None:
             self._model = WhisperModel(
                 self.settings.model_size,
@@ -289,8 +337,7 @@ class FasterWhisperSpeechService(SpeechService):
             "dtype": "float32",
             "blocksize": block_size,
         }
-        if self.settings.input_device_index is not None:
-            stream_options["device"] = self.settings.input_device_index
+        stream_options["device"] = input_device_index
 
         with sd.InputStream(**stream_options):
             self._emit(SpeechEventKind.READY, message="Voz pronta. Diga “IRIS” para começar.")
@@ -360,7 +407,7 @@ class RealtimeSpeechService(SpeechService):
             device=self.settings.device,
             compute_type=self.settings.compute_type,
             language=self.settings.language,
-            input_device_index=self.settings.input_device_index,
+            input_device_index=self._resolve_input_device_index(),
             sample_rate=self.settings.sample_rate,
             beam_size=self.settings.beam_size,
             beam_size_realtime=self.settings.realtime_beam_size,

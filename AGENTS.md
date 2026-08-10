@@ -198,13 +198,15 @@ Regras:
 
 - Preserve a identidade visual clara, leve e em cores pastéis.
 - Use as constantes de `ui/theme/colors.py`.
-- Reutilize toaster, tabelas, diálogos, header, sidebar e controles existentes.
+- Reutilize toaster(toaster_handler), tabelas(table), diálogos(custom_dialog), header, sidebar e controles existentes.
 - Não duplique estilos entre telas quando um componente compartilhado for adequado.
 - Operações lentas devem rodar fora da thread visual.
 - Atualizações disparadas por threads de áudio ou rede devem ser encaminhadas com segurança para a página Flet.
 - Textos visíveis devem permanecer em português do Brasil.
 - Estados de carregamento, sucesso, erro, vazio e indisponibilidade devem ser apresentados de forma clara.
 - A futura tela de documentação deverá consumir os arquivos da pasta `documentation/`, sem manter cópias divergentes do conteúdo.
+- Botões primários com textos como "salvar/confirmar", devem ter border-radius 5 e da cor PASTEL_DARK_PURPLE.
+- Botões secundários com textos como "voltar/cancelar",devem ter border-radius 5 e da cor BLUE_GREY.
 
 ## 13. Voz
 

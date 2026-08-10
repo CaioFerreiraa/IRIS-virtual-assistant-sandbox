@@ -145,7 +145,7 @@ Limitações esperadas:
 - necessidade de configurar o microfone;
 - risco de falsos positivos na palavra de ativação.
 
-A voz vem desativada por padrão. O primeiro uso pode baixar modelos grandes. A lista de microfones ainda não é descoberta pela interface; um índice pode ser informado manualmente.
+A voz vem desativada por padrão. O primeiro uso pode baixar modelos grandes. A interface lista os microfones por solicitação do usuário, mas a descoberta ainda depende do PortAudio e dos drivers disponibilizados pelo sistema operacional.
 
 ## Rotinas
 

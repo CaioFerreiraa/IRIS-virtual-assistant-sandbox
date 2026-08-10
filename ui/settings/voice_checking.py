@@ -116,7 +116,10 @@ class VoiceCheckingView:
                         controls=[
                             ft.FilledButton(
                                 content=ft.Text("Voltar"),
-                                bgcolor=PASTEL_PURPLE,
+                                bgcolor=PASTEL_DARK_PURPLE,
+                                style=ft.ButtonStyle(
+                                    shape=ft.RoundedRectangleBorder(radius=5),
+                                ),
                                 color=ft.Colors.WHITE,
                                 on_click=self.on_back,
                             )

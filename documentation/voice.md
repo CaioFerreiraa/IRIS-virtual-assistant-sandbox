@@ -135,11 +135,13 @@ Grupos configuráveis:
 
 O padrão seguro mantém a voz desativada. Ao habilitar, o padrão de baixo custo é CPU, `int8`, modelo `small` para o resultado final e `tiny` para tempo real.
 
-O microfone é escolhido por uma lista das entradas de áudio disponíveis. A opção padrão delega a escolha ao Windows. Quando o modo básico é selecionado, o formulário oculta os parâmetros exclusivos do RealtimeSTT, pois eles não alteram esse backend.
+O microfone é escolhido por uma lista que mantém uma entrada por dispositivo físico e uma opção separada para o microfone padrão do sistema. No Windows, o botão “Recarregar” executa uma sondagem curta do PyAudio em um processo isolado para obter os endpoints WASAPI conectados naquele momento. O processo principal continua usando `sounddevice` para captura e visualização, evitando inicializar simultaneamente duas implementações do PortAudio no aplicativo. Não existe um monitor periódico de dispositivos em segundo plano.
+
+A tela mantém separadamente o microfone salvo e o microfone selecionado no formulário. O visualizador acompanha primeiro o selecionado, mesmo antes de salvar; se não houver seleção, usa o índice salvo; se também não houver índice salvo, não inicia captura para visualização. Uma falha isolada de captura no visualizador não altera a seleção. Quando nenhuma entrada existe, a lista fica vazia, o campo fica bloqueado e o índice persistido também é removido. O botão “Deletar microfone” permite remover explicitamente o índice salvo e limpar a seleção ativa. Falhas de enumeração ou captura são tratadas sem encerrar a aplicação. Ao salvar o formulário, a IRIS persiste o índice do dispositivo selecionado para o backend de voz. Quando o modo básico é selecionado, o formulário oculta os parâmetros exclusivos do RealtimeSTT, pois eles não alteram esse backend.
 
 Quando o serviço está pronto, a configuração de voz apresenta o botão “Testar microfone”. A rota `/settings/voice_checking` abre um modal de diagnóstico no qual não é necessário dizer “IRIS”:
 
-- o visualizador confirma se há sinal chegando do dispositivo selecionado;
+- o visualizador confirma se há sinal chegando do dispositivo efetivo;
 - o modo básico apresenta cada resultado final do Faster-Whisper;
 - o modo completo apresenta separadamente o texto parcial do RealtimeSTT e o resultado final do Faster-Whisper;
 - as frases reconhecidas ficam visíveis apenas durante a sessão da tela e não são persistidas.

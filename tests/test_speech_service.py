@@ -1,6 +1,14 @@
+import sys
+import types
 import unittest
+from unittest.mock import patch
 
-from services.speech_service import SpeechEventKind, SpeechService
+from services.speech_service import (
+    FasterWhisperSpeechService,
+    NoInputDeviceError,
+    SpeechEventKind,
+    SpeechService,
+)
 from services.voice_settings import VoiceSettings
 
 
@@ -77,6 +85,17 @@ class SpeechServiceTests(unittest.TestCase):
         self.assertIn("Caio", prompt)
         self.assertIn("Abrir aplicativos", prompt)
         self.assertIn("Spotify", prompt)
+
+    def test_invalid_saved_microphone_falls_back_to_system_default(self) -> None:
+        fake_sounddevice = types.SimpleNamespace(
+            default=types.SimpleNamespace(device=[-1, 1]),
+            query_devices=lambda index: (_ for _ in ()).throw(RuntimeError("device not found")),
+        )
+        service = FasterWhisperSpeechService(VoiceSettings(input_device_index=16))
+
+        with patch.dict(sys.modules, {"sounddevice": fake_sounddevice}):
+            with self.assertRaises(NoInputDeviceError):
+                service._resolve_input_device_index()
 
 
 if __name__ == "__main__":

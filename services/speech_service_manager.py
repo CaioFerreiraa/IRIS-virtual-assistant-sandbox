@@ -27,6 +27,7 @@ class SpeechServiceManager:
         self._current_settings = VoiceSettings()
         self._backend_ready = False
         self._backend_error = False
+        self._microphone_available: bool | None = None
         self.last_event: SpeechEvent | None = None
 
     @property
@@ -49,6 +50,11 @@ class SpeechServiceManager:
         with self._lock:
             return self._backend_error
 
+    @property
+    def microphone_available(self) -> bool | None:
+        with self._lock:
+            return self._microphone_available
+
     def prepare(self, settings: VoiceSettings) -> None:
         self.apply_settings(settings)
 
@@ -60,6 +66,7 @@ class SpeechServiceManager:
             self._current_settings = settings
             self._backend_ready = False
             self._backend_error = False
+            self._microphone_available = None
             self.last_event = None
 
         threading.Thread(
@@ -137,9 +144,13 @@ class SpeechServiceManager:
             if event.kind == SpeechEventKind.READY:
                 self._backend_ready = True
                 self._backend_error = False
+                self._microphone_available = True
             elif event.kind == SpeechEventKind.ERROR:
                 self._backend_ready = False
                 self._backend_error = True
+                message = event.message.casefold()
+                if any(term in message for term in ("microfone", "microphone", "portaudio")):
+                    self._microphone_available = False
             elif event.kind == SpeechEventKind.STARTING:
                 self._backend_ready = False
                 self._backend_error = False

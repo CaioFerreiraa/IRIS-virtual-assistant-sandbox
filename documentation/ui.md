@@ -77,7 +77,7 @@ O header contém:
 - indicador do estado do reconhecimento de voz;
 - ações da janela.
 
-O indicador de voz não possui ação de clique. Seu tooltip descreve se o backend está carregando, com erro, pronto no modo básico, pronto no modo completo ou pausado fora das rotas autorizadas. Durante uma ativação por “IRIS”, o indicador recebe uma sombra luminosa na cor do estado atual.
+O indicador de voz abre um diálogo ao ser clicado, independentemente do estado atual. O diálogo lista os estados possíveis do microfone com seus ícones e cores, destacando o estado ativo. Seu tooltip também descreve se o backend está carregando, com erro, pronto no modo básico, pronto no modo completo, desativado, indisponível ou pausado fora das rotas autorizadas. Durante uma ativação por “IRIS”, o indicador recebe uma sombra luminosa na cor do estado atual.
 
 ### Sidebar
 
@@ -147,6 +147,12 @@ Utilizado quando uma ação exige:
 
 Oferece estrutura reutilizável para listas com colunas.
 
+### Controles de formulário
+
+Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários.
+Campos de entrada devem preencher toda a largura disponível na célula da grid, independentemente do tamanho do texto exibido.
+Quando um campo possuir texto de ajuda, o mesmo conteúdo deve ficar disponível como tooltip.
+
 ### Controles da janela
 
 Como a janela usa moldura personalizada, ações de minimizar, maximizar e fechar precisam manter comportamento consistente.
@@ -207,9 +213,9 @@ A tela será dividida em:
 
 A seção de voz possui o primeiro formulário completo. Configurações gerais e senhas permanecem como placeholders explícitos.
 
-O formulário de voz permite escolher modo básico ou tempo real, modelos, idioma, uma das entradas de microfone detectadas, CPU ou CUDA, precisão, captura, VAD e opções de reconhecimento. Cada campo possui um ícone de informação sem ação de clique; a explicação aparece como tooltip no hover. O modo básico oculta os parâmetros exclusivos do RealtimeSTT. O prompt fixo de “IRIS” e o contexto dinâmico dos nomes de chamada dos módulos não são exibidos.
+O formulário de voz permite escolher modo básico ou tempo real, modelos, idioma, um microfone disponível, CPU ou CUDA, precisão, captura, VAD e opções de reconhecimento. O campo de microfone ocupa a segunda linha da primeira seção e mantém, na mesma linha, uma coluna separada para as ações “Recarregar” e “Deletar microfone”. A primeira consulta novamente os dispositivos; a segunda remove o índice persistido e deixa a seleção sem microfone ativo. O card de estado identifica o microfone selecionado; se não houver seleção, usa o microfone salvo; se também não houver salvo, informa que nenhum microfone está conectado. Abaixo, apresenta o estado do serviço de voz. Cada campo possui um ícone de informação sem ação de clique; a explicação aparece como tooltip no hover. O modo básico oculta os parâmetros exclusivos do RealtimeSTT. O prompt fixo de “IRIS” e o contexto dinâmico dos nomes de chamada dos módulos não são exibidos.
 
-Abaixo do estado do serviço existe um visualizador do nível do microfone. Quando o backend está pronto, o botão “Testar microfone” abre a rota `/settings/voice_checking` como um modal centralizado. Essa tela exibe transcrições brutas sem exigir a palavra de ativação e permite comparar RealtimeSTT e Faster-Whisper no modo completo.
+Abaixo do estado do serviço existe um visualizador do nível do microfone efetivo: primeiro o selecionado, depois o salvo e, se ambos estiverem ausentes, nenhum. Quando o backend está pronto, o botão “Testar microfone” abre a rota `/settings/voice_checking` como um modal centralizado. Essa tela exibe transcrições brutas sem exigir a palavra de ativação e permite comparar RealtimeSTT e Faster-Whisper no modo completo.
 
 Salvamentos devem usar toaster para indicar sucesso ou erro.
 
