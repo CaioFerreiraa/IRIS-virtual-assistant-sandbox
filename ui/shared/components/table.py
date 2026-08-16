@@ -17,7 +17,7 @@ from ui.theme.colors import (
 class TableColumn:
     key: str
     label: str
-    width: int
+    weight: int = 1
 
 
 TableRow = Mapping[str, object]
@@ -28,28 +28,18 @@ def build_responsive_table(
     rows: Sequence[TableRow],
     empty_message: str = "Nenhum registro encontrado.",
 ) -> ft.Container:
-    table_width = sum(column.width for column in columns)
-
     return ft.Container(
         expand=True,
         bgcolor=SURFACE,
         border=ft.Border.all(1, BORDER),
         border_radius=8,
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-        content=ft.Row(
+        content=ft.Column(
             expand=True,
             spacing=0,
-            scroll=ft.ScrollMode.AUTO,
             controls=[
-                ft.Column(
-                    width=table_width,
-                    expand=True,
-                    spacing=0,
-                    controls=[
-                        _build_header(columns),
-                        _build_body(columns, rows, empty_message),
-                    ],
-                ),
+                _build_header(columns),
+                _build_body(columns, rows, empty_message),
             ],
         ),
     )
@@ -65,7 +55,7 @@ def _build_header(columns: Sequence[TableColumn]) -> ft.Container:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 _build_cell(
-                    column.width,
+                    column.weight,
                     ft.Text(
                         column.label,
                         size=12,
@@ -123,7 +113,7 @@ def _build_row(
             spacing=0,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                _build_cell(column.width, _normalize_cell_value(row.get(column.key)))
+                _build_cell(column.weight, _normalize_cell_value(row.get(column.key)))
                 for column in columns
             ],
         ),
@@ -131,12 +121,12 @@ def _build_row(
 
 
 def _build_cell(
-    width: int,
+    weight: int,
     content: ft.Control,
     is_header: bool = False,
 ) -> ft.Container:
     return ft.Container(
-        width=width,
+        expand=weight,
         height=46 if is_header else 54,
         padding=ft.Padding(left=14, top=0, right=14, bottom=0),
         alignment=ft.Alignment.CENTER_LEFT,

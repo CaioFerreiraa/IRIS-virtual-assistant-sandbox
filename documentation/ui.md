@@ -160,7 +160,13 @@ IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos in
 
 ### Histórico
 
-Apresenta registros em tabela responsiva.
+Apresenta registros em tabela responsiva que ocupa toda a área disponível da
+rota. As colunas são distribuídas por peso para acompanhar a largura da linha,
+com reticências e tooltip quando o conteúdo não couber.
+
+A tela possui uma barra de pesquisa que filtra os registros por ID, data,
+módulo, rotina, status e mensagem. A pesquisa ignora diferenças entre
+maiúsculas, minúsculas e acentos.
 
 Campos:
 
