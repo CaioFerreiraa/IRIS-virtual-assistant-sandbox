@@ -129,7 +129,7 @@ Módulos podem depender de:
 - portas locais;
 - serviços em execução.
 
-A plataforma deverá apresentar essas dependências, mas o contrato definitivo de distribuição ainda não foi criado.
+A plataforma possui um manifesto local versão 1 para descoberta, README, runtime Python e variáveis de texto. O contrato definitivo de distribuição, dependências instaláveis e permissões ainda não foi criado.
 
 ## Reconhecimento de voz
 
@@ -181,6 +181,10 @@ Antes de oferecer instalação comunitária, a IRIS precisará definir mecanismo
 
 A versão atual não deve ser considerada uma sandbox de segurança para código desconhecido.
 
+O registry isola exceções Python durante descoberta e inicialização, mas isso não isola acesso a arquivos, rede ou recursos do sistema. A versão 1 também não possui Vault: variáveis secretas, tokens, senhas, logins e credenciais são incompatíveis e não podem ser persistidos nas configurações dos módulos.
+
+Auto start está disponível apenas para runtimes Python raiz que fornecem `start()`. O encerramento automático de processo externo depende de `start()` devolver o handle do processo criado pela própria IRIS.
+
 ## Banco local
 
 O SQLite simplifica a instalação, mas possui limitações:
@@ -190,6 +194,8 @@ O SQLite simplifica a instalação, mas possui limitações:
 - backups ainda não possuem fluxo visual;
 - o caminho atual depende do diretório de execução;
 - migrações precisam ser cuidadosamente testadas.
+
+A cadeia histórica inicial do Alembic contém revisões antigas inconsistentes entre si. A migration atual do registry é testada a partir do head anterior, mas a criação de uma base totalmente vazia por toda a cadeia histórica ainda exige uma futura consolidação das migrations antigas sem reescrever revisões já aplicadas.
 
 ## Distribuição
 

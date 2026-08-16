@@ -4,7 +4,14 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from database.db import Base
-from database.models import Log, Module, Routine, RoutineAction
+from database.models import (
+    Log,
+    Module,
+    ModuleVariableDefinition,
+    ModuleVariableValue,
+    Routine,
+    RoutineAction,
+)
 
 from logging.config import fileConfig
 
@@ -72,12 +79,30 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        is_sqlite = connection.dialect.name == "sqlite"
+        if is_sqlite:
+            # O batch mode do Alembic recria tabelas. A desativação é temporária
+            # e a integridade é verificada antes de encerrar a conexão.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
         context.configure(
             connection=connection, target_metadata=target_metadata
         )
 
         with context.begin_transaction():
             context.run_migrations()
+
+        if is_sqlite:
+            connection.commit()
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            violations = connection.exec_driver_sql(
+                "PRAGMA foreign_key_check"
+            ).fetchall()
+            if violations:
+                raise RuntimeError(
+                    "A migration produziu violações de foreign key no SQLite."
+                )
+            connection.commit()
 
 
 if context.is_offline_mode():

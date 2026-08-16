@@ -5,6 +5,7 @@ import flet as ft
 from services.speech_service import SpeechEvent, SpeechEventKind
 from services.speech_service_manager import SpeechServiceManager
 from ui.shared.components.audio_visualizer import AudioVisualizer
+from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import (
     APP_BACKGROUND,
@@ -76,56 +77,48 @@ class VoiceCheckingView:
 
         self.status_card = self._build_status_card()
         modal = ft.Container(
-            width=880,
-            padding=28,
-            bgcolor=SURFACE,
-            border=ft.Border.all(1, BORDER),
-            border_radius=14,
+            width=930,
             shadow=ft.BoxShadow(
                 spread_radius=1,
                 blur_radius=28,
                 color=ft.Colors.with_opacity(0.18, TEXT_PRIMARY),
                 offset=ft.Offset(0, 8),
             ),
-            content=ft.Column(
-                tight=True,
-                spacing=20,
-                controls=[
-                    ft.Column(
-                        tight=True,
-                        spacing=5,
-                        controls=[
-                            ft.Text(
-                                "Teste do reconhecimento de voz",
-                                size=24,
-                                weight=ft.FontWeight.W_700,
-                                color=TEXT_PRIMARY,
-                            ),
-                            ft.Text(
-                                "Fale normalmente. Nesta tela não é necessário dizer “IRIS”; toda transcrição reconhecida será exibida abaixo.",
-                                size=13,
-                                color=TEXT_SECONDARY,
-                            ),
-                        ],
-                    ),
-                    self.status_card,
-                    self.audio_visualizer.build(),
-                    ft.ResponsiveRow(spacing=16, run_spacing=16, controls=transcription_panels),
-                    ft.Row(
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        controls=[
-                            ft.FilledButton(
-                                content=ft.Text("Voltar"),
-                                bgcolor=PASTEL_DARK_PURPLE,
-                                style=ft.ButtonStyle(
-                                    shape=ft.RoundedRectangleBorder(radius=5),
-                                ),
-                                color=ft.Colors.WHITE,
-                                on_click=self.on_back,
-                            )
-                        ],
-                    ),
-                ],
+            content=build_route_content_container(
+                icon=ft.Icons.MIC_ROUNDED,
+                title="Teste do reconhecimento de voz",
+                subtitle=(
+                    "Fale normalmente. Nesta tela não é necessário dizer “IRIS”; "
+                    "toda transcrição reconhecida será exibida abaixo."
+                ),
+                expand=False,
+                content=ft.Column(
+                    tight=True,
+                    spacing=20,
+                    controls=[
+                        self.status_card,
+                        self.audio_visualizer.build(),
+                        ft.ResponsiveRow(
+                            spacing=16,
+                            run_spacing=16,
+                            controls=transcription_panels,
+                        ),
+                        ft.Row(
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            controls=[
+                                ft.FilledButton(
+                                    content=ft.Text("Voltar"),
+                                    bgcolor=PASTEL_DARK_PURPLE,
+                                    style=ft.ButtonStyle(
+                                        shape=ft.RoundedRectangleBorder(radius=5),
+                                    ),
+                                    color=ft.Colors.WHITE,
+                                    on_click=self.on_back,
+                                )
+                            ],
+                        ),
+                    ],
+                ),
             ),
         )
 

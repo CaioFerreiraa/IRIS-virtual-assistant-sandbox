@@ -22,13 +22,14 @@ O fluxo atual de inicialização é:
 
 1. `main.py` chama `init_db()`;
 2. o SQLite é criado ou atualizado;
-3. os módulos padrão são inseridos;
-4. o Flet inicia a aplicação;
-5. `ui/flet_app.py` monta janela, tema, header, sidebar e área de conteúdo;
-6. a rota inicial carrega a tela principal;
-7. módulos registrados no banco são transformados em opções de pesquisa;
-8. configurações de voz são carregadas;
-9. o gerenciador de voz fica pronto e inicia o backend em uma thread quando a voz está habilitada.
+3. os módulos padrão legados são inseridos ou atualizados;
+4. `ModuleRegistryService` descobre e sincroniza cada pasta de `modules/installed` isoladamente;
+5. o Flet inicia a aplicação;
+6. `ui/flet_app.py` monta janela, tema, header, sidebar e área de conteúdo;
+7. a rota inicial carrega a tela principal;
+8. módulos disponíveis no banco são transformados em opções de pesquisa;
+9. configurações de voz são carregadas;
+10. gerenciadores de voz e runtimes habilitados iniciam seus backends em threads isoladas.
 
 ## Camadas e responsabilidades
 
@@ -81,6 +82,7 @@ Exemplos:
 - criação de logs;
 - carregamento de rotinas;
 - persistência futura de configurações.
+- persistência de definições e valores não sensíveis de módulos.
 
 A camada evita que consultas SQLAlchemy sejam espalhadas por toda a aplicação.
 
@@ -95,6 +97,7 @@ Responsável por:
 - inicialização;
 - seeds;
 - compatibilidade temporária de esquemas antigos.
+- ativação de foreign keys por conexão SQLite.
 
 A evolução estrutural deve migrar progressivamente para o Alembic.
 
@@ -139,6 +142,7 @@ Um módulo pode:
 - abrir um recurso;
 - futuramente chamar um serviço HTTP;
 - devolver resultado estruturado.
+- declarar metadados, README, runtime e variáveis em `module.json`.
 
 Módulos comunitários devem permanecer independentes do layout interno da interface.
 
@@ -170,11 +174,11 @@ O fluxo atual de um comando digitado é:
 
 1. o usuário escreve no campo principal;
 2. a tela atualiza as sugestões de módulos;
-3. o usuário escolhe um caminho ou envia o texto;
+3. o usuário escolhe uma opção ou envia um texto sem ambiguidade;
 4. o serviço da home cria uma sessão de banco;
-5. o `CommandProcessor` localiza o módulo;
+5. a resolução produz o `module_id` e o `CommandProcessor` carrega esse registro;
 6. o sistema valida se o módulo é executável;
-7. o `ModuleRunner` executa o entry point Python ou o sistema abre a URL configurada;
+7. a Home despacha a operação para background e o `ModuleRunner` executa o entry point Python, ou o legado abre a URL configurada;
 8. o resultado é transformado em resposta estruturada;
 9. um log de sucesso ou erro é salvo;
 10. a interface apresenta um toaster;
@@ -204,13 +208,26 @@ A comunicação depende do tipo do módulo.
 
 ### Entry point Python
 
-O módulo é carregado por importação dinâmica. O runner procura uma função executável entre:
+Módulos legados podem usar caminho de pacote. Módulos instalados usam um arquivo validado dentro da própria pasta. O runner procura uma função executável entre:
 
 - `execute`;
 - `run`;
 - `main`.
 
 O argumento é encaminhado quando a função aceita entrada.
+
+Configurações de texto validadas são encaminhadas pelo parâmetro opcional `variables`. Elas não contêm credenciais.
+
+### Registry e estados
+
+O registry separa quatro estados:
+
+- manifesto do desenvolvedor no sistema de arquivos;
+- metadados e preferências persistidos no SQLite;
+- status de runtime em memória;
+- detalhes técnicos de descoberta e inicialização em `module.log`.
+
+A UI não redescobre pastas ao redesenhar a sidebar. Ela consulta o banco e o snapshot preparado pelo registry.
 
 ### Pesquisa de argumentos
 
@@ -272,6 +289,8 @@ Erros de execução devem:
 5. permitir uma nova tentativa.
 
 O `FatalErrorHandler` protege eventos gerais, enquanto erros esperados de módulo devem ser tratados no fluxo da própria funcionalidade.
+
+Falhas de descoberta, validação, importação, configuração ou inicialização não entram no histórico de execução. Elas tornam somente o módulo afetado indisponível, aparecem de forma resumida no diagnóstico e são detalhadas no `module.log` local.
 
 ## Princípios de evolução
 

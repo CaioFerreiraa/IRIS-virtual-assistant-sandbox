@@ -15,6 +15,7 @@ def list_modules(db: Session = Depends(get_db)):
 
 @router.post("/")
 def create_module(
+    module_public_key: str,
     name: str,
     call_name: str | None = None,
     custom_call_name: str | None = None,
@@ -24,6 +25,7 @@ def create_module(
 ):
     processor = CommandProcessor(ModuleRepository(db))
     return processor.create_module(
+        module_public_key=module_public_key.strip(),
         name=name.strip(),
         call_name=call_name.strip() if call_name else None,
         custom_call_name=custom_call_name.strip() if custom_call_name else None,

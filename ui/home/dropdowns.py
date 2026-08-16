@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 import re
 
 import flet as ft
@@ -12,14 +13,22 @@ EXECUTABLE_SUFFIX_ICON = ft.Icons.ARROW_FORWARD_ROUNDED
 ModuleOption = str | Mapping[str, object]
 
 
+@dataclass(frozen=True)
+class ResolvedModule:
+    module_id: int | None
+    path: str
+    argument: str
+    ambiguous: bool = False
+
+
 class HomeDropdowns:
     def __init__(
         self,
         module_options: Sequence[ModuleOption],
         executable_lookup: Mapping[str, bool],
         controls,
-        search_arguments: Callable[[str, str], Sequence[ui.argument_dropdown.ArgumentOption]],
-        on_select_module: Callable[[str], None],
+        search_arguments: Callable[[int, str], Sequence[ui.argument_dropdown.ArgumentOption]],
+        on_select_module: Callable[[int, str], None],
         on_select_argument: Callable[[str], None],
         update_control: Callable[[ft.Control], None],
         dropdown_height: int,
@@ -33,6 +42,7 @@ class HomeDropdowns:
         self.on_select_argument = on_select_argument
         self.update_control = update_control
         self.dropdown_height = dropdown_height
+        self.selected_module_id: int | None = None
         self.selected_module_path: str | None = None
         self.expanded_groups: dict[str, bool] = {}
         self.last_query: str | None = None
@@ -70,6 +80,7 @@ class HomeDropdowns:
 
     def clear_selected_module(self) -> None:
         # Limpa o modulo atualmente aguardando argumento.
+        self.selected_module_id = None
         self.selected_module_path = None
 
     def toggle_group(self, module_path: str) -> None:
@@ -122,24 +133,49 @@ class HomeDropdowns:
 
     def show_argument_suggestions(self, query: str = "") -> None:
         # Busca e renderiza argumentos para o modulo selecionado.
-        if not self.selected_module_path:
+        if self.selected_module_id is None:
             self.hide_argument_suggestions()
             self.update_control(self.controls.argument_panel)
             self.sync_stack()
             return
 
-        arguments = self.search_arguments(self.selected_module_path, query)
+        arguments = self.search_arguments(self.selected_module_id, query)
+        self.apply_argument_suggestions(arguments)
+
+    def apply_argument_suggestions(
+        self,
+        arguments: Sequence[ui.argument_dropdown.ArgumentOption],
+    ) -> None:
+        if self.selected_module_id is None:
+            return
         self.controls.argument_suggestions_list.controls = ui.argument_dropdown.build_argument_suggestion_controls(arguments, self.on_select_argument)
         self.controls.argument_panel.visible = self.selected_module_path is not None
         self.update_control(self.controls.argument_panel)
         self.sync_stack()
 
-    def open_argument_dropdown(self, module_path: str) -> None:
+    def open_argument_dropdown(
+        self,
+        module_id: int,
+        module_path: str,
+        *,
+        load_suggestions: bool = True,
+    ) -> None:
         # Abre o dropdown secundario para escolher argumento do modulo.
+        self.selected_module_id = module_id
         self.selected_module_path = module_path
         self.hide_module_suggestions()
         self.controls.argument_input_field.value = ""
-        self.show_argument_suggestions("")
+        if load_suggestions:
+            self.show_argument_suggestions("")
+        else:
+            self.controls.argument_suggestions_list.controls = [
+                ft.Container(
+                    height=80,
+                    alignment=ft.Alignment.CENTER,
+                    content=ft.ProgressRing(width=22, height=22, stroke_width=2),
+                )
+            ]
+            self.controls.argument_panel.visible = True
         self.update_control(self.controls.argument_input_field)
         self.update_control(self.controls.module_panel)
         self.sync_stack()
@@ -159,6 +195,21 @@ def option_is_executable(module_option: ModuleOption) -> bool:
     return bool(module_option.get("is_executable", False))
 
 
+def option_module_id(module_option: ModuleOption) -> int | None:
+    if isinstance(module_option, str):
+        return None
+    value = module_option.get("module_id")
+    return value if isinstance(value, int) else None
+
+
+def option_command_paths(module_option: ModuleOption) -> list[str]:
+    if isinstance(module_option, str):
+        return [module_option]
+    values = module_option.get("command_paths", ())
+    paths = [str(value) for value in values] if isinstance(values, (list, tuple)) else []
+    return list(dict.fromkeys([option_path(module_option), *paths]))
+
+
 def sort_modules(module_options: Sequence[ModuleOption]) -> list[ModuleOption]:
     # Ordena modulos mantendo pais e filhos em uma ordem previsivel.
     return sorted(module_options, key=lambda module_option: _parent_sort_key(option_path(module_option)))
@@ -172,7 +223,12 @@ def filter_modules(query: str, module_options: Sequence[ModuleOption]) -> list[M
 
     matches = []
     for module_option in sort_modules(module_options):
-        searchable = ui.text_utils.normalize(option_path(module_option))
+        searchable_value = (
+            option_path(module_option)
+            if isinstance(module_option, str)
+            else str(module_option.get("search_text", option_path(module_option)))
+        )
+        searchable = ui.text_utils.normalize(searchable_value)
         if all(_token_matches(token, searchable) for token in tokens):
             matches.append(module_option)
 
@@ -183,31 +239,82 @@ def resolve_voice_module(
     query: str,
     module_options: Sequence[ModuleOption],
 ) -> tuple[str, str] | None:
-    """Encontra o caminho executável no começo da fala e separa seu argumento."""
+    """Compatibilidade: devolve caminho e argumento quando a resolução é única."""
+    resolved = resolve_voice_module_option(query, module_options)
+    if resolved is None or resolved.ambiguous:
+        return None
+    return resolved.path, resolved.argument
+
+
+def resolve_voice_module_option(
+    query: str,
+    module_options: Sequence[ModuleOption],
+) -> ResolvedModule | None:
+    """Resolve uma fala para um ID sem escolher silenciosamente entre ambiguidades."""
     original_words = [word for word in re.split(r"\s+", query.strip()) if word]
     normalized_words = [ui.text_utils.normalize(word).strip(".,!?;:") for word in original_words]
-    candidates: list[tuple[int, str, str]] = []
+    candidates: list[tuple[int, int | None, str, str]] = []
 
     for module_option in module_options:
         if not option_is_executable(module_option):
             continue
         module_path = option_path(module_option)
-        path_words = [
-            word
-            for word in ui.text_utils.normalize(module_path.replace("/", " ")).split()
-            if word
-        ]
-        if len(path_words) > len(normalized_words):
-            continue
-        if normalized_words[: len(path_words)] != path_words:
-            continue
-        argument = " ".join(original_words[len(path_words):]).strip(" ,.!?;:")
-        candidates.append((len(path_words), module_path, argument))
+        for command_path in option_command_paths(module_option):
+            path_words = [
+                word
+                for word in ui.text_utils.normalize(command_path.replace("/", " ")).split()
+                if word
+            ]
+            if len(path_words) > len(normalized_words):
+                continue
+            if normalized_words[: len(path_words)] != path_words:
+                continue
+            argument = " ".join(original_words[len(path_words):]).strip(" ,.!?;:")
+            candidates.append(
+                (
+                    len(path_words),
+                    option_module_id(module_option),
+                    module_path,
+                    argument,
+                )
+            )
 
     if not candidates:
         return None
-    _, module_path, argument = max(candidates, key=lambda candidate: candidate[0])
-    return module_path, argument
+    longest_match = max(candidate[0] for candidate in candidates)
+    best_candidates = [candidate for candidate in candidates if candidate[0] == longest_match]
+    unique_modules = {
+        (candidate[1], candidate[2]): candidate
+        for candidate in best_candidates
+    }
+    if len(unique_modules) > 1:
+        return ResolvedModule(None, "", "", ambiguous=True)
+    _, module_id, module_path, argument = next(iter(unique_modules.values()))
+    return ResolvedModule(module_id, module_path, argument)
+
+
+def resolve_typed_module(
+    query: str,
+    module_options: Sequence[ModuleOption],
+) -> ResolvedModule | None:
+    normalized_query = ui.text_utils.normalize(query.replace("/", " ")).strip()
+    if not normalized_query:
+        return None
+    matches: dict[tuple[int | None, str], ModuleOption] = {}
+    for module_option in module_options:
+        if not option_is_executable(module_option):
+            continue
+        if any(
+            ui.text_utils.normalize(path.replace("/", " ")).strip() == normalized_query
+            for path in option_command_paths(module_option)
+        ):
+            matches[(option_module_id(module_option), option_path(module_option))] = module_option
+    if not matches:
+        return None
+    if len(matches) > 1:
+        return ResolvedModule(None, "", "", ambiguous=True)
+    module_id, path = next(iter(matches))
+    return ResolvedModule(module_id, path, "")
 
 
 def module_executable_lookup(module_options: Sequence[ModuleOption]) -> dict[str, bool]:
@@ -256,7 +363,7 @@ def build_module_suggestion_controls(
     executable_lookup: Mapping[str, bool],
     expanded_groups: dict[str, bool],
     on_toggle: Callable[[str], None],
-    on_select: Callable[[str], None],
+    on_select: Callable[[int, str], None],
 ) -> list[ft.Control]:
     # Cria os controles da lista de modulos a partir da arvore filtrada.
     controls: list[ft.Control] = []
@@ -270,6 +377,7 @@ def build_module_suggestion_controls(
             children = node["children"]
             module_path = str(node["path"])
             is_executable = bool(node["is_executable"])
+            module_id = node.get("module_id")
 
             if children:
                 is_expanded = expanded_groups.get(module_path, has_query)
@@ -279,6 +387,7 @@ def build_module_suggestion_controls(
                         module_path,
                         is_expanded,
                         is_executable,
+                        module_id,
                         on_toggle,
                         on_select,
                         indent=depth * 24,
@@ -290,6 +399,7 @@ def build_module_suggestion_controls(
             else:
                 controls.append(
                     _build_module_leaf(
+                        module_id,
                         module_path,
                         on_select,
                         label=str(node["label"]),
@@ -325,6 +435,7 @@ def build_module_tree(
                     "path": current_path,
                     "children": {},
                     "is_executable": executable_lookup.get(current_path, False),
+                    "module_id": None,
                 },
             )["children"]
 
@@ -334,6 +445,7 @@ def build_module_tree(
                 current_node = node[part]
                 node = current_node["children"]
             current_node["is_executable"] = option_is_executable(module_option)
+            current_node["module_id"] = option_module_id(module_option)
 
     return root
 
@@ -391,8 +503,9 @@ def _build_executable_suffix(is_executable: bool) -> ft.Control:
 
 
 def _build_module_leaf(
+    module_id: int | None,
     module_path: str,
-    on_select: Callable[[str], None],
+    on_select: Callable[[int, str], None],
     label: str,
     is_executable: bool,
     indent: int = 0,
@@ -404,7 +517,11 @@ def _build_module_leaf(
         border_radius=12,
         ink=True,
         ink_color=PASTEL_BLUE,
-        on_click=lambda _, selected=module_path: on_select(selected),
+        on_click=(
+            (lambda _, selected_id=module_id, selected=module_path: on_select(selected_id, selected))
+            if module_id is not None
+            else None
+        ),
         content=ft.Row(
             spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -422,8 +539,9 @@ def _build_module_group_header(
     module_path: str,
     is_expanded: bool,
     is_executable: bool,
+    module_id: int | None,
     on_toggle: Callable[[str], None],
-    on_select: Callable[[str], None],
+    on_select: Callable[[int, str], None],
     indent: int = 0,
 ) -> ft.Container:
     # Cria uma linha de modulo com filhos expansivel como pasta.
@@ -437,7 +555,7 @@ def _build_module_group_header(
         ft.Text(label, size=14, weight=ft.FontWeight.W_700, color=TEXT_PRIMARY, overflow=ft.TextOverflow.ELLIPSIS, no_wrap=True, expand=True),
     ]
 
-    if is_executable:
+    if is_executable and module_id is not None:
         controls.append(
             ft.Container(
                 width=28,
@@ -446,7 +564,7 @@ def _build_module_group_header(
                 alignment=ft.Alignment.CENTER,
                 ink=True,
                 ink_color=PASTEL_BLUE,
-                on_click=lambda _, selected=module_path: on_select(selected),
+                on_click=lambda _, selected_id=module_id, selected=module_path: on_select(selected_id, selected),
                 content=ft.Icon(icon=EXECUTABLE_SUFFIX_ICON, size=16, color=PASTEL_DARK_PURPLE),
             )
         )

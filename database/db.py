@@ -1,11 +1,31 @@
 from collections.abc import Generator
+from pathlib import Path
 
-from sqlalchemy import create_engine, func, inspect, text
+from sqlalchemy import create_engine, event, func, inspect, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = "sqlite:///iris.db"
 
 engine = create_engine(DATABASE_URL, echo=True)
+
+
+def enable_sqlite_foreign_keys(target_engine: Engine) -> None:
+    """Ativa chaves estrangeiras em toda conexão SQLite do engine informado."""
+    if target_engine.url.get_backend_name() != "sqlite":
+        return
+
+    @event.listens_for(target_engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, connection_record) -> None:
+        del connection_record
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        finally:
+            cursor.close()
+
+
+enable_sqlite_foreign_keys(engine)
 
 SessionLocal = sessionmaker(
     bind=engine,
@@ -18,41 +38,49 @@ Base = declarative_base()
 
 DEFAULT_MODULE_TREE = (
     {
+        "module_public_key": "iris.assistant",
         "name": "Assistente",
         "call_name": "assistente",
         "description": "Módulo principal da IRIS.",
     },
     {
+        "module_public_key": "iris.calendar",
         "name": "Agenda",
         "call_name": "agenda",
         "description": "Módulo responsável por compromissos e eventos.",
     },
     {
+        "module_public_key": "iris.files",
         "name": "Arquivos",
         "call_name": "arquivos",
         "description": "Módulo responsável por localizar e organizar arquivos.",
     },
     {
+        "module_public_key": "iris.browser",
         "name": "Navegador",
         "call_name": "navegador",
         "description": "Módulo responsável por navegação e pesquisa.",
     },
     {
+        "module_public_key": "iris.system",
         "name": "Sistema",
         "call_name": "sistema",
         "description": "Módulo responsável por comandos do sistema.",
     },
     {
+        "module_public_key": "iris.images",
         "name": "Imagens",
         "call_name": "imagens",
         "description": "Módulo responsável por recursos de imagem.",
         "children": (
             {
+                "module_public_key": "iris.images.numbers",
                 "name": "Números",
                 "call_name": "numeros",
                 "description": "Submódulo de imagens com números.",
                 "children": (
                     {
+                        "module_public_key": "iris.images.numbers.five",
                         "name": "5",
                         "call_name": "5",
                         "description": "Submódulo de imagem do número 5.",
@@ -62,11 +90,13 @@ DEFAULT_MODULE_TREE = (
         ),
     },
     {
+        "module_public_key": "open",
         "name": "Abrir",
         "call_name": "abrir",
         "description": "Módulo responsável por abrir recursos locais ou páginas.",
         "children": (
             {
+                "module_public_key": "open.app",
                 "name": "App",
                 "call_name": "app",
                 "description": "Abre itens da area de trabalho.",
@@ -75,11 +105,13 @@ DEFAULT_MODULE_TREE = (
                 "is_executable": True,
             },
             {
+                "module_public_key": "open.web",
                 "name": "Web",
                 "call_name": "web",
                 "description": "Submódulo responsável por abrir páginas web.",
                 "children": (
                     {
+                        "module_public_key": "open.web.green",
                         "name": "Verde",
                         "call_name": "verde",
                         "description": "Abre uma página HTML com fundo verde.",
@@ -88,6 +120,7 @@ DEFAULT_MODULE_TREE = (
                         "is_executable": True,
                     },
                     {
+                        "module_public_key": "open.web.red",
                         "name": "Vermelho",
                         "call_name": "vermelho",
                         "description": "Abre uma página HTML com fundo vermelho.",
@@ -105,8 +138,10 @@ DEFAULT_MODULE_TREE = (
 def init_db() -> None:
     import database.models
 
-    Base.metadata.create_all(bind=engine)
     _ensure_sqlite_schema()
+    _ensure_module_registry_schema()
+    Base.metadata.create_all(bind=engine)
+    _ensure_module_registry_schema()
     _seed_default_modules()
 
 
@@ -216,6 +251,54 @@ def _ensure_sqlite_schema() -> None:
                 )
 
 
+def _ensure_module_registry_schema() -> None:
+    if engine.url.get_backend_name() != "sqlite":
+        return
+
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "modules" not in table_names:
+        return
+
+    module_columns = {column["name"] for column in inspector.get_columns("modules")}
+    has_registry_schema = "module_public_key" in module_columns
+    has_alembic_version = "alembic_version" in table_names
+
+    if not has_registry_schema:
+        _run_alembic_upgrade_from_legacy_schema(has_alembic_version)
+        return
+
+    if not has_alembic_version:
+        _stamp_alembic_revision("head")
+
+
+def _run_alembic_upgrade_from_legacy_schema(has_alembic_version: bool) -> None:
+    if not has_alembic_version:
+        _stamp_alembic_revision("e5f7a9c2d4b1")
+    _upgrade_alembic_revision("head")
+
+
+def _build_alembic_config():
+    from alembic.config import Config
+
+    project_root = Path(__file__).resolve().parents[1]
+    config = Config(str(project_root / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", str(engine.url))
+    return config
+
+
+def _stamp_alembic_revision(revision: str) -> None:
+    from alembic import command
+
+    command.stamp(_build_alembic_config(), revision)
+
+
+def _upgrade_alembic_revision(revision: str) -> None:
+    from alembic import command
+
+    command.upgrade(_build_alembic_config(), revision)
+
+
 def _seed_default_modules() -> None:
     from database.models import Module
 
@@ -225,15 +308,27 @@ def _seed_default_modules() -> None:
             for module_data in modules:
                 module = (
                     db.query(Module)
-                    .filter(
-                        func.lower(Module.call_name) == module_data["call_name"].lower(),
-                        Module.parent_module_id == parent_id,
-                    )
+                    .filter(Module.module_public_key == module_data["module_public_key"])
                     .first()
                 )
 
                 if module is None:
+                    module = (
+                        db.query(Module)
+                        .filter(
+                            Module.module_public_key.like("legacy.module-%"),
+                            func.lower(Module.call_name) == module_data["call_name"].lower(),
+                            Module.parent_module_id == parent_id,
+                            Module.manifest_directory.is_(None),
+                        )
+                        .first()
+                    )
+                    if module is not None:
+                        module.module_public_key = module_data["module_public_key"]
+
+                if module is None:
                     module = Module(
+                        module_public_key=module_data["module_public_key"],
                         name=module_data["name"],
                         call_name=module_data["call_name"],
                         description=module_data.get("description", ""),
@@ -245,6 +340,8 @@ def _seed_default_modules() -> None:
                     db.add(module)
                     db.flush()
                 else:
+                    module.name = module_data["name"]
+                    module.call_name = module_data["call_name"]
                     module.description = module_data.get("description", module.description)
                     module.request_method = module_data.get("request_method", module.request_method)
                     module.request_url = module_data.get("request_url", module.request_url)

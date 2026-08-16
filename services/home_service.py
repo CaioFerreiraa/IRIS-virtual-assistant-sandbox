@@ -4,33 +4,33 @@ from repositories.module_repository import ModuleRepository
 
 
 class HomeService:
-    def module_has_arguments(self, module_path: str) -> bool:
+    def module_has_arguments(self, module_id: int) -> bool:
         # Verifica se um modulo executavel possui busca de argumentos.
         processor, db = self._build_processor()
         try:
-            return processor.module_has_argument_search(module_path)
+            return processor.module_has_argument_search_by_id(module_id)
         except Exception as error:
             print(error)
             return False
         finally:
             db.close()
 
-    def search_module_arguments(self, module_path: str, query: str = "") -> list[dict[str, str]]:
+    def search_module_arguments(self, module_id: int, query: str = "") -> list[dict[str, str]]:
         # Busca os argumentos disponiveis para um modulo.
         processor, db = self._build_processor()
         try:
-            return processor.search_module_arguments(module_path, query)
+            return processor.search_module_arguments_by_id(module_id, query)
         except Exception as error:
             print(error)
             return []
         finally:
             db.close()
 
-    def execute_module(self, module_path: str, argument: str | None = None) -> dict:
+    def execute_module(self, module_id: int, argument: str | None = None) -> dict:
         # Executa um modulo com ou sem argumento.
         processor, db = self._build_processor()
         try:
-            return processor.execute_module_path(module_path, argument)
+            return processor.execute_module_id(module_id, argument)
         finally:
             db.close()
 

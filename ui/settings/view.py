@@ -6,11 +6,11 @@ from services.speech_service_manager import SpeechServiceManager
 from ui.settings.general_tab import build_general_settings_tab
 from ui.settings.passwords_tab import build_passwords_tab
 from ui.settings.voice_tab import VoiceSettingsTab
+from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import (
     BORDER,
     PASTEL_PURPLE,
-    SURFACE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
@@ -46,27 +46,20 @@ class SettingsViewState:
         self.speech_manager.subscribe(self.voice_tab.on_speech_event)
         self.voice_tab.sync_status_from_manager()
 
-        return ft.Container(
-            expand=True,
-            padding=ft.Padding(left=28, top=28, right=28, bottom=28),
-            content=ft.Container(
+        return build_route_content_container(
+            icon=ft.Icons.SETTINGS_ROUNDED,
+            title="Configurações",
+            subtitle="Personalize o comportamento da IRIS.",
+            content=ft.Column(
                 expand=True,
-                padding=ft.Padding(left=24, top=24, right=24, bottom=24),
-                bgcolor=SURFACE,
-                border=ft.Border.all(1, BORDER),
-                border_radius=8,
-                content=ft.Column(
-                    expand=True,
-                    spacing=20,
-                    controls=[
-                        ft.Text("Configurações", size=24, weight=ft.FontWeight.BOLD, color=TEXT_PRIMARY),
-                        ft.Container(
-                            border=ft.Border.only(bottom=ft.BorderSide(1, BORDER)),
-                            content=ft.Row(spacing=20, controls=list(self.tab_buttons.values())),
-                        ),
-                        self.tab_content,
-                    ],
-                ),
+                spacing=20,
+                controls=[
+                    ft.Container(
+                        border=ft.Border.only(bottom=ft.BorderSide(1, BORDER)),
+                        content=ft.Row(spacing=20, controls=list(self.tab_buttons.values())),
+                    ),
+                    self.tab_content,
+                ],
             ),
         )
 

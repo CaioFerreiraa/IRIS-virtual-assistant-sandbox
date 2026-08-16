@@ -1,6 +1,17 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from database.db import Base
@@ -8,8 +19,15 @@ from database.db import Base
 
 class Module(Base):
     __tablename__ = "modules"
+    __table_args__ = (
+        CheckConstraint(
+            "parent_module_id IS NULL OR parent_module_id <> id",
+            name="ck_modules_parent_not_self",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    module_public_key = Column(String(120), nullable=False, unique=True)
     name = Column(String(100), nullable=False)
     call_name = Column(String(100), nullable=False)
     custom_call_name = Column(String(100), nullable=True)
@@ -17,9 +35,21 @@ class Module(Base):
 
     request_method = Column(String(10), nullable=True)
     request_url = Column(String(255), nullable=True)
-    is_executable = Column(Boolean, default=False)
+    is_executable = Column(Boolean, nullable=False, default=False)
 
-    parent_module_id = Column(Integer, ForeignKey("modules.id"), nullable=True)
+    is_available = Column(Boolean, nullable=False, default=True)
+    validation_error = Column(String(255), nullable=True)
+    manifest_directory = Column(Text, nullable=True)
+    readme_path = Column(Text, nullable=True)
+    runtime_type = Column(String(20), nullable=True)
+    supports_auto_start = Column(Boolean, nullable=False, default=False)
+    auto_start_enabled = Column(Boolean, nullable=False, default=False)
+
+    parent_module_id = Column(
+        Integer,
+        ForeignKey("modules.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     created_date = Column(DateTime, default=datetime.utcnow)
     edited_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -31,10 +61,76 @@ class Module(Base):
     child_modules = relationship(
         "Module",
         back_populates="parent_module",
-        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     logs = relationship("Log", back_populates="module")
     routine_actions = relationship("RoutineAction", back_populates="module")
+    variable_definitions = relationship(
+        "ModuleVariableDefinition",
+        back_populates="module",
+        order_by="ModuleVariableDefinition.display_order",
+        passive_deletes=True,
+    )
+
+
+class ModuleVariableDefinition(Base):
+    __tablename__ = "module_variable_definitions"
+    __table_args__ = (
+        UniqueConstraint("module_id", "key", name="uq_module_variable_definition"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    module_id = Column(
+        Integer,
+        ForeignKey("modules.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    key = Column(String(100), nullable=False)
+    label = Column(String(150), nullable=False)
+    description = Column(Text, nullable=True)
+    type = Column(String(30), nullable=False)
+    is_required = Column(Boolean, nullable=False, default=False)
+    is_user_editable = Column(Boolean, nullable=False, default=False)
+    default_value = Column(Text, nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    module = relationship("Module", back_populates="variable_definitions")
+    value = relationship(
+        "ModuleVariableValue",
+        back_populates="variable_definition",
+        uselist=False,
+        passive_deletes=True,
+    )
+
+
+class ModuleVariableValue(Base):
+    __tablename__ = "module_variable_values"
+    __table_args__ = (
+        UniqueConstraint(
+            "variable_definition_id",
+            name="uq_module_variable_value_definition",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    variable_definition_id = Column(
+        Integer,
+        ForeignKey("module_variable_definitions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    value_text = Column(Text, nullable=False, default="")
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    variable_definition = relationship(
+        "ModuleVariableDefinition",
+        back_populates="value",
+    )
 
 
 class Routine(Base):

@@ -7,8 +7,9 @@ import ui.home as ui
 from services.home_service import HomeService
 from services.speech_service import SpeechEvent, SpeechEventKind
 from services.speech_service_manager import SpeechServiceManager
+from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
-from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, SURFACE
+from ui.theme.colors import PASTEL_DARK_PURPLE
 from ui.theme.fonts import TITLE_FONT
 
 
@@ -40,7 +41,7 @@ class HomeViewState:
         self.speech_manager = speech_manager
         self.is_loading = False
         self.is_voice_active = False
-        self._argument_capability_cache: dict[str, bool] = {}
+        self._argument_capability_cache: dict[int, bool] = {}
         self.controls: HomeViewControls | None = None
         self.dropdowns: ui.dropdowns.HomeDropdowns | None = None
 
@@ -161,35 +162,47 @@ class HomeViewState:
         self.sync_clear_button_visibility()
         self.update_if_ready(controls.command_input_field)
 
-        resolved = ui.dropdowns.resolve_voice_module(text, self.module_options)
+        resolved = ui.dropdowns.resolve_voice_module_option(text, self.module_options)
         if resolved is None:
             self._dropdowns().show_module_suggestions(text)
             return
+        if resolved.ambiguous or resolved.module_id is None:
+            self._dropdowns().show_module_suggestions(text)
+            return
 
-        module_path, argument = resolved
-        if argument and self._module_has_arguments(module_path):
-            self._dropdowns().open_argument_dropdown(module_path)
-            controls.argument_input_field.value = argument
-            self._dropdowns().show_argument_suggestions(argument)
+        if resolved.argument and self._module_has_arguments(resolved.module_id):
+            self._dropdowns().open_argument_dropdown(
+                resolved.module_id,
+                resolved.path,
+                load_suggestions=False,
+            )
+            controls.argument_input_field.value = resolved.argument
+            self._request_argument_suggestions(resolved.argument)
             self.update_if_ready(controls.argument_input_field)
             return
 
-        self._dropdowns().show_module_suggestions(module_path)
+        self._dropdowns().show_module_suggestions(resolved.path)
 
     def _submit_voice_command(self, text: str) -> None:
-        resolved = ui.dropdowns.resolve_voice_module(text, self.module_options)
+        resolved = ui.dropdowns.resolve_voice_module_option(text, self.module_options)
         if resolved is None:
             self.show_module_error("Não encontrei um módulo compatível com o comando falado.")
             return
+        if resolved.ambiguous:
+            self.show_module_error("O comando corresponde a mais de um módulo. Escolha um item da lista.")
+            return
+        if resolved.module_id is None:
+            self.show_module_error("Não foi possível identificar o módulo selecionado.")
+            return
 
-        module_path, argument = resolved
-        self._dropdowns().selected_module_path = module_path
-        self.send_request(argument=argument or None)
+        self._dropdowns().selected_module_id = resolved.module_id
+        self._dropdowns().selected_module_path = resolved.path
+        self.send_request(argument=resolved.argument or None)
 
-    def _module_has_arguments(self, module_path: str) -> bool:
-        if module_path not in self._argument_capability_cache:
-            self._argument_capability_cache[module_path] = self.home_service.module_has_arguments(module_path)
-        return self._argument_capability_cache[module_path]
+    def _module_has_arguments(self, module_id: int) -> bool:
+        if module_id not in self._argument_capability_cache:
+            self._argument_capability_cache[module_id] = self.home_service.module_has_arguments(module_id)
+        return self._argument_capability_cache[module_id]
 
     def keep_dropdowns_open(self, e=None) -> None:
         # Mantem cliques internos dos dropdowns sem fechar nada.
@@ -210,41 +223,116 @@ class HomeViewState:
 
     def show_argument_suggestions_from_event(self, e) -> None:
         # Atualiza sugestoes de argumentos a partir do input secundario.
-        self._dropdowns().show_argument_suggestions_from_event(e)
+        self._request_argument_suggestions(e.control.value or "")
 
-    def validate_module_request(self) -> str:
+    def _request_argument_suggestions(self, query: str) -> None:
+        dropdowns = self._dropdowns()
+        module_id = dropdowns.selected_module_id
+        if module_id is None:
+            return
+        try:
+            page = self._controls().root.page
+        except RuntimeError:
+            page = None
+        if page is None:
+            dropdowns.show_argument_suggestions(query)
+            return
+        page.run_thread(
+            self._search_arguments_background,
+            page,
+            module_id,
+            query,
+        )
+
+    def _search_arguments_background(
+        self,
+        page: ft.Page,
+        module_id: int,
+        query: str,
+    ) -> None:
+        arguments = self.home_service.search_module_arguments(module_id, query)
+        page.run_task(
+            self._apply_argument_suggestions,
+            module_id,
+            query,
+            arguments,
+        )
+
+    async def _apply_argument_suggestions(
+        self,
+        module_id: int,
+        query: str,
+        arguments: Sequence[ui.argument_dropdown.ArgumentOption],
+    ) -> None:
+        dropdowns = self._dropdowns()
+        if dropdowns.selected_module_id != module_id:
+            return
+        current_query = self._controls().argument_input_field.value or ""
+        if current_query != query:
+            return
+        dropdowns.apply_argument_suggestions(arguments)
+
+    def validate_module_request(self) -> tuple[int, str]:
         # Garante que existe um modulo digitado ou selecionado.
+        selected_module_id = self._dropdowns().selected_module_id
         selected_module_path = self._dropdowns().selected_module_path
-        command = selected_module_path or (self._controls().command_input_field.value or "").strip()
-        if not command:
-            raise ValueError("Informe um modulo para executar.")
-        return command
+        if selected_module_id is not None and selected_module_path:
+            return selected_module_id, selected_module_path
 
-    def send_request(self, e=None, argument: str | None = None) -> None:
+        command = (self._controls().command_input_field.value or "").strip()
+        if not command:
+            raise ValueError("Informe um módulo para executar.")
+        resolved = ui.dropdowns.resolve_typed_module(command, self.module_options)
+        if resolved is None:
+            raise ValueError("Escolha um módulo válido na lista de sugestões.")
+        if resolved.ambiguous:
+            raise ValueError("O comando corresponde a mais de um módulo. Escolha um item da lista.")
+        if resolved.module_id is None:
+            raise ValueError("Não foi possível identificar o módulo selecionado.")
+        return resolved.module_id, resolved.path
+
+    def send_request(
+        self,
+        e=None,
+        argument: str | None = None,
+        module_id: int | None = None,
+        module_path: str | None = None,
+    ) -> None:
         # Executa a rota atual ou abre a busca de argumentos quando necessario.
         controls = self._controls()
         if self.is_loading:
             return
 
         if self.is_voice_active:
-            resolved = ui.dropdowns.resolve_voice_module(
+            resolved = ui.dropdowns.resolve_voice_module_option(
                 controls.command_input_field.value or "",
                 self.module_options,
             )
-            if resolved is not None:
-                module_path, spoken_argument = resolved
+            if resolved is not None and resolved.ambiguous:
+                self.show_module_error("O comando corresponde a mais de um módulo. Escolha um item da lista.")
+                return
+            if resolved is not None and resolved.module_id is not None:
+                module_id = resolved.module_id
+                module_path = resolved.path
+                self._dropdowns().selected_module_id = module_id
                 self._dropdowns().selected_module_path = module_path
-                if argument is None and spoken_argument:
-                    argument = spoken_argument
+                if argument is None and resolved.argument:
+                    argument = resolved.argument
 
         try:
-            module_path = self.validate_module_request()
+            if module_id is None or module_path is None:
+                module_id, module_path = self.validate_module_request()
         except Exception as error:
             self.show_module_error(str(error))
             return
 
-        if argument is None and self.home_service.module_has_arguments(module_path):
-            self._dropdowns().open_argument_dropdown(module_path)
+        if argument is None and self.home_service.module_has_arguments(module_id):
+            self._dropdowns().open_argument_dropdown(
+                module_id,
+                module_path,
+                load_suggestions=False,
+            )
+            self._request_argument_suggestions("")
             return
 
         self.is_loading = True
@@ -252,33 +340,69 @@ class HomeViewState:
         self.update_if_ready(controls.send_button)
 
         try:
-            result = self.home_service.execute_module(module_path, argument)
-            if result.get("success", True):
-                self.show_module_success(result)
-                controls.command_input_field.value = ""
-                controls.argument_input_field.value = ""
-                self.sync_clear_button_visibility()
-                self.update_if_ready(controls.command_input_field)
-                self.update_if_ready(controls.argument_input_field)
-            else:
-                self.show_module_error(self.result_message(result) or "O modulo retornou erro.")
+            page = controls.root.page
+        except RuntimeError:
+            page = None
+        if page is None:
+            try:
+                result = self.home_service.execute_module(module_id, argument)
+                self._apply_request_result(result, None)
+            except Exception as error:
+                self._apply_request_result(None, error)
+            return
+        page.run_thread(self._execute_request, page, module_id, argument)
+
+    def _execute_request(
+        self,
+        page: ft.Page,
+        module_id: int,
+        argument: str | None,
+    ) -> None:
+        try:
+            result = self.home_service.execute_module(module_id, argument)
+            page.run_task(self._finish_request, result, None)
         except Exception as error:
+            page.run_task(self._finish_request, None, error)
+
+    async def _finish_request(
+        self,
+        result: dict | None,
+        error: Exception | None,
+    ) -> None:
+        self._apply_request_result(result, error)
+
+    def _apply_request_result(
+        self,
+        result: dict | None,
+        error: Exception | None,
+    ) -> None:
+        controls = self._controls()
+        if error is not None:
             self.show_module_error(str(error))
-            print(error)
-        finally:
-            self.is_loading = False
-            ui.input.set_send_button_loading(controls.send_button, self.is_loading)
-            self.update_if_ready(controls.send_button)
-            if self.speech_manager is not None:
-                self.speech_manager.deactivate_command()
+        elif result is not None and result.get("success", True):
+            self.show_module_success(result)
+            controls.command_input_field.value = ""
+            controls.argument_input_field.value = ""
+            self._dropdowns().clear_selected_module()
+            self.sync_clear_button_visibility()
+            self.update_if_ready(controls.command_input_field)
+            self.update_if_ready(controls.argument_input_field)
+        elif result is not None:
+            self.show_module_error(self.result_message(result) or "O módulo retornou erro.")
+
+        self.is_loading = False
+        ui.input.set_send_button_loading(controls.send_button, self.is_loading)
+        self.update_if_ready(controls.send_button)
+        if self.speech_manager is not None:
+            self.speech_manager.deactivate_command()
 
     def show_module_success(self, result: dict) -> None:
         if self.toaster_handler is None:
             return
 
         self.toaster_handler.show_success(
-            message=self.result_message(result) or "Modulo executado com sucesso.",
-            title="Modulo executado",
+            message=self.result_message(result) or "Módulo executado com sucesso.",
+            title="Módulo executado",
         )
 
     def show_module_error(self, message: str) -> None:
@@ -286,8 +410,8 @@ class HomeViewState:
             return
 
         self.toaster_handler.show_error(
-            message=message or "Nao foi possivel executar o modulo.",
-            title="Erro no modulo",
+            message=message or "Não foi possível executar o módulo.",
+            title="Erro no módulo",
         )
 
     def result_message(self, result: dict) -> str:
@@ -299,20 +423,26 @@ class HomeViewState:
             return f"URL aberta: {result['opened']}"
         return ""
 
-    def select_module(self, module_path: str) -> None:
+    def select_module(self, module_id: int, module_path: str) -> None:
         # Seleciona um modulo e decide se executa direto ou pede argumento.
         controls = self._controls()
         controls.command_input_field.value = module_path
         self.sync_clear_button_visibility()
         self.update_if_ready(controls.command_input_field)
 
-        if self.home_service.module_has_arguments(module_path):
-            self._dropdowns().open_argument_dropdown(module_path)
+        self._dropdowns().selected_module_id = module_id
+        self._dropdowns().selected_module_path = module_path
+        if self.home_service.module_has_arguments(module_id):
+            self._dropdowns().open_argument_dropdown(
+                module_id,
+                module_path,
+                load_suggestions=False,
+            )
+            self._request_argument_suggestions("")
             return
 
-        self._dropdowns().clear_selected_module()
         self.hide_dropdowns()
-        self.send_request(argument=None)
+        self.send_request(argument=None, module_id=module_id, module_path=module_path)
 
     def execute_argument_from_event(self, e) -> None:
         # Executa o argumento digitado no input secundario.
@@ -460,34 +590,29 @@ def build_background_logo() -> ft.Container:
     )
 
 
-def build_home_content( input_title: ft.Container, input_shell: ft.Container, dropdown_stack: ft.Stack,
-                        on_background_click: Callable | None = None, ) -> ft.Container:
+def build_home_content(
+    input_title: ft.Container,
+    input_shell: ft.Container,
+    dropdown_stack: ft.Stack,
+    on_background_click: Callable | None = None,
+) -> ft.Container:
     # Cria a estrutura visual da home com fundo, titulo, input e dropdowns.
-    return ft.Container(
-        expand=True,
-        padding=ft.Padding(left=28, top=28, right=28, bottom=28),
-        content=ft.Container(
+    return build_route_content_container(
+        content=ft.Stack(
             expand=True,
-            bgcolor=SURFACE,
-            border=ft.Border.all(1, BORDER),
-            border_radius=8,
-            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            content=ft.Stack(
-                expand=True,
-                fit=ft.StackFit.EXPAND,
-                controls=[
-                    build_background_logo(),
-                    ft.Container(
-                        alignment=ft.Alignment.TOP_CENTER,
-                        padding=ft.Padding(left=24, top=34, right=24, bottom=24),
-                        content=ft.Column(
-                            width=800,
-                            tight=True,
-                            spacing=0,
-                            controls=[input_title, input_shell, dropdown_stack],
-                        ),
+            fit=ft.StackFit.EXPAND,
+            controls=[
+                build_background_logo(),
+                ft.Container(
+                    alignment=ft.Alignment.TOP_CENTER,
+                    padding=ft.Padding(left=24, top=18, right=24, bottom=24),
+                    content=ft.Column(
+                        width=800,
+                        tight=True,
+                        spacing=0,
+                        controls=[input_title, input_shell, dropdown_stack],
                     ),
-                ],
-            ),
+                ),
+            ],
         ),
     )

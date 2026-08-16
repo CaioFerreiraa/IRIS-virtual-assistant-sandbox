@@ -2,335 +2,177 @@
 
 ## Conceito
 
-Módulos são as capacidades da IRIS.
+Módulos são as capacidades da IRIS. Um módulo pode organizar outros módulos, executar uma ação Python ou manter um backend iniciado junto com a aplicação.
 
-Cada módulo representa:
+Módulos e submódulos usam a mesma entidade `Module`. A hierarquia persistida usa `parent_module_id`, enquanto referências entre manifestos usam a chave pública estável `module_public_key`.
 
-- uma categoria;
-- uma tarefa;
-- uma integração;
-- uma ação local;
-- um caminho até uma ação executável.
+## Estado atual
 
-Exemplos conceituais:
+A IRIS possui dois grupos de módulos:
 
-```text
-Abrir
-└── App
-    └── Spotify
+- módulos padrão legados, cadastrados pelo seed com chaves públicas explícitas;
+- módulos descobertos em `modules/installed`, declarados por manifesto.
 
-Agenda
-├── Consultar
-└── Criar evento
-```
+Novos desenvolvimentos devem usar o manifesto. O guia completo e o exemplo mínimo estão em [`modules/README.md`](../modules/README.md).
 
-Nem todo item precisa executar uma ação. Alguns módulos existem apenas para organizar submódulos.
-
-## Módulos e submódulos
-
-Módulos e submódulos usam a mesma entidade `Module`.
-
-A hierarquia é formada por:
+## Estrutura de um módulo instalado
 
 ```text
-parent_module_id
+modules/
+└── installed/
+    └── weather/
+        ├── module.json
+        ├── README.md
+        └── main.py
 ```
 
-Quando o campo é vazio, o módulo está na raiz. Quando contém outro identificador, o módulo é filho daquele registro.
+O `README.md` utiliza Markdown puro. A interface é criada pela IRIS com controles Flet nativos; módulos não fornecem HTML ou controles visuais.
 
-Essa abordagem permite vários níveis de profundidade.
+## Manifesto versão 1
 
-## Campos técnicos
+```json
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "weather",
+        "name": "Clima",
+        "call_name": "clima",
+        "parent_public_key": null,
+        "description": "Consulta informações de clima.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": false
+    },
+    "variables": [
+        {
+            "key": "default_city",
+            "label": "Cidade padrão",
+            "description": "Cidade utilizada quando nenhuma cidade for informada.",
+            "type": "text",
+            "required": true,
+            "user_editable": true,
+            "default_value": ""
+        }
+    ]
+}
+```
 
-### `name`
+Os campos da raiz são obrigatórios. `runtime` pode ser `null` para módulos organizacionais. `module.is_executable` é opcional; quando ausente, seu valor é inferido pela presença de runtime.
 
-Nome apresentado ao usuário.
+## Chave pública
 
-### `call_name`
+`module_public_key` é obrigatória, única e imutável depois do registro. A sincronização nunca utiliza nome, `call_name`, caminho ou ID do banco.
 
-Nome padrão usado para localizar o módulo por texto ou voz.
-
-### `custom_call_name`
-
-Nome personalizado definido futuramente pelo usuário.
-
-Quando existir, poderá funcionar como alias.
-
-### `description`
-
-Explica a finalidade do módulo.
-
-### `request_method`
-
-Define o tipo de execução.
-
-A implementação atual reconhece principalmente:
-
-- `PYTHON`;
-- `GET`.
-
-O nome `GET` atualmente abre uma URL no navegador. A separação entre abertura de URL e requisição HTTP real ainda precisa ser corrigida.
-
-### `request_url`
-
-Contém o destino da execução.
-
-Para Python, pode ser um caminho de importação:
+Formato aceito:
 
 ```text
-modules.default_modules.open.app.main
+^[a-z0-9._-]+$
 ```
 
-Para URL, pode ser:
+Exemplos:
 
 ```text
-http://127.0.0.1:4101/web/verde
+weather
+weather.forecast
+open.web
 ```
 
-### `is_executable`
+O `id` numérico continua sendo controlado pelo SQLite e é usado pela interface e pela execução depois que o comando é resolvido.
 
-Indica se o módulo pode executar uma ação.
+## Descoberta segura e registry
 
-Um módulo organizacional deve permanecer como não executável.
+`ModuleRegistryService` processa cada pasta isoladamente. O fluxo é:
 
-### `parent_module_id`
+1. localizar `module.json`;
+2. ler e validar o JSON;
+3. validar README, entry point, tipos e variáveis;
+4. importar o entry point;
+5. validar chaves duplicadas e hierarquia;
+6. sincronizar o módulo pela chave pública;
+7. sincronizar definições de variáveis;
+8. marcar módulos ausentes ou inválidos como indisponíveis.
 
-Relaciona o módulo ao pai.
+Uma pasta quebrada não impede a sincronização das demais nem a abertura da IRIS. Um módulo inválido novo não recebe registro normal. Se já existia, permanece no banco com preferências e valores preservados, mas fica indisponível.
 
-## Caminho de módulo
+O registry prepara um estado em memória com os diagnósticos. A sidebar consulta esse estado e o banco; ela não examina o sistema de arquivos em cada renderização.
 
-O caminho representa a posição completa.
+## Validações
 
-Exemplo:
+A versão atual rejeita:
 
-```text
-Abrir > App > Spotify
-```
+- manifesto ausente ou JSON inválido;
+- schema incompatível;
+- campos obrigatórios ausentes ou com tipos incorretos;
+- chave pública ausente, vazia, inválida ou duplicada;
+- pai ausente, autorreferência ou ciclo;
+- README ausente ou fora da pasta;
+- entry point ausente quando existe runtime;
+- módulo executável sem `execute`, `run` ou `main`;
+- auto start sem `start()` ou declarado por módulo filho;
+- chave de variável duplicada ou inválida;
+- tipo de variável diferente de texto;
+- variável obrigatória não editável sem valor padrão;
+- variáveis secretas, privadas, criptografadas ou com finalidade sensível.
 
-O caminho ajuda:
+## `module.log`
 
-- pesquisa;
-- exibição;
-- diferenciação de nomes iguais;
-- seleção progressiva;
-- execução;
-- logs.
+Falhas de descoberta, manifesto, importação, configuração e inicialização são acrescentadas a `module.log` dentro da pasta do módulo.
 
-## Pesquisa por comando
+O arquivo contém data e hora, etapa, tipo da exceção, mensagem e traceback. O traceback não é mostrado na interface comum. Se o arquivo não puder ser criado, o logger geral recebe a falha como fallback.
 
-A tela principal recebe texto e atualiza a lista de sugestões.
+Erros normais ocorridos ao executar uma ação continuam no histórico do SQLite e não são gravados em `module.log`.
 
-No fluxo futuro de voz, a mesma pesquisa deverá acontecer a cada atualização parcial.
+## Variáveis
 
-Exemplo:
+A definição vem do manifesto. Valores editados vêm do SQLite. A tela `/modules/{module_id}` cria campos somente quando `user_editable` é `true`.
 
-```text
-abrir
-```
+Regras atuais:
 
-Pode retornar todos os caminhos contendo “abrir”.
+- somente texto é suportado;
+- configurações obrigatórias são validadas ao salvar e executar;
+- valores não editáveis usam o `default_value` do manifesto;
+- sincronização não substitui valores editados pelo usuário;
+- definições removidas ficam inativas e não são apagadas automaticamente;
+- valores não aparecem em logs;
+- senhas, tokens, logins e outros segredos não podem ser armazenados.
 
-```text
-abrir app
-```
+## Nome de chamada e pesquisa
 
-Deve priorizar caminhos que contenham os dois termos.
+`call_name` é definido no manifesto e não é editável. `custom_call_name` é uma preferência opcional do usuário; um novo valor substitui o anterior, sem histórico ou tabela de aliases.
 
-```text
-abrir app spotify
-```
-
-Deve priorizar o caminho completo correspondente.
-
-A pesquisa precisa ser determinística. O mesmo comando deve produzir a mesma ordenação quando o conjunto de módulos não mudou.
-
-## Seleção automática
-
-No fluxo planejado:
-
-- o primeiro item da lista será pré-selecionado;
-- quando a fala terminar, o primeiro resultado poderá ser executado;
-- a palavra “enviar” também poderá concluir;
-- um único resultado não deve ser executado antes do usuário terminar a frase.
-
-Essa regra evita que “abrir” execute algo antes que o usuário diga “abrir app Spotify”.
+A Home pesquisa nome exibido, `call_name` e `custom_call_name`. Uma seleção resulta em `module_id`. Se o texto corresponder a mais de um módulo, a IRIS solicita uma escolha e não executa silenciosamente o primeiro resultado.
 
 ## Execução Python
 
-O `ModuleRunner` importa dinamicamente o módulo indicado por `request_url`.
-
-Ele procura uma função nesta ordem:
-
-1. `execute`;
-2. `run`;
-3. `main`.
-
-A função pode receber um argumento.
-
-Exemplo:
+O entry point pode fornecer `execute`, `run` ou `main`. A função pode receber argumento e variáveis:
 
 ```python
-def execute(argument: str | None = None) -> dict:
+def execute(
+    argument: str | None = None,
+    variables: dict[str, str] | None = None,
+) -> dict:
     return {
         "success": True,
         "message": "Ação concluída.",
     }
 ```
 
-## Pesquisa de argumentos
+A execução da Home ocorre em background e devolve o resultado à thread visual do Flet. Toda execução normal gera log no SQLite.
 
-Um módulo pode oferecer pesquisa complementar.
+O comportamento legado `GET` ainda abre uma URL no navegador. Ele permanece separado do manifesto versão 1 e ainda não representa uma requisição HTTP completa.
 
-Nomes aceitos atualmente:
+## Auto start
 
-```python
-search_arguments
-searchArguments
-```
+`supports_auto_start` é capacidade do manifesto. `auto_start_enabled` é preferência persistida do usuário e aparece como “Iniciar com a IRIS”.
 
-Exemplo:
+Somente módulos raiz válidos, com runtime Python, suporte declarado e preferência habilitada são iniciados. Cada backend inicia isoladamente em uma thread. Uma falha marca somente aquele backend como inválido e não interrompe os demais.
 
-```python
-def search_arguments(query: str = "") -> list[dict[str, str]]:
-    return [
-        {
-            "label": "Spotify",
-            "value": "C:\\Caminho\\Spotify.exe",
-            "description": "Aplicativo",
-        }
-    ]
-```
+O contrato mínimo exige `start()`. `stop()` é opcional para recursos no processo. Se `start()` devolver um handle compatível com `subprocess.Popen`, a IRIS mantém esse handle e encerra somente o processo criado por ela.
 
-A interface pode apresentar a lista antes de executar.
+## Segurança atual
 
-## Resultado
-
-O resultado recomendado é:
-
-```python
-{
-    "success": True,
-    "message": "Spotify aberto.",
-}
-```
-
-Chaves utilizadas pelo núcleo:
-
-- `success`;
-- `message`;
-- `result`;
-- `opened`.
-
-Uma falha controlada pode retornar:
-
-```python
-{
-    "success": False,
-    "message": "Aplicativo não encontrado.",
-}
-```
-
-Uma exceção deve ser usada quando o fluxo não consegue produzir uma resposta válida.
-
-## Logs
-
-Toda execução deve gerar log.
-
-O registro contém:
-
-- módulo;
-- status;
-- mensagem;
-- data;
-- rotina opcional.
-
-O log não deve conter credenciais ou dados sensíveis.
-
-## Comunicação HTTP
-
-A arquitetura do projeto prevê comunicação por HTTP para permitir módulos em diferentes linguagens.
-
-O fluxo conceitual é:
-
-```text
-Núcleo IRIS
-    ↓ requisição
-Serviço do módulo
-    ↓ execução
-API externa ou recurso local
-    ↓ resposta
-Núcleo IRIS
-```
-
-A implementação HTTP completa ainda não está finalizada. Atualmente existe um módulo FastAPI de teste e abertura de URLs.
-
-No futuro, será necessário definir:
-
-- métodos suportados;
-- payload;
-- autenticação;
-- timeout;
-- health check;
-- formato de resposta;
-- inicialização do processo;
-- encerramento;
-- portas;
-- tratamento de indisponibilidade.
-
-## Módulos padrão
-
-A inicialização atual registra módulos de demonstração, incluindo categorias como:
-
-- Assistente;
-- Agenda;
-- Arquivos;
-- Navegador;
-- Sistema;
-- Imagens;
-- Abrir.
-
-Alguns são apenas estruturas. Outros possuem execução de teste.
-
-## Independência
-
-Um módulo deve evitar conhecer:
-
-- componentes Flet;
-- rotas visuais;
-- tabelas internas sem contrato;
-- cores;
-- estado global da tela.
-
-Ele deve receber entrada, executar uma responsabilidade e devolver resultado.
-
-## Segurança
-
-Um módulo pode ter acesso ao computador e a serviços externos.
-
-Por isso, módulos devem declarar:
-
-- finalidade;
-- permissões;
-- dependências;
-- dados utilizados;
-- destino de rede;
-- ações destrutivas;
-- credenciais necessárias.
-
-A instalação de módulos comunitários ainda não possui mecanismo de confiança definido.
-
-## Evolução futura
-
-Ainda precisam ser definidos:
-
-- manifesto;
-- versão;
-- dependências;
-- instalação;
-- atualização;
-- remoção;
-- assinatura;
-- permissões;
-- compatibilidade;
-- documentação embutida;
-- inicialização de módulos em outras linguagens.
+Importar um módulo Python executa código no processo da IRIS. O registry evita que exceções comuns derrubem a inicialização, mas não é uma sandbox de segurança. Instalação, assinatura, permissões e distribuição comunitária confiável ainda precisam de um contrato futuro.

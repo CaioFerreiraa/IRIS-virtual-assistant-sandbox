@@ -81,7 +81,39 @@ O indicador de voz abre um diálogo ao ser clicado, independentemente do estado 
 
 ### Sidebar
 
-A sidebar apresenta módulos e acesso rápido a áreas do sistema.
+A sidebar apresenta os módulos em uma árvore recolhível: cada submódulo
+fica dentro do menu de seu pai, sem alterar a rota numérica usada na navegação.
+O item ativo mantém seus ancestrais expandidos, exceto quando o usuário
+recolhe explicitamente um deles. Clicar em qualquer item que possui filhos
+sempre alterna a exibição dos submódulos e mantém a navegação para a tela do
+módulo pai.
+
+Os itens listados usam cantos retos, tamanho fixo, ficam encostados uns aos
+outros e a `ListView` alcança as laterais internas do painel. O padding fica no
+cabeçalho da seção e nos próprios itens, sem criar uma segunda margem ao redor
+da lista. Nomes longos usam a quebra de linha nativa do Flet dentro do limite do
+item. Quando existe, `custom_call_name` aparece entre parênteses como texto
+secundário logo após o nome do módulo.
+
+Cada item possui uma bolinha de status. Módulos executáveis usam bolinha verde,
+itens organizacionais usam bolinha roxa e módulos com problema aparecem com
+bolinha vermelha na área de diagnóstico.
+
+Módulos raiz usam sempre `SURFACE`. Submódulos são deslocados para a direita e
+escurecem conforme a profundidade: `GREY_100` (`#F5F6FA`), `GREY_200`
+(`#E4E7F2`), `GREY_300` (`#D3D8EA`), `GREY_400` (`#C2C8E1`) e `GREY_500`
+(`#B0B9D9`). Profundidades adicionais permanecem em `GREY_500` para preservar
+contraste e legibilidade.
+
+Ao manter o ponteiro sobre um item, o tooltip apresenta o nome do módulo e um
+resumo de até três linhas do README, com reticências quando houver mais texto.
+O README é lido durante a sincronização do registry e mantido em memória; a
+sidebar não consulta o sistema de arquivos em cada renderização. Módulos
+legados usam a descrição persistida como fallback.
+
+A borda direita da sidebar pode ser arrastada horizontalmente entre limites
+seguros. A largura permanece durante a navegação da sessão e a área da rota se
+ajusta ao espaço restante.
 
 ### Área de conteúdo
 
@@ -95,6 +127,7 @@ Rotas atuais ou planejadas:
 - histórico;
 - configurações;
 - documentação.
+- módulo: `/modules/{module_id}`.
 
 ### Home
 
@@ -107,6 +140,23 @@ A home possui:
 - lista de módulos;
 - lista de argumentos;
 - logo de fundo.
+
+A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. A execução acontece em background para manter a interface responsiva.
+
+### Tela do módulo
+
+A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. Ela contém:
+
+- breadcrumb calculado pela hierarquia;
+- nome e status;
+- switch “Iniciar com a IRIS” quando o runtime raiz suporta auto start;
+- README em Markdown, com caminho validado e HTML rejeitado;
+- `call_name` somente leitura;
+- um único `custom_call_name` editável;
+- campos Flet automáticos somente para variáveis de texto editáveis;
+- validação e toaster de sucesso ou erro.
+
+IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos inválidos sem ID aparecem no diagnóstico da sidebar com pasta, mensagem curta e caminho do `module.log`, sem traceback.
 
 ### Histórico
 
@@ -122,6 +172,24 @@ Campos:
 - mensagem.
 
 ## Componentes compartilhados
+
+### Conteúdo de rota
+
+`build_route_content_container`, definido em
+`ui/shared/components/route_content_container.py`, é o shell visual comum das
+rotas. Ele centraliza margem, padding, superfície, borda, raio e o cabeçalho com
+ícone, título, subtítulo e ação opcional à direita.
+
+Somente `content` é obrigatório. `icon`, `title`, `subtitle`, `trailing` e
+`expand` são
+opcionais; quando nenhum elemento de cabeçalho é informado, o componente
+renderiza apenas o conteúdo no shell padrão. Título e subtítulo também aceitam
+um controle Flet, permitindo preservar elementos como o breadcrumb da tela de
+módulo.
+
+Home, Histórico, Configurações, Documentação, detalhes de módulo e rotas em
+desenvolvimento usam esse componente. O teste de voz continua apresentado
+como modal, mas o card interno também utiliza o mesmo shell.
 
 ### Toaster
 
@@ -170,6 +238,7 @@ Toda funcionalidade deve considerar:
 - foco;
 - hover;
 - execução em andamento.
+- módulo inválido e backend online ou com erro.
 
 A ausência de feedback não deve ser usada como indicação de sucesso.
 

@@ -67,6 +67,7 @@ Representa módulos e submódulos.
 Campos:
 
 - `id`: identificador;
+- `module_public_key`: chave pública obrigatória, única e estável;
 - `name`: nome exibido;
 - `call_name`: nome padrão usado em comandos;
 - `custom_call_name`: nome personalizado;
@@ -74,11 +75,48 @@ Campos:
 - `request_method`: modo de execução;
 - `request_url`: destino ou entry point;
 - `is_executable`: indica se pode ser executado;
+- `is_available`: indica se o módulo pode ser usado;
+- `validation_error`: mensagem curta para módulo inválido;
+- `manifest_directory` e `readme_path`: caminhos validados do módulo instalado;
+- `runtime_type` e `supports_auto_start`: capacidade declarada pelo manifesto;
+- `auto_start_enabled`: preferência do usuário;
 - `parent_module_id`: módulo pai;
 - `created_date`: criação;
 - `edited_date`: última edição.
 
 A própria tabela representa uma árvore. Um módulo sem pai fica na raiz. Um módulo com `parent_module_id` é filho de outro.
+
+`module_public_key` é usado pela sincronização do manifesto. O ID numérico continua sendo usado pelas relações internas, rotas e execuções.
+
+### ModuleVariableDefinition
+
+Representa uma variável declarada em `module.json`.
+
+Campos principais:
+
+- `module_id`;
+- `key`, única dentro do módulo;
+- `label` e `description`;
+- `type`;
+- `is_required`;
+- `is_user_editable`;
+- `default_value`;
+- `display_order`;
+- `is_active`.
+
+Uma definição removida do manifesto fica inativa até existir uma política explícita de exclusão.
+
+### ModuleVariableValue
+
+Armazena um único valor de texto editado pelo usuário para uma definição editável.
+
+Campos:
+
+- `variable_definition_id`, único;
+- `value_text`;
+- `updated_at`.
+
+Valores não editáveis não precisam de registro e usam o padrão do manifesto. Estas tabelas não podem armazenar credenciais ou outros segredos.
 
 ### Routine
 
@@ -148,6 +186,10 @@ Module
  ├── child_modules
  ├── logs
  └── routine_actions
+ └── variable_definitions
+
+ModuleVariableDefinition
+ └── value opcional
 
 Routine
  ├── routine_actions
@@ -168,7 +210,8 @@ Log
 
 1. cria tabelas ausentes com `Base.metadata.create_all`;
 2. aplica compatibilidades manuais para bancos antigos;
-3. insere ou atualiza módulos padrão.
+3. insere ou atualiza módulos padrão legados;
+4. antes da abertura do Flet, o registry sincroniza `modules/installed`.
 
 A compatibilidade manual existe devido à evolução inicial do modelo. Ela não deve ser usada como padrão para novas mudanças.
 
@@ -176,9 +219,11 @@ A compatibilidade manual existe devido à evolução inicial do modelo. Ela não
 
 O projeto possui uma árvore inicial de módulos.
 
-O seed procura cada módulo por `call_name` e `parent_module_id`. Quando encontra um registro, atualiza propriedades principais. Quando não encontra, cria o item.
+O seed atual possui chaves públicas explícitas. A procura normal usa essas chaves. Apenas a adoção única de registros anteriores à nova coluna utiliza `call_name` e pai para substituir a chave temporária `legacy.module-{id}`.
 
 Essa operação precisa permanecer idempotente: iniciar a aplicação várias vezes não pode duplicar os mesmos módulos.
+
+Módulos instalados por manifesto não usam o seed. O registry sincroniza por `module_public_key` e preserva `custom_call_name`, `auto_start_enabled` e valores do usuário.
 
 ## Alembic
 
@@ -204,6 +249,8 @@ Uma migration deve considerar:
 - downgrade possível;
 - compatibilidade com SQLite.
 
+A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão.
+
 ## Transações
 
 Operações de escrita devem:
@@ -215,6 +262,10 @@ Operações de escrita devem:
 5. encerrar a sessão.
 
 Não mantenha uma sessão global compartilhada indefinidamente entre eventos da interface.
+
+## Foreign keys
+
+O engine executa `PRAGMA foreign_keys=ON` em cada nova conexão SQLite. A migration usa a mesma configuração. A aplicação também rejeita autorreferências e ciclos antes de persistir a hierarquia.
 
 ## Logs e transparência
 

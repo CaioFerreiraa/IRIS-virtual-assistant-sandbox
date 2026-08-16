@@ -10,6 +10,7 @@ from services.documentation_service import (
     resolve_document_link,
 )
 from ui.shared.components.custom_dialog import custom_dialog
+from ui.shared.components.route_content_container import build_route_content_container
 from ui.theme.colors import (
     BORDER,
     PASTEL_BLUE,
@@ -47,36 +48,23 @@ class DocumentationViewState:
         self._render_document_list()
         self._render_active_document()
 
-        return ft.Container(
-            expand=True,
-            padding=ft.Padding(left=28, top=28, right=28, bottom=28),
-            content=ft.Container(
+        return build_route_content_container(
+            icon=ft.Icons.MENU_BOOK_ROUNDED,
+            title="Documentação",
+            subtitle=f"{len(self.documents)} documentos encontrados",
+            trailing=self._build_search_button(),
+            content=ft.Row(
                 expand=True,
-                padding=ft.Padding(left=24, top=24, right=24, bottom=24),
-                bgcolor=SURFACE,
-                border=ft.Border.all(1, BORDER),
-                border_radius=8,
-                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                content=ft.Column(
-                    expand=True,
-                    spacing=18,
-                    controls=[
-                        self._build_header(),
-                        ft.Row(
-                            expand=True,
-                            spacing=20,
-                            vertical_alignment=ft.CrossAxisAlignment.START,
-                            controls=[
-                                self._build_sidebar(),
-                                ft.Container(
-                                    expand=4,
-                                    height=None,
-                                    content=self.markdown_container,
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
+                spacing=20,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                controls=[
+                    self._build_sidebar(),
+                    ft.Container(
+                        expand=4,
+                        height=None,
+                        content=self.markdown_container,
+                    ),
+                ],
             ),
         )
 
@@ -88,46 +76,6 @@ class DocumentationViewState:
             if document.filename == INITIAL_DOCUMENT:
                 return document
         return self.documents[0]
-
-    def _build_header(self) -> ft.Row:
-        return ft.Row(
-            spacing=16,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            controls=[
-                ft.Container(
-                    width=42,
-                    height=42,
-                    border_radius=8,
-                    alignment=ft.Alignment.CENTER,
-                    bgcolor=BLUE_GREY,
-                    content=ft.Icon(
-                        icon=ft.Icons.MENU_BOOK_ROUNDED,
-                        size=22,
-                        color=PASTEL_DARK_PURPLE,
-                    ),
-                ),
-                ft.Column(
-                    spacing=2,
-                    tight=True,
-                    expand=True,
-                    controls=[
-                        ft.Text(
-                            "Documentação",
-                            size=24,
-                            weight=ft.FontWeight.BOLD,
-                            color=TEXT_PRIMARY,
-                            font_family=TITLE_FONT,
-                        ),
-                        ft.Text(
-                            f"{len(self.documents)} documentos encontrados",
-                            size=13,
-                            color=TEXT_SECONDARY,
-                        ),
-                    ],
-                ),
-                self._build_search_button(),
-            ],
-        )
 
     def _build_search_button(self) -> ft.Container:
         return ft.Container(

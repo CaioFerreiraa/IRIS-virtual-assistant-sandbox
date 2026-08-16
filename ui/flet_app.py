@@ -4,7 +4,7 @@ from pathlib import Path
 import flet as ft
 
 from core.fatal_error_handler import FatalErrorHandler
-from core.routes import build_route_content
+from core.routes import MODULE_ROUTE_PATTERN, build_route_content
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -13,9 +13,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from database.db import SessionLocal
 from repositories.module_repository import ModuleRepository
 from services.speech_service_manager import SpeechServiceManager
+from services.module_registry_state import get_module_registry_state
+from services.module_runtime_service import module_runtime_manager
 from services.voice_settings_service import VoiceSettingsService
 from ui.shared.components.header import VOICE_ACTIVE_ROUTES, build_header
-from ui.shared.components.sidebar import build_sidebar
+from ui.shared.components.sidebar import DEFAULT_SIDEBAR_WIDTH, build_sidebar
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import APP_BACKGROUND
 from ui.theme.fonts import DEFAULT_FONT, FONT_ASSETS
@@ -70,11 +72,19 @@ def get_default_page(page: ft.Page):
         fallback=ft.Container(expand=True, bgcolor=APP_BACKGROUND),
     )
     fatal_error_handler.guard_call(page.add, app_container)
-    page.on_disconnect = lambda _: speech_manager.shutdown()
-    page.on_close = lambda _: speech_manager.shutdown()
+    def shutdown_services(event=None) -> None:
+        speech_manager.shutdown()
+        module_runtime_manager.shutdown()
+
+    page.on_disconnect = shutdown_services
+    page.on_close = shutdown_services
     fatal_error_handler.guard_call(
         speech_manager.prepare,
         VoiceSettingsService(speech_manager).load_for_runtime(),
+    )
+    fatal_error_handler.guard_call(
+        page.run_thread,
+        module_runtime_manager.start_enabled_backends,
     )
     return page
 
@@ -88,25 +98,45 @@ def get_app_container(
     header_slot = ft.Container()
     sidebar_slot = ft.Container()
     route_slot = ft.Container(expand=True)
-    active_module = {"name": "Assistente"}
+    sidebar_width = DEFAULT_SIDEBAR_WIDTH
+    expanded_module_ids: set[int] = set()
+    collapsed_module_ids: set[int] = set()
 
-    def load_module_options() -> list[dict[str, str | bool]]:
+    def load_module_options() -> list[dict[str, object]]:
         db = SessionLocal()
         try:
             return ModuleRepository(db).list_module_options()
         finally:
             db.close()
 
+    def remember_sidebar_width(width: float) -> None:
+        nonlocal sidebar_width
+        sidebar_width = width
+
     def navigate(route: str):
         page.go(route)
 
-    def select_module(module_name: str):
-        active_module["name"] = module_name
-        render_layout()
+    def select_module(module_id: int, module_name: str):
+        del module_name
+        page.go(f"/modules/{module_id}")
+
+    def active_module_id(route: str) -> int | None:
+        match = MODULE_ROUTE_PATTERN.fullmatch(route)
+        if match is None or not match.group(1).isdigit():
+            return None
+        return int(match.group(1))
 
     def render_layout(e=None):
         current_route = page.route or "/"
         module_options = load_module_options()
+        registry_state = get_module_registry_state()
+        for option in module_options:
+            module_id = option.get("module_id")
+            if type(module_id) is int:
+                option["readme_content"] = registry_state.readme_contents.get(
+                    module_id,
+                    "",
+                )
         speech_manager.clear_subscribers()
         speech_manager.set_command_enabled(current_route in VOICE_ACTIVE_ROUTES)
         header_slot.content = build_header(
@@ -115,9 +145,14 @@ def get_app_container(
             speech_manager=speech_manager,
         )
         sidebar_slot.content = build_sidebar(
-            active_module=active_module["name"],
+            active_module_id=active_module_id(current_route),
             on_select=fatal_error_handler.guard_callback(select_module),
-            modules=[str(module_option["path"]) for module_option in module_options],
+            modules=module_options,
+            invalid_modules=registry_state.invalid_modules,
+            width=sidebar_width,
+            on_width_change=remember_sidebar_width,
+            expanded_module_ids=expanded_module_ids,
+            collapsed_module_ids=collapsed_module_ids,
         )
         route_slot.content = build_route_content(
             current_route,
@@ -143,6 +178,7 @@ def get_app_container(
                 ft.Row(
                     expand=True,
                     spacing=0,
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
                     controls=[
                         sidebar_slot,
                         route_slot,

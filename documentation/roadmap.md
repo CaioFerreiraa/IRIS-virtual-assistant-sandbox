@@ -20,6 +20,8 @@ Criação e compatibilidade do SQLite
    ↓
 Seed dos módulos padrão
    ↓
+Registry de modules/installed
+   ↓
 Inicialização do Flet
    ↓
 Montagem da interface
@@ -27,7 +29,7 @@ Montagem da interface
 Carregamento da rota inicial
 ```
 
-O gerenciador de voz é preparado automaticamente e inicia o backend quando a preferência está habilitada. O scheduler e processos HTTP externos ainda não são iniciados automaticamente.
+O gerenciador de voz é preparado automaticamente. Backends Python de módulos raiz também podem iniciar isoladamente quando o manifesto oferece auto start e o usuário habilita a preferência. O scheduler ainda não é iniciado automaticamente.
 
 ## Fluxo atual de comando
 
@@ -39,6 +41,8 @@ Input principal
 Filtro de módulos
    ↓
 Seleção de caminho
+   ↓
+Resolução para module_id
    ↓
 HomeService
    ↓
@@ -87,7 +91,7 @@ Pode solicitar qual programa deve ser aberto.
 
 ### 5. Execução
 
-O núcleo delega para:
+A Home usa background e o núcleo delega para:
 
 - entry point Python;
 - abertura de URL;
@@ -266,7 +270,11 @@ A palavra “IRIS” ativa a interação e é retirada do comando enviado para p
 
 ## Próximo marco: comunidade
 
-- [ ] Definir manifesto de módulo.
+- [x] Definir manifesto local de módulo versão 1.
+- [x] Descobrir pastas isoladamente.
+- [x] Sincronizar por chave pública.
+- [x] Criar tela nativa de módulo e configurações de texto.
+- [x] Registrar falhas técnicas em `module.log`.
 - [ ] Definir empacotamento.
 - [ ] Definir repositório de catálogo.
 - [ ] Definir instalação.

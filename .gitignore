@@ -13,6 +13,7 @@ __pycache__/
 *.db-journal
 *.db-shm
 *.db-wal
+modules/installed/**/module.log
 
 .env
 .env.*
