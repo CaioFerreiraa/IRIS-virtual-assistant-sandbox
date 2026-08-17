@@ -6,6 +6,7 @@ import textwrap
 import flet as ft
 
 from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE
+from ui.shared.components.tooltip_container import build_tooltip_container
 
 
 ControlCallback = Callable[[ft.ControlEvent], None]
@@ -31,7 +32,7 @@ def build_dropdown(
         value=value,
         options=[ft.DropdownOption(key=key, text=text) for key, text in options],
         helper_text=helper,
-        tooltip=build_tooltip_message(helper) if helper else None,
+        tooltip=build_tooltip_container(helper) if helper else None,
         disabled=disabled,
         expand=expand,
         border_color=BORDER,
@@ -63,7 +64,7 @@ def build_text_field(
         multiline=multiline,
         min_lines=2 if multiline else None,
         max_lines=3 if multiline else 1,
-        tooltip=build_tooltip_message(helper) if helper else None,
+        tooltip=build_tooltip_container(helper) if helper else None,
         disabled=disabled,
         expand=expand,
         border_color=BORDER,

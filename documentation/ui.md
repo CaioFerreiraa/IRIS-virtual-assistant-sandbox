@@ -89,21 +89,28 @@ sempre alterna a exibição dos submódulos e mantém a navegação para a tela 
 módulo pai.
 
 Os itens listados usam cantos retos, tamanho fixo, ficam encostados uns aos
-outros e a `ListView` alcança as laterais internas do painel. O padding fica no
-cabeçalho da seção e nos próprios itens, sem criar uma segunda margem ao redor
-da lista. Nomes longos usam a quebra de linha nativa do Flet dentro do limite do
-item. Quando existe, `custom_call_name` aparece entre parênteses como texto
-secundário logo após o nome do módulo.
+outros e mantêm o mesmo padding horizontal em qualquer profundidade. Nomes
+longos usam a quebra de linha nativa do Flet dentro do limite do item. Quando
+existe, `custom_call_name` aparece entre parênteses como texto secundário logo
+após o nome do módulo. O item selecionado exibe somente uma linha roxa, poucos
+pixels abaixo do nome; sua borda externa não muda.
 
-Cada item possui uma bolinha de status. Módulos executáveis usam bolinha verde,
-itens organizacionais usam bolinha roxa e módulos com problema aparecem com
-bolinha vermelha na área de diagnóstico.
+O ícone aparece primeiro e mantém sempre as mesmas cores, sem variar conforme o
+estado do módulo. Entre ele e o nome fica uma bolinha de status pequena: verde
+para módulos executáveis e vermelha para módulos com problema. Itens
+organizacionais sem problema não exibem a bolinha. Módulos inválidos sem item na
+árvore continuam com o indicador vermelho na área de diagnóstico.
 
-Módulos raiz usam sempre `SURFACE`. Submódulos são deslocados para a direita e
+Módulos raiz usam sempre `SURFACE`. Submódulos não ganham recuo adicional e
 escurecem conforme a profundidade: `GREY_100` (`#F5F6FA`), `GREY_200`
 (`#E4E7F2`), `GREY_300` (`#D3D8EA`), `GREY_400` (`#C2C8E1`) e `GREY_500`
 (`#B0B9D9`). Profundidades adicionais permanecem em `GREY_500` para preservar
-contraste e legibilidade.
+contraste e legibilidade. O primeiro filho de cada pai recebe uma sombra leve
+na cor de fundo do pai para reforçar visualmente a profundidade da árvore.
+
+A `ListView` alcança as laterais internas do painel e expande verticalmente para
+usar todo o espaço disponível. Sua área externa também usa `SURFACE`, inclusive
+abaixo do último item quando a lista não ocupa toda a altura.
 
 Ao manter o ponteiro sobre um item, o tooltip apresenta o nome do módulo e um
 resumo de até três linhas do README, com reticências quando houver mais texto.
@@ -141,20 +148,21 @@ A home possui:
 - lista de argumentos;
 - logo de fundo.
 
+O ícone à esquerda do input acompanha o módulo selecionado. As sugestões também
+usam o ícone persistido; quando não há seleção, o input mostra `explore`.
+
 A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. A execução acontece em background para manter a interface responsiva.
 
 ### Tela do módulo
 
-A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. Ela contém:
+A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo e apresenta o botão primário “Executar” à esquerda do status quando a ação está disponível. O conteúdo é dividido em abas:
 
-- breadcrumb calculado pela hierarquia;
-- nome e status;
-- switch “Iniciar com a IRIS” quando o runtime raiz suporta auto start;
-- README em Markdown, com caminho validado e HTML rejeitado;
-- `call_name` somente leitura;
-- um único `custom_call_name` editável;
-- campos Flet automáticos somente para variáveis de texto editáveis;
-- validação e toaster de sucesso ou erro.
+- **Sobre**: descrição, README quando existe e `module.json` formatado com fonte Consolas quando existe;
+- **Configurações**: todos os campos persistidos do modelo em modo de leitura, `custom_call_name` editável, variáveis editáveis e argumento transitório quando o módulo oferece busca de argumentos;
+- **Log**: somente as execuções do módulo, usando a mesma tabela do histórico;
+- **Erro**: aparece somente para falhas técnicas de descoberta, validação, importação, configuração ou inicialização do módulo ou de um submódulo. Quando existe, fica em primeiro lugar e é selecionada inicialmente.
+
+O switch “Iniciar com a IRIS” aparece para todo módulo disponível. Ele só fica habilitado para runtime Python raiz que declara `supports_auto_start`; nos demais casos, a própria tela explica por que a opção está desabilitada. Erros normais ocorridos durante uma requisição permanecem apenas no histórico e não criam a aba de erro.
 
 IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos inválidos sem ID aparecem no diagnóstico da sidebar com pasta, mensagem curta e caminho do `module.log`, sem traceback.
 
@@ -226,6 +234,14 @@ Oferece estrutura reutilizável para listas com colunas.
 Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários.
 Campos de entrada devem preencher toda a largura disponível na célula da grid, independentemente do tamanho do texto exibido.
 Quando um campo possuir texto de ajuda, o mesmo conteúdo deve ficar disponível como tooltip.
+
+### Tooltip
+
+`build_tooltip_container`, definido em
+`ui/shared/components/tooltip_container.py`, recebe somente o texto da dica e
+aplica a largura e o espaçamento comuns. A cor fica sob responsabilidade do
+tema nativo do Flet, mantendo o cinza translúcido usado pelos tooltips padrão
+dos campos.
 
 ### Controles da janela
 

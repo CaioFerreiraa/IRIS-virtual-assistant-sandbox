@@ -38,6 +38,7 @@ class ModuleRegistryTests(unittest.TestCase):
             module = db.query(Module).filter(Module.module_public_key == "weather").one()
             self.assertTrue(module.is_available)
             self.assertEqual("PYTHON", module.request_method)
+            self.assertEqual("extension", module.icon)
         finally:
             db.close()
         self.assertEqual(1, len(state.synced_module_ids))
@@ -80,6 +81,7 @@ class ModuleRegistryTests(unittest.TestCase):
         )
         state = self.registry.sync()
         self.assertIn("não foi encontrado", state.invalid_modules[0].message)
+        self.assertEqual("missing", state.invalid_modules[0].parent_public_key)
 
     def test_indirect_cycle_is_invalid(self) -> None:
         create_module_folder(

@@ -10,6 +10,7 @@ class InvalidModuleInfo:
     message: str
     log_path: str
     module_public_key: str | None = None
+    parent_public_key: str | None = None
 
 
 @dataclass(frozen=True)

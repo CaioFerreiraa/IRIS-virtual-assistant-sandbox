@@ -4,6 +4,7 @@
         "module_public_key": "example.echo",
         "name": "Exemplo mínimo",
         "call_name": "exemplo",
+        "icon": "extension",
         "parent_public_key": null,
         "description": "Demonstra o contrato mínimo de um módulo executável.",
         "readme": "README.md",

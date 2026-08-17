@@ -27,7 +27,7 @@ O fluxo atual de inicialização é:
 5. o Flet inicia a aplicação;
 6. `ui/flet_app.py` monta janela, tema, header, sidebar e área de conteúdo;
 7. a rota inicial carrega a tela principal;
-8. módulos disponíveis no banco são transformados em opções de pesquisa;
+8. módulos disponíveis no banco são transformados em opções de pesquisa, enquanto módulos indisponíveis permanecem visíveis para diagnóstico na sidebar;
 9. configurações de voz são carregadas;
 10. gerenciadores de voz e runtimes habilitados iniciam seus backends em threads isoladas.
 
@@ -291,6 +291,8 @@ Erros de execução devem:
 O `FatalErrorHandler` protege eventos gerais, enquanto erros esperados de módulo devem ser tratados no fluxo da própria funcionalidade.
 
 Falhas de descoberta, validação, importação, configuração ou inicialização não entram no histórico de execução. Elas tornam somente o módulo afetado indisponível, aparecem de forma resumida no diagnóstico e são detalhadas no `module.log` local.
+
+A rota do módulo também agrega falhas técnicas dos submódulos na aba “Erro”. Erros de uma execução normal continuam separados nessa decisão: são registrados no SQLite e aparecem na aba “Log”, sem transformar a requisição em falha estrutural do módulo.
 
 ## Princípios de evolução
 

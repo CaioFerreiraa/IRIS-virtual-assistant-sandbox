@@ -28,6 +28,7 @@ def build_manifest(
         "module_public_key": public_key,
         "name": public_key.replace(".", " ").title(),
         "call_name": public_key.rsplit(".", 1)[-1],
+        "icon": "extension",
         "parent_public_key": parent_public_key,
         "description": "Módulo temporário de teste.",
         "readme": "README.md",

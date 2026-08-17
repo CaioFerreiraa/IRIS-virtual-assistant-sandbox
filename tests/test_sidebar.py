@@ -6,6 +6,8 @@ from ui.shared.components.sidebar import (
     MAX_SIDEBAR_WIDTH,
     MIN_SIDEBAR_WIDTH,
     MODULE_ITEM_HEIGHT,
+    STATUS_DOT_SIZE,
+    _build_module_icons,
     _build_module_tree,
     _build_tooltip_message,
     _module_background,
@@ -13,6 +15,8 @@ from ui.shared.components.sidebar import (
 )
 from services.module_registry_state import InvalidModuleInfo
 from ui.theme.colors import (
+    BLUE_GREY,
+    BORDER,
     CANCEL,
     GREY_100,
     GREY_200,
@@ -20,6 +24,8 @@ from ui.theme.colors import (
     GREY_400,
     GREY_500,
     PASTEL_DARK_GREEN,
+    PASTEL_DARK_PURPLE,
+    PASTEL_PURPLE,
     SURFACE,
 )
 
@@ -138,17 +144,46 @@ class SidebarTests(unittest.TestCase):
         self.assertEqual(MIN_SIDEBAR_WIDTH, narrow.width)
         self.assertEqual(MAX_SIDEBAR_WIDTH, wide.width)
 
-    def test_executable_module_has_green_status_dot(self) -> None:
+    def test_status_dots_are_small_and_rendered_before_the_label(self) -> None:
         sidebar = build_sidebar(None, lambda *_: None, modules=self.modules)
+        root_branch = _module_list(sidebar).controls[0]
+        child_branch = root_branch.controls[1].controls[0]
+        grandchild_item = child_branch.controls[1].controls[0]
+        labels = grandchild_item.content.controls[1]
+        dot = labels.controls[0]
+        label_column = labels.controls[1]
+
+        self.assertEqual(STATUS_DOT_SIZE, dot.width)
+        self.assertEqual(STATUS_DOT_SIZE, dot.height)
+        self.assertEqual(PASTEL_DARK_GREEN, dot.bgcolor)
+        self.assertEqual("Verde", label_column.controls[0].value)
+
+    def test_organizational_module_does_not_have_status_dot(self) -> None:
+        sidebar = build_sidebar(None, lambda *_: None, modules=self.modules)
+        root_branch = _module_list(sidebar).controls[0]
+        parent_item = root_branch.controls[0]
+        labels = parent_item.content.controls[1]
+
+        self.assertEqual(1, len(labels.controls))
+
+    def test_problem_module_has_red_status_dot(self) -> None:
+        modules = [
+            {
+                "module_id": 1,
+                "name": "Quebrado",
+                "validation_error": "Manifesto inválido.",
+            }
+        ]
+        sidebar = build_sidebar(None, lambda *_: None, modules=modules)
         dots = [
             control
             for control in _walk_controls(sidebar)
             if isinstance(control, ft.Container)
-            and control.width == 11
-            and control.height == 11
+            and control.width == STATUS_DOT_SIZE
+            and control.height == STATUS_DOT_SIZE
         ]
 
-        self.assertTrue(any(dot.bgcolor == PASTEL_DARK_GREEN for dot in dots))
+        self.assertTrue(any(dot.bgcolor == CANCEL for dot in dots))
 
     def test_invalid_module_has_red_status_dot(self) -> None:
         sidebar = build_sidebar(
@@ -167,11 +202,30 @@ class SidebarTests(unittest.TestCase):
             control
             for control in _walk_controls(sidebar)
             if isinstance(control, ft.Container)
-            and control.width == 11
-            and control.height == 11
+            and control.width == STATUS_DOT_SIZE
+            and control.height == STATUS_DOT_SIZE
         ]
 
         self.assertTrue(any(dot.bgcolor == CANCEL for dot in dots))
+
+    def test_module_icon_colors_do_not_change_with_status(self) -> None:
+        problem_icon = _build_module_icons(
+            {
+                "icon": "warning",
+                "validation_error": "Falha ao validar o módulo.",
+            }
+        )
+        executable_icon = _build_module_icons(
+            {
+                "icon": "play_arrow",
+                "is_executable": True,
+            }
+        )
+
+        for icon in (problem_icon, executable_icon):
+            self.assertEqual(BLUE_GREY, icon.bgcolor)
+            self.assertIsInstance(icon.content, ft.Text)
+            self.assertEqual(PASTEL_DARK_PURPLE, icon.content.color)
 
     def test_parent_and_children_follow_grey_depth_scale(self) -> None:
         self.assertEqual(SURFACE, _module_background(0))
@@ -182,12 +236,18 @@ class SidebarTests(unittest.TestCase):
         self.assertEqual(GREY_500, _module_background(5))
         self.assertEqual(GREY_500, _module_background(20))
 
-    def test_module_list_touches_sidebar_panel_edges(self) -> None:
+    def test_module_list_fills_available_surface_area(self) -> None:
         sidebar = build_sidebar(None, lambda *_: None, modules=self.modules)
         sidebar_panel = sidebar.content.controls[0]
+        list_shell = sidebar_panel.content.controls[1]
+        module_list = _module_list(sidebar)
 
         self.assertEqual(0, sidebar_panel.padding)
-        self.assertEqual(0, _module_list(sidebar).padding)
+        self.assertTrue(sidebar_panel.content.expand)
+        self.assertTrue(list_shell.expand)
+        self.assertEqual(SURFACE, list_shell.bgcolor)
+        self.assertTrue(module_list.expand)
+        self.assertEqual(0, module_list.padding)
 
     def test_module_items_keep_fixed_height(self) -> None:
         expanded_ids = {1, 2}
@@ -218,10 +278,62 @@ class SidebarTests(unittest.TestCase):
         self.assertEqual(2, name.max_lines)
         self.assertEqual(ft.TextOverflow.ELLIPSIS, name.overflow)
 
+    def test_active_module_has_underline_without_changing_item_border(self) -> None:
+        sidebar = build_sidebar(1, lambda *_: None, modules=self.modules)
+        root_branch = _module_list(sidebar).controls[0]
+        parent_item = root_branch.controls[0]
+        labels = parent_item.content.controls[1]
+        label_column = labels.controls[-1]
+        underline = label_column.controls[1]
+
+        self.assertEqual(BORDER, parent_item.border.bottom.color)
+        self.assertEqual(0, parent_item.border.top.width)
+        self.assertTrue(underline.visible)
+        self.assertEqual(PASTEL_PURPLE, underline.bgcolor)
+        self.assertEqual(2, underline.height)
+
+        label_text = label_column.controls[0]
+        label_text.on_size_change(type("SizeEvent", (), {"width": 64.0})())
+        self.assertEqual(64.0, underline.width)
+
+    def test_nested_items_keep_the_same_padding(self) -> None:
+        sidebar = build_sidebar(
+            None,
+            lambda *_: None,
+            modules=self.modules,
+            expanded_module_ids={1, 2},
+        )
+        root_branch = _module_list(sidebar).controls[0]
+        parent_item = root_branch.controls[0]
+        child_branch = root_branch.controls[1].controls[0]
+        child_item = child_branch.controls[0]
+        grandchild_item = child_branch.controls[1].controls[0]
+
+        self.assertEqual(12, parent_item.padding.left)
+        self.assertEqual(12, child_item.padding.left)
+        self.assertEqual(12, grandchild_item.padding.left)
+
+    def test_first_child_uses_parent_background_as_shadow(self) -> None:
+        sidebar = build_sidebar(
+            None,
+            lambda *_: None,
+            modules=self.modules,
+            expanded_module_ids={1, 2},
+        )
+        root_branch = _module_list(sidebar).controls[0]
+        parent_item = root_branch.controls[0]
+        child_branch = root_branch.controls[1].controls[0]
+        child_item = child_branch.controls[0]
+        grandchild_item = child_branch.controls[1].controls[0]
+
+        self.assertIsNone(parent_item.shadow)
+        self.assertEqual(SURFACE, child_item.shadow.color)
+        self.assertEqual(GREY_100, grandchild_item.shadow.color)
+
 
 def _module_list(sidebar: ft.Container) -> ft.ListView:
     sidebar_panel = sidebar.content.controls[0]
-    return sidebar_panel.content.controls[1]
+    return sidebar_panel.content.controls[1].content
 
 
 def _walk_controls(control: ft.Control):

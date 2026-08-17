@@ -15,8 +15,8 @@ from ui.shared.components.form_controls import (
     build_dropdown,
     build_primary_button,
     build_text_field,
-    build_tooltip_message,
 )
+from ui.shared.components.tooltip_container import build_tooltip_container
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import (
     BLUE_GREY,
@@ -66,7 +66,6 @@ FIELD_HELP = {
     "condition_on_previous_text": "Usa a transcrição anterior como contexto para manter coerência entre frases no modo básico.",
     "temperature": "Controla a variabilidade da transcrição. Zero produz resultados mais determinísticos.",
 }
-TOOLTIP_LINE_WIDTH = 52
 MICROPHONE_DROPDOWN_MENU_WIDTH = 420
 MICROPHONE_DROPDOWN_MENU_HEIGHT = 220
 DEFAULT_MICROPHONE_ID = ""
@@ -326,7 +325,7 @@ class VoiceSettingsTab:
             else "Nenhum microfone conectado."
         )
         microphone_field.helper_text = microphone_helper
-        microphone_field.tooltip = build_tooltip_message(microphone_helper, width=TOOLTIP_LINE_WIDTH)
+        microphone_field.tooltip = build_tooltip_container(microphone_helper)
 
         if must_clear_saved_microphone:
             self._clear_saved_microphone(show_toast=False)
@@ -525,7 +524,7 @@ class VoiceSettingsTab:
                 "Clique em Recarregar para consultar os dispositivos novamente."
             )
             microphone_field.helper_text = microphone_helper
-            microphone_field.tooltip = build_tooltip_message(microphone_helper, width=TOOLTIP_LINE_WIDTH)
+            microphone_field.tooltip = build_tooltip_container(microphone_helper)
             self._update_microphone_controls()
             if self._is_mounted(self.audio_visualizer.root):
                 self.audio_visualizer.root.update()
@@ -627,12 +626,7 @@ class VoiceSettingsTab:
                 alignment=ft.Alignment.CENTER,
                 bgcolor=BLUE_GREY,
 
-                tooltip=ft.Tooltip(
-                    message=build_tooltip_message(FIELD_HELP[field_name], width=TOOLTIP_LINE_WIDTH),
-                    bgcolor=BLUE_GREY,
-                    text_style=ft.TextStyle(size=12, color=TEXT_PRIMARY),
-                    padding=12,
-                ),
+                tooltip=build_tooltip_container(FIELD_HELP[field_name]),
                 content=ft.Icon(
                     ft.Icons.INFO_OUTLINE_ROUNDED,
                     color=PASTEL_PURPLE,

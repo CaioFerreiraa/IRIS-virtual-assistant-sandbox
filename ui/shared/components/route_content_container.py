@@ -14,12 +14,13 @@ from ui.theme.fonts import TITLE_FONT
 
 
 HeaderValue = str | ft.Control
+HeaderIcon = ft.IconData | ft.Control
 
 
 def build_route_content_container(
     content: ft.Control,
     *,
-    icon: ft.IconData | None = None,
+    icon: HeaderIcon | None = None,
     title: HeaderValue | None = None,
     subtitle: HeaderValue | None = None,
     trailing: ft.Control | None = None,
@@ -54,7 +55,7 @@ def build_route_content_container(
 
 
 def _build_route_header(
-    icon: ft.IconData | None,
+    icon: HeaderIcon | None,
     title: HeaderValue | None,
     subtitle: HeaderValue | None,
     trailing: ft.Control | None,
@@ -71,10 +72,14 @@ def _build_route_header(
                 border_radius=8,
                 alignment=ft.Alignment.CENTER,
                 bgcolor=BLUE_GREY,
-                content=ft.Icon(
-                    icon=icon,
-                    size=22,
-                    color=PASTEL_DARK_PURPLE,
+                content=(
+                    icon
+                    if isinstance(icon, ft.Control)
+                    else ft.Icon(
+                        icon=icon,
+                        size=22,
+                        color=PASTEL_DARK_PURPLE,
+                    )
                 ),
             )
         )

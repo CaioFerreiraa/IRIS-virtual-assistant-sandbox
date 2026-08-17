@@ -33,7 +33,16 @@ class ModuleRegistryMigrationTests(unittest.TestCase):
             revision = connection.execute(
                 sa.text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            self.assertEqual("f8c1d4a7b2e9", revision)
+            self.assertEqual("b7e4a1c9d2f6", revision)
+            columns = {
+                column["name"]
+                for column in sa.inspect(connection).get_columns("modules")
+            }
+            self.assertIn("icon", columns)
+            icon = connection.execute(
+                sa.text("SELECT icon FROM modules WHERE id = 1")
+            ).scalar_one()
+            self.assertEqual("extension", icon)
             self.assertEqual([], connection.execute(sa.text("PRAGMA foreign_key_check")).fetchall())
 
     def test_upgrade_previous_head_with_existing_module(self) -> None:

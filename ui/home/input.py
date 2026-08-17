@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import flet as ft
 
+from ui.shared.components.material_icons import material_icon
 from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE, BLUE_GREY, TEXT_PRIMARY, TEXT_SECONDARY
 
 
@@ -127,6 +128,7 @@ def set_input_shell_voice_active(input_shell: ft.Container, is_active: bool, *, 
 
 def build_command_input(
     command_input_field: ft.TextField,
+    module_icon: ft.Text,
     clear_button: ft.Container,
     send_button: ft.Container,
     voice_hint: ft.Container | None = None,
@@ -141,7 +143,7 @@ def build_command_input(
             spacing=12,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                ft.Icon(icon=ft.Icons.EXPLORE, color=PASTEL_DARK_PURPLE, size=28),
+                module_icon,
                 command_input_field,
                 clear_button,
                 ft.Stack(
@@ -161,6 +163,10 @@ def build_command_input(
             ],
         ),
     )
+
+
+def build_module_icon() -> ft.Text:
+    return material_icon("explore", size=28, color=PASTEL_DARK_PURPLE)
 
 
 def build_input_shell(command_input: ft.Container) -> ft.Container:

@@ -41,48 +41,56 @@ DEFAULT_MODULE_TREE = (
         "module_public_key": "iris.assistant",
         "name": "Assistente",
         "call_name": "assistente",
+        "icon": "auto_awesome",
         "description": "Módulo principal da IRIS.",
     },
     {
         "module_public_key": "iris.calendar",
         "name": "Agenda",
         "call_name": "agenda",
+        "icon": "calendar_month",
         "description": "Módulo responsável por compromissos e eventos.",
     },
     {
         "module_public_key": "iris.files",
         "name": "Arquivos",
         "call_name": "arquivos",
+        "icon": "folder",
         "description": "Módulo responsável por localizar e organizar arquivos.",
     },
     {
         "module_public_key": "iris.browser",
         "name": "Navegador",
         "call_name": "navegador",
+        "icon": "language",
         "description": "Módulo responsável por navegação e pesquisa.",
     },
     {
         "module_public_key": "iris.system",
         "name": "Sistema",
         "call_name": "sistema",
+        "icon": "computer",
         "description": "Módulo responsável por comandos do sistema.",
     },
     {
         "module_public_key": "iris.images",
         "name": "Imagens",
         "call_name": "imagens",
+        "icon": "image",
         "description": "Módulo responsável por recursos de imagem.",
         "children": (
             {
                 "module_public_key": "iris.images.numbers",
                 "name": "Números",
                 "call_name": "numeros",
+                "icon": "pin",
                 "description": "Submódulo de imagens com números.",
                 "children": (
                     {
                         "module_public_key": "iris.images.numbers.five",
                         "name": "5",
                         "call_name": "5",
+                        "icon": "looks_5",
                         "description": "Submódulo de imagem do número 5.",
                     },
                 ),
@@ -93,12 +101,14 @@ DEFAULT_MODULE_TREE = (
         "module_public_key": "open",
         "name": "Abrir",
         "call_name": "abrir",
+        "icon": "open_in_new",
         "description": "Módulo responsável por abrir recursos locais ou páginas.",
         "children": (
             {
                 "module_public_key": "open.app",
                 "name": "App",
                 "call_name": "app",
+                "icon": "apps",
                 "description": "Abre itens da area de trabalho.",
                 "request_method": "PYTHON",
                 "request_url": "modules.default_modules.open.app.main",
@@ -108,12 +118,14 @@ DEFAULT_MODULE_TREE = (
                 "module_public_key": "open.web",
                 "name": "Web",
                 "call_name": "web",
+                "icon": "public",
                 "description": "Submódulo responsável por abrir páginas web.",
                 "children": (
                     {
                         "module_public_key": "open.web.green",
                         "name": "Verde",
                         "call_name": "verde",
+                        "icon": "palette",
                         "description": "Abre uma página HTML com fundo verde.",
                         "request_method": "GET",
                         "request_url": "http://127.0.0.1:4101/web/verde",
@@ -123,6 +135,7 @@ DEFAULT_MODULE_TREE = (
                         "module_public_key": "open.web.red",
                         "name": "Vermelho",
                         "call_name": "vermelho",
+                        "icon": "palette",
                         "description": "Abre uma página HTML com fundo vermelho.",
                         "request_method": "GET",
                         "request_url": "http://127.0.0.1:4101/web/vermelho",
@@ -269,7 +282,12 @@ def _ensure_module_registry_schema() -> None:
         return
 
     if not has_alembic_version:
-        _stamp_alembic_revision("head")
+        if "icon" in module_columns:
+            _stamp_alembic_revision("head")
+            return
+        _stamp_alembic_revision("f8c1d4a7b2e9")
+
+    _upgrade_alembic_revision("head")
 
 
 def _run_alembic_upgrade_from_legacy_schema(has_alembic_version: bool) -> None:
@@ -331,6 +349,7 @@ def _seed_default_modules() -> None:
                         module_public_key=module_data["module_public_key"],
                         name=module_data["name"],
                         call_name=module_data["call_name"],
+                        icon=module_data.get("icon", "extension"),
                         description=module_data.get("description", ""),
                         parent_module_id=parent_id,
                         request_method=module_data.get("request_method"),
@@ -342,6 +361,7 @@ def _seed_default_modules() -> None:
                 else:
                     module.name = module_data["name"]
                     module.call_name = module_data["call_name"]
+                    module.icon = module_data.get("icon", "extension")
                     module.description = module_data.get("description", module.description)
                     module.request_method = module_data.get("request_method", module.request_method)
                     module.request_url = module_data.get("request_url", module.request_url)

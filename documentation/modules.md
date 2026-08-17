@@ -37,6 +37,7 @@ O `README.md` utiliza Markdown puro. A interface é criada pela IRIS com control
         "module_public_key": "weather",
         "name": "Clima",
         "call_name": "clima",
+        "icon": "partly_cloudy_day",
         "parent_public_key": null,
         "description": "Consulta informações de clima.",
         "readme": "README.md",
@@ -62,6 +63,8 @@ O `README.md` utiliza Markdown puro. A interface é criada pela IRIS com control
 ```
 
 Os campos da raiz são obrigatórios. `runtime` pode ser `null` para módulos organizacionais. `module.is_executable` é opcional; quando ausente, seu valor é inferido pela presença de runtime.
+
+O campo opcional `module.icon` armazena o nome de uma ligature do Material Icons. A ausência usa `extension`. O nome aceita letras minúsculas, números e underscores. O registry persiste esse valor para a Home, a sidebar e a tela do módulo.
 
 ## Chave pública
 
@@ -107,6 +110,7 @@ A versão atual rejeita:
 - manifesto ausente ou JSON inválido;
 - schema incompatível;
 - campos obrigatórios ausentes ou com tipos incorretos;
+- nome de ícone fora do formato aceito;
 - chave pública ausente, vazia, inválida ou duplicada;
 - pai ausente, autorreferência ou ciclo;
 - README ausente ou fora da pasta;
@@ -145,6 +149,8 @@ Regras atuais:
 `call_name` é definido no manifesto e não é editável. `custom_call_name` é uma preferência opcional do usuário; um novo valor substitui o anterior, sem histórico ou tabela de aliases.
 
 A Home pesquisa nome exibido, `call_name` e `custom_call_name`. Uma seleção resulta em `module_id`. Se o texto corresponder a mais de um módulo, a IRIS solicita uma escolha e não executa silenciosamente o primeiro resultado.
+
+O ícone persistido acompanha o módulo nas sugestões e no campo da Home, na árvore da sidebar e no cabeçalho da rota selecionada.
 
 ## Execução Python
 

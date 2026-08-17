@@ -10,6 +10,7 @@ from core.routes import build_route_content
 from database.db import Base, enable_sqlite_foreign_keys
 from database.models import Module
 from repositories.module_repository import ModuleRepository
+from services.module_service import get_module_detail
 from ui.home.dropdowns import (
     filter_modules,
     resolve_typed_module,
@@ -35,10 +36,11 @@ class ModuleSearchAndRouteTests(unittest.TestCase):
                 name="Clima",
                 call_name="clima",
                 custom_call_name="tempo",
+                icon="partly_cloudy_day",
                 is_executable=True,
                 is_available=True,
-                request_method="PYTHON",
-                request_url="module.py",
+                request_method="GET",
+                request_url="https://example.com",
             )
             db.add(module)
             db.commit()
@@ -56,6 +58,7 @@ class ModuleSearchAndRouteTests(unittest.TestCase):
     def test_searches_by_original_call_name(self) -> None:
         matches = filter_modules("clima", self.options())
         self.assertEqual(self.module_id, matches[0]["module_id"])
+        self.assertEqual("partly_cloudy_day", matches[0]["icon"])
 
     def test_searches_by_custom_call_name(self) -> None:
         matches = filter_modules("tempo", self.options())
@@ -97,7 +100,33 @@ class ModuleSearchAndRouteTests(unittest.TestCase):
         )
         texts = _collect_text_values(control)
         self.assertIn("Clima", texts)
+        self.assertIn("Sobre", texts)
+        self.assertIn("Configurações", texts)
+        self.assertIn("Log", texts)
+        self.assertNotIn("Erro", texts)
         self.assertNotIn("Módulo não encontrado", texts)
+
+    def test_parent_detail_reports_invalid_submodule_as_technical_error(self) -> None:
+        db = self.session_factory()
+        try:
+            db.add(
+                Module(
+                    module_public_key="weather.broken",
+                    name="Previsão quebrada",
+                    call_name="previsao",
+                    parent_module_id=self.module_id,
+                    is_available=False,
+                    validation_error="Manifesto inválido.",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        detail = get_module_detail(self.module_id, self.session_factory)
+
+        self.assertEqual(1, len(detail["technical_errors"]))
+        self.assertTrue(detail["technical_errors"][0]["is_submodule"])
 
     def test_route_with_missing_or_invalid_id_is_friendly(self) -> None:
         missing_control = build_route_content(

@@ -24,6 +24,7 @@ modules/
         "module_public_key": "weather",
         "name": "Clima",
         "call_name": "clima",
+        "icon": "partly_cloudy_day",
         "parent_public_key": null,
         "description": "Consulta informações de clima.",
         "readme": "README.md",
@@ -58,6 +59,8 @@ modules/
 ```
 
 Todos os quatro campos da raiz são obrigatórios. `runtime` pode ser `null` para módulos apenas organizacionais. `module.is_executable` é opcional: quando ausente, vale `true` se existir runtime e `false` caso contrário.
+
+`module.icon` recebe o nome de uma ligature do Material Icons, em letras minúsculas, números e underscores, por exemplo `partly_cloudy_day`. Quando o campo não é informado, a IRIS usa `extension` para manter compatibilidade com manifestos anteriores. A fonte Material Symbols Rounded é distribuída localmente em `assets/fonts` e a interface não depende dos ícones internos do Flet para representar módulos.
 
 ## Chave pública
 

@@ -5,7 +5,7 @@ from core.module_runner import PYTHON_REQUEST_METHOD, ModuleRunner
 from repositories.log_repository import LogRepository
 from repositories.module_repository import ModuleRepository
 from services.module_service import get_effective_module_variables
-from services.module_manifest import PUBLIC_KEY_PATTERN
+from services.module_manifest import MATERIAL_ICON_PATTERN, PUBLIC_KEY_PATTERN
 
 
 class CommandProcessor:
@@ -21,6 +21,7 @@ class CommandProcessor:
         call_name: str | None = None,
         custom_call_name: str | None = None,
         description: str = "",
+        icon: str = "extension",
         parent_module_id: int | None = None,
     ):
         module_public_key = module_public_key.strip()
@@ -32,6 +33,9 @@ class CommandProcessor:
             )
         if not name:
             raise ValueError("Informe o nome do módulo.")
+        icon = icon.strip()
+        if not icon or len(icon) > 100 or not MATERIAL_ICON_PATTERN.fullmatch(icon):
+            raise ValueError("Informe um nome válido do Material Icons.")
         if self.module_repository.get_by_public_key(module_public_key) is not None:
             raise ValueError("A chave pública informada já está registrada.")
         if (
@@ -46,6 +50,7 @@ class CommandProcessor:
             call_name=call_name or name,
             custom_call_name=custom_call_name,
             description=description,
+            icon=icon,
             parent_module_id=parent_module_id,
         )
 

@@ -5,6 +5,7 @@ import re
 import flet as ft
 import ui.home as ui
 
+from ui.shared.components.material_icons import material_icon
 from ui.theme.colors import BORDER, PASTEL_BLUE, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE, TEXT_PRIMARY, TEXT_SECONDARY
 
 
@@ -36,6 +37,7 @@ class HomeDropdowns:
         # Guarda dependencias e estado visual dos dropdowns da home.
         self.module_options = module_options
         self.executable_lookup = executable_lookup
+        self.icon_lookup = module_icon_lookup(module_options)
         self.controls = controls
         self.search_arguments = search_arguments
         self.on_select_module = on_select_module
@@ -122,6 +124,7 @@ class HomeDropdowns:
             self.expanded_groups,
             self.toggle_group,
             self.on_select_module,
+            icon_lookup=self.icon_lookup,
         )
         self.controls.module_panel.visible = bool(matches)
         self.update_control(self.controls.module_panel)
@@ -200,6 +203,12 @@ def option_module_id(module_option: ModuleOption) -> int | None:
         return None
     value = module_option.get("module_id")
     return value if isinstance(value, int) else None
+
+
+def option_icon(module_option: ModuleOption) -> str:
+    if isinstance(module_option, str):
+        return "extension"
+    return str(module_option.get("icon") or "extension")
 
 
 def option_command_paths(module_option: ModuleOption) -> list[str]:
@@ -326,6 +335,14 @@ def module_executable_lookup(module_options: Sequence[ModuleOption]) -> dict[str
     }
 
 
+def module_icon_lookup(module_options: Sequence[ModuleOption]) -> dict[str, str]:
+    return {
+        option_path(module_option): option_icon(module_option)
+        for module_option in module_options
+        if option_path(module_option)
+    }
+
+
 def build_dropdown_panel(content: ft.Control, on_click: Callable | None = None) -> ft.Container:
     # Cria o painel visual reutilizado pelos dropdowns da home.
     return ft.Container(
@@ -364,11 +381,13 @@ def build_module_suggestion_controls(
     expanded_groups: dict[str, bool],
     on_toggle: Callable[[str], None],
     on_select: Callable[[int, str], None],
+    *,
+    icon_lookup: Mapping[str, str] | None = None,
 ) -> list[ft.Control]:
     # Cria os controles da lista de modulos a partir da arvore filtrada.
     controls: list[ft.Control] = []
     has_query = bool(query.strip())
-    tree = build_module_tree(matches, executable_lookup)
+    tree = build_module_tree(matches, executable_lookup, icon_lookup)
 
     def append_nodes(nodes: Mapping[str, dict], depth: int = 0) -> None:
         # Adiciona recursivamente pastas e folhas da arvore de modulos.
@@ -388,6 +407,7 @@ def build_module_suggestion_controls(
                         is_expanded,
                         is_executable,
                         module_id,
+                        str(node["icon"]),
                         on_toggle,
                         on_select,
                         indent=depth * 24,
@@ -403,6 +423,7 @@ def build_module_suggestion_controls(
                         module_path,
                         on_select,
                         label=str(node["label"]),
+                        icon=str(node["icon"]),
                         is_executable=is_executable,
                         indent=depth * 24 + 28,
                     )
@@ -415,6 +436,7 @@ def build_module_suggestion_controls(
 def build_module_tree(
     module_options: Sequence[ModuleOption],
     executable_lookup: Mapping[str, bool],
+    icon_lookup: Mapping[str, str] | None = None,
 ) -> dict[str, dict]:
     # Transforma caminhos como A / B / C em uma arvore de modulos.
     root: dict[str, dict] = {}
@@ -436,6 +458,7 @@ def build_module_tree(
                     "children": {},
                     "is_executable": executable_lookup.get(current_path, False),
                     "module_id": None,
+                    "icon": (icon_lookup or {}).get(current_path, "extension"),
                 },
             )["children"]
 
@@ -446,6 +469,7 @@ def build_module_tree(
                 node = current_node["children"]
             current_node["is_executable"] = option_is_executable(module_option)
             current_node["module_id"] = option_module_id(module_option)
+            current_node["icon"] = option_icon(module_option)
 
     return root
 
@@ -507,6 +531,7 @@ def _build_module_leaf(
     module_path: str,
     on_select: Callable[[int, str], None],
     label: str,
+    icon: str,
     is_executable: bool,
     indent: int = 0,
 ) -> ft.Container:
@@ -526,7 +551,7 @@ def _build_module_leaf(
             spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                ft.Icon(icon=ft.Icons.ACCOUNT_TREE_ROUNDED, size=18, color=PASTEL_PURPLE),
+                material_icon(icon, size=19, color=PASTEL_DARK_PURPLE),
                 ft.Text(label, size=14, color=TEXT_PRIMARY, overflow=ft.TextOverflow.ELLIPSIS, no_wrap=True, expand=True),
                 _build_executable_suffix(is_executable),
             ],
@@ -540,6 +565,7 @@ def _build_module_group_header(
     is_expanded: bool,
     is_executable: bool,
     module_id: int | None,
+    icon: str,
     on_toggle: Callable[[str], None],
     on_select: Callable[[int, str], None],
     indent: int = 0,
@@ -551,7 +577,7 @@ def _build_module_group_header(
             size=20,
             color=PASTEL_DARK_PURPLE,
         ),
-        ft.Icon(icon=ft.Icons.FOLDER_ROUNDED, size=18, color=PASTEL_PURPLE),
+        material_icon(icon, size=19, color=PASTEL_DARK_PURPLE),
         ft.Text(label, size=14, weight=ft.FontWeight.W_700, color=TEXT_PRIMARY, overflow=ft.TextOverflow.ELLIPSIS, no_wrap=True, expand=True),
     ]
 

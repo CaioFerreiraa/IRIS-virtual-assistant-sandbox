@@ -6,9 +6,10 @@ import re
 import textwrap
 
 import flet as ft
-from flet.controls import border
 
 from services.module_registry_state import InvalidModuleInfo
+from services.module_service import module_has_problem
+from ui.shared.components.material_icons import material_icon
 from ui.theme.colors import (
     BLUE_GREY,
     BORDER,
@@ -31,9 +32,9 @@ DEFAULT_SIDEBAR_WIDTH = 272.0
 MIN_SIDEBAR_WIDTH = 240.0
 MAX_SIDEBAR_WIDTH = 460.0
 MODULE_ITEM_HEIGHT = 55.0
+STATUS_DOT_SIZE = 7.0
 TOOLTIP_LINE_WIDTH = 44
 TOOLTIP_README_LINES = 3
-MODULE_LEVEL_INDENT = 12
 CHILD_BACKGROUNDS = (
     GREY_100,
     GREY_200,
@@ -132,29 +133,20 @@ def _markdown_to_plain_text(content: str) -> str:
     return " ".join(lines)
 
 
-def _build_status_dot(module: Mapping[str, object]) -> ft.Container:
-    status = str(module.get("runtime_status") or module.get("status") or "").casefold()
-    has_problem = (
-        bool(module.get("validation_error"))
-        or module.get("is_available") is False
-        or status in {"com erro", "erro", "error"}
-    )
-    is_executable = bool(module.get("is_executable"))
-
-    if has_problem:
+def _build_status_dot(module: Mapping[str, object]) -> ft.Container | None:
+    if module_has_problem(module):
         color = CANCEL
         tooltip = "Módulo com problema"
-    elif is_executable:
+    elif bool(module.get("is_executable")):
         color = PASTEL_DARK_GREEN
         tooltip = "Módulo executável"
     else:
-        color = PASTEL_PURPLE
-        tooltip = "Grupo de módulos"
+        return None
 
     return ft.Container(
-        width=11,
-        height=11,
-        border_radius=6,
+        width=STATUS_DOT_SIZE,
+        height=STATUS_DOT_SIZE,
+        border_radius=STATUS_DOT_SIZE / 2,
         bgcolor=color,
         border=ft.Border.all(1, BORDER),
         tooltip=tooltip,
@@ -162,10 +154,11 @@ def _build_status_dot(module: Mapping[str, object]) -> ft.Container:
 
 
 def _build_module_labels(
+    module: Mapping[str, object],
     name: str,
     custom_call_name: str,
     is_active: bool,
-) -> ft.Text:
+) -> ft.Row:
     custom_call_span = (
         ft.TextSpan(
             text=f" ({custom_call_name})",
@@ -178,18 +171,66 @@ def _build_module_labels(
         if custom_call_name
         else None
     )
-    return ft.Text(
-        name,
-        expand=True,
-        size=12,
-        color=TEXT_PRIMARY,
-        weight=ft.FontWeight.W_700 if is_active else ft.FontWeight.W_600,
-        max_lines=2,
-        overflow=ft.TextOverflow.ELLIPSIS,
-        spans=[custom_call_span] if custom_call_span is not None else None,
-        #font_family=TITLE_FONT
+    underline = ft.Container(
+        height=2,
+        border_radius=1,
+        bgcolor=PASTEL_PURPLE if is_active else None,
+        visible=is_active,
     )
 
+    def on_label_size_change(event: ft.LayoutSizeChangeEvent) -> None:
+        if underline.width == event.width:
+            return
+        underline.width = event.width
+        _update_if_mounted(underline)
+
+    label = ft.Column(
+        expand=True,
+        tight=True,
+        spacing=3,
+        controls=[
+            ft.Text(
+                name,
+                size=12,
+                color=TEXT_PRIMARY,
+                weight=ft.FontWeight.W_700 if is_active else ft.FontWeight.W_600,
+                max_lines=2,
+                overflow=ft.TextOverflow.ELLIPSIS,
+                spans=[custom_call_span] if custom_call_span is not None else None,
+                on_size_change=on_label_size_change if is_active else None,
+            ),
+            underline,
+        ],
+    )
+
+    controls: list[ft.Control] = []
+    status_dot = _build_status_dot(module)
+    if status_dot is not None:
+        controls.append(status_dot)
+    controls.append(label)
+
+    return ft.Row(
+        expand=True,
+        spacing=6,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=controls,
+    )
+
+
+def _build_module_icons(module: Mapping[str, object]) -> ft.Container:
+    return ft.Container(
+        width=26,
+        height=26,
+        border_radius=8,
+        alignment=ft.Alignment.CENTER,
+        bgcolor=BLUE_GREY,
+        content=material_icon(
+            str(module.get("icon") or "extension"),
+            size=20,
+            color=PASTEL_DARK_PURPLE,
+            weight=ft.FontWeight.W_500,
+        ),
+    )
 
 # Controles da árvore
 
@@ -199,6 +240,7 @@ def _build_module_item(
     is_active: bool,
     on_click: Callable[[ft.ControlEvent], None],
     trailing: ft.Control | None = None,
+    parent_shadow_color: str | None = None,
 ) -> ft.Container:
     name = str(module.get("name") or module.get("path") or "Módulo")
     custom_call_name = str(module.get("custom_call_name") or "").strip()
@@ -209,8 +251,8 @@ def _build_module_item(
     )
 
     row_controls: list[ft.Control] = [
-        _build_status_dot(module),
-        _build_module_labels(name, custom_call_name, is_active),
+        _build_module_icons(module),
+        _build_module_labels(module, name, custom_call_name, is_active),
     ]
     if trailing is not None:
         row_controls.append(trailing)
@@ -218,16 +260,24 @@ def _build_module_item(
     return ft.Container(
         height=MODULE_ITEM_HEIGHT,
         padding=ft.Padding(
-            left=12 + min(depth, 5) * MODULE_LEVEL_INDENT,
+            left=12,
             top=8,
             right=8,
             bottom=8,
         ),
         alignment=ft.Alignment.CENTER_LEFT,
-        border=ft.Border.only(bottom=ft.BorderSide(0.3, BORDER )),
-
+        border=ft.Border.only(bottom=ft.BorderSide(0.5, BORDER)),
         bgcolor=_module_background(depth),
         border_radius=0,
+        shadow=(
+            ft.BoxShadow(
+                blur_radius=5,
+                color=parent_shadow_color,
+                offset=ft.Offset(0, -2),
+            )
+            if parent_shadow_color is not None
+            else None
+        ),
         ink=True,
         ink_color=ft.Colors.with_opacity(0.10, PASTEL_PURPLE),
         tooltip=ft.Tooltip(
@@ -255,6 +305,7 @@ def _build_module_branch(
     collapsed_module_ids: set[int],
     visited_ids: set[int],
     depth: int = 0,
+    parent_shadow_color: str | None = None,
 ) -> ft.Control:
     module_id = int(node.data["module_id"])
     if module_id in visited_ids:
@@ -270,6 +321,7 @@ def _build_module_branch(
             depth,
             is_active,
             lambda _: on_select(module_id, name),
+            parent_shadow_color=parent_shadow_color,
         )
 
     starts_expanded = (
@@ -294,8 +346,9 @@ def _build_module_branch(
                 collapsed_module_ids,
                 branch_visited_ids,
                 depth + 1,
+                _module_background(depth) if child_index == 0 else None,
             )
-            for child in node.children
+            for child_index, child in enumerate(node.children)
         ],
     )
     toggle_button = ft.IconButton(
@@ -344,6 +397,7 @@ def _build_module_branch(
                 is_active,
                 on_parent_click,
                 toggle_button,
+                parent_shadow_color,
             ),
             children,
         ],
@@ -371,10 +425,10 @@ def _build_invalid_module_item(module: InvalidModuleInfo) -> ft.Container:
             vertical_alignment=ft.CrossAxisAlignment.START,
             controls=[
                 ft.Container(
-                    width=11,
-                    height=11,
+                    width=STATUS_DOT_SIZE,
+                    height=STATUS_DOT_SIZE,
                     margin=ft.Margin(top=3),
-                    border_radius=6,
+                    border_radius=STATUS_DOT_SIZE / 2,
                     bgcolor=CANCEL,
                     border=ft.Border.all(1, BORDER),
                     tooltip="Módulo com problema",
@@ -415,7 +469,8 @@ def _build_invalid_module_item(module: InvalidModuleInfo) -> ft.Container:
 
 def _build_section_title(label: str, icon: ft.IconData, count: int) -> ft.Container:
     return ft.Container(
-        padding=ft.Padding(left=16, top=30, right=14, bottom=30),
+        padding=ft.Padding(left=16, top=28, right=14, bottom=16),
+        #bgcolor=GREY_100,
         #border=ft.Border.only(bottom=ft.BorderSide(0.3, PASTEL_PURPLE)),
         content=ft.Row(
             spacing=7,
@@ -425,7 +480,7 @@ def _build_section_title(label: str, icon: ft.IconData, count: int) -> ft.Contai
                 ft.Text(
                     label,
                     expand=True,
-                    size=18,
+                    size=16,
                     weight=ft.FontWeight.BOLD,
                     color=TEXT_PRIMARY,
                     font_family=TITLE_FONT
@@ -434,7 +489,7 @@ def _build_section_title(label: str, icon: ft.IconData, count: int) -> ft.Contai
                     width=24,
                     height=22,
                     alignment=ft.Alignment.CENTER,
-                    bgcolor=BLUE_GREY,
+                    bgcolor=SURFACE,
                     border_radius=11,
                     content=ft.Text(
                         str(count),
@@ -492,12 +547,17 @@ def build_sidebar(
 
     panel_controls: list[ft.Control] = [
         _build_section_title("Módulos", ft.Icons.WIDGETS_OUTLINED, len(module_data)),
-        ft.ListView(
-            spacing=0,
-            padding=0,
+        ft.Container(
             expand=True,
-            controls=module_items,
-        ),
+            border_radius=0,
+            bgcolor=SURFACE,
+            content=ft.ListView(
+                spacing=0,
+                padding=0,
+                expand=True,
+                controls=module_items,
+            ),
+        )
     ]
 
     invalid_items = [
@@ -529,7 +589,7 @@ def build_sidebar(
         bottom=0,
         margin=ft.Margin(left=18, top=28, right=4, bottom=25),
         padding=0,
-        bgcolor=SURFACE,
+        bgcolor=BLUE_GREY,
         border=ft.Border.all(1, BORDER),
         border_radius=12,
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
@@ -538,7 +598,11 @@ def build_sidebar(
             color=ft.Colors.with_opacity(0.06, PASTEL_DARK_PURPLE),
             offset=ft.Offset(0, 5),
         ),
-        content=ft.Column(spacing=20, controls=panel_controls),
+        content=ft.Column(
+            expand=True,
+            spacing=20,
+            controls=panel_controls,
+        ),
     )
 
     root = ft.Container(

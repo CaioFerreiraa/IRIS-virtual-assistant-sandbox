@@ -20,6 +20,7 @@ def create_module(
     call_name: str | None = None,
     custom_call_name: str | None = None,
     description: str = "",
+    icon: str = "extension",
     parent_module_id: int | None = None,
     db: Session = Depends(get_db),
 ):
@@ -30,5 +31,6 @@ def create_module(
         call_name=call_name.strip() if call_name else None,
         custom_call_name=custom_call_name.strip() if custom_call_name else None,
         description=description.strip(),
+        icon=icon.strip(),
         parent_module_id=parent_module_id,
     )

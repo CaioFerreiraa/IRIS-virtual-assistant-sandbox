@@ -7,14 +7,15 @@ class LogRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_logs(self) -> list[Log]:
-        return (
+    def list_logs(self, *, module_id: int | None = None) -> list[Log]:
+        query = (
             self.db.query(Log)
             .outerjoin(Log.module)
             .outerjoin(Log.routine)
-            .order_by(Log.created_at.desc())
-            .all()
         )
+        if module_id is not None:
+            query = query.filter(Log.module_id == module_id)
+        return query.order_by(Log.created_at.desc()).all()
 
     def create_log(
         self,

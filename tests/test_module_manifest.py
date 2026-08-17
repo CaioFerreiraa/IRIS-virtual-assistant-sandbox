@@ -35,7 +35,20 @@ class ModuleManifestTests(unittest.TestCase):
         )
         parsed = self.parse(manifest)
         self.assertEqual("weather", parsed.module_public_key)
+        self.assertEqual("extension", parsed.icon)
         self.assertEqual("default_city", parsed.variables[0].key)
+
+    def test_invalid_material_icon_name(self) -> None:
+        manifest = build_manifest()
+        manifest["module"]["icon"] = "Invalid icon"
+        with self.assertRaisesRegex(ManifestValidationError, "Material Icons"):
+            self.parse(manifest)
+
+    def test_missing_icon_uses_compatibility_fallback(self) -> None:
+        manifest = build_manifest()
+        del manifest["module"]["icon"]
+
+        self.assertEqual("extension", self.parse(manifest).icon)
 
     def test_missing_public_key(self) -> None:
         manifest = build_manifest()

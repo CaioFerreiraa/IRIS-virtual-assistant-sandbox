@@ -23,9 +23,13 @@ class ModuleRepository:
             for module in self.list_modules(available_only=True)
         ]
 
-    def list_module_options(self) -> list[dict[str, object]]:
+    def list_module_options(
+        self,
+        *,
+        available_only: bool = True,
+    ) -> list[dict[str, object]]:
         options: list[dict[str, object]] = []
-        for module in self.list_modules(available_only=True):
+        for module in self.list_modules(available_only=available_only):
             path = self.get_module_path(module)
             command_paths = self.get_module_command_paths(module)
             options.append(
@@ -36,6 +40,8 @@ class ModuleRepository:
                     "call_name": module.call_name,
                     "custom_call_name": module.custom_call_name,
                     "description": module.description or "",
+                    "icon": module.icon or "extension",
+                    "module_public_key": module.module_public_key,
                     "parent_module_id": module.parent_module_id,
                     "is_executable": bool(module.is_executable),
                     "is_available": bool(module.is_available),
@@ -135,6 +141,25 @@ class ModuleRepository:
             .one_or_none()
         )
 
+    def list_descendants(self, module_id: int) -> list[Module]:
+        descendants: list[Module] = []
+        pending_ids = [module_id]
+        visited_ids = {module_id}
+        while pending_ids:
+            children = (
+                self.db.query(Module)
+                .filter(Module.parent_module_id.in_(pending_ids))
+                .all()
+            )
+            pending_ids = []
+            for child in children:
+                if child.id in visited_ids:
+                    continue
+                visited_ids.add(child.id)
+                descendants.append(child)
+                pending_ids.append(child.id)
+        return descendants
+
     def get_breadcrumb(self, module: Module) -> list[dict[str, int | str]]:
         items: list[dict[str, int | str]] = []
         current: Module | None = module
@@ -209,6 +234,7 @@ class ModuleRepository:
         call_name: str,
         custom_call_name: str | None = None,
         description: str = "",
+        icon: str = "extension",
         parent_module_id: int | None = None,
     ) -> Module:
         module = Module(
@@ -217,6 +243,7 @@ class ModuleRepository:
             call_name=call_name,
             custom_call_name=custom_call_name,
             description=description,
+            icon=icon,
             parent_module_id=parent_module_id,
         )
         self.db.add(module)

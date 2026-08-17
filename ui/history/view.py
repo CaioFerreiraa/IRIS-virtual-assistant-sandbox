@@ -150,17 +150,25 @@ class HistoryViewState:
             return
 
 
-def _load_history_rows() -> list[dict[str, object]]:
-    db = SessionLocal()
+def load_history_rows(
+    *,
+    module_id: int | None = None,
+    session_factory=SessionLocal,
+) -> list[dict[str, object]]:
+    db = session_factory()
     try:
         module_repository = ModuleRepository(db)
-        logs = LogRepository(db).list_logs()
+        logs = LogRepository(db).list_logs(module_id=module_id)
         return [
             _build_history_row(log, module_repository)
             for log in logs
         ]
     finally:
         db.close()
+
+
+def _load_history_rows() -> list[dict[str, object]]:
+    return load_history_rows()
 
 
 def _build_history_row(log: Log, module_repository: ModuleRepository) -> dict[str, object]:

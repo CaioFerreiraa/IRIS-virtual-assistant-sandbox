@@ -32,6 +32,7 @@ class Module(Base):
     call_name = Column(String(100), nullable=False)
     custom_call_name = Column(String(100), nullable=True)
     description = Column(Text, nullable=True)
+    icon = Column(String(100), nullable=False, default="extension")
 
     request_method = Column(String(10), nullable=True)
     request_url = Column(String(255), nullable=True)

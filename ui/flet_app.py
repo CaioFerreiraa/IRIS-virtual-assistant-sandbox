@@ -102,10 +102,15 @@ def get_app_container(
     expanded_module_ids: set[int] = set()
     collapsed_module_ids: set[int] = set()
 
-    def load_module_options() -> list[dict[str, object]]:
+    def load_module_options(
+        *,
+        available_only: bool,
+    ) -> list[dict[str, object]]:
         db = SessionLocal()
         try:
-            return ModuleRepository(db).list_module_options()
+            return ModuleRepository(db).list_module_options(
+                available_only=available_only,
+            )
         finally:
             db.close()
 
@@ -128,9 +133,27 @@ def get_app_container(
 
     def render_layout(e=None):
         current_route = page.route or "/"
-        module_options = load_module_options()
+        sidebar_module_options = load_module_options(available_only=False)
+        module_options = [
+            option
+            for option in sidebar_module_options
+            if bool(option.get("is_available"))
+        ]
         registry_state = get_module_registry_state()
-        for option in module_options:
+        registered_public_keys = {
+            str(option.get("module_public_key"))
+            for option in sidebar_module_options
+            if option.get("module_public_key")
+        }
+        unregistered_invalid_modules = tuple(
+            invalid_module
+            for invalid_module in registry_state.invalid_modules
+            if (
+                not invalid_module.module_public_key
+                or invalid_module.module_public_key not in registered_public_keys
+            )
+        )
+        for option in sidebar_module_options:
             module_id = option.get("module_id")
             if type(module_id) is int:
                 option["readme_content"] = registry_state.readme_contents.get(
@@ -147,8 +170,8 @@ def get_app_container(
         sidebar_slot.content = build_sidebar(
             active_module_id=active_module_id(current_route),
             on_select=fatal_error_handler.guard_callback(select_module),
-            modules=module_options,
-            invalid_modules=registry_state.invalid_modules,
+            modules=sidebar_module_options,
+            invalid_modules=unregistered_invalid_modules,
             width=sidebar_width,
             on_width_change=remember_sidebar_width,
             expanded_module_ids=expanded_module_ids,

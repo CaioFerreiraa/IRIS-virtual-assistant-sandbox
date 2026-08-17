@@ -109,6 +109,7 @@ class HomeViewState:
         controls.command_input_field.value = ""
         controls.argument_input_field.value = ""
         self._dropdowns().clear_selected_module()
+        self._set_module_icon(None)
         self.sync_clear_button_visibility()
         self.hide_dropdowns()
         self.update_if_ready(controls.command_input_field)
@@ -159,6 +160,7 @@ class HomeViewState:
         controls = self._controls()
         controls.command_input_field.value = text
         self._dropdowns().clear_selected_module()
+        self._set_module_icon(None)
         self.sync_clear_button_visibility()
         self.update_if_ready(controls.command_input_field)
 
@@ -169,6 +171,8 @@ class HomeViewState:
         if resolved.ambiguous or resolved.module_id is None:
             self._dropdowns().show_module_suggestions(text)
             return
+
+        self._set_module_icon(resolved.module_id)
 
         if resolved.argument and self._module_has_arguments(resolved.module_id):
             self._dropdowns().open_argument_dropdown(
@@ -197,6 +201,7 @@ class HomeViewState:
 
         self._dropdowns().selected_module_id = resolved.module_id
         self._dropdowns().selected_module_path = resolved.path
+        self._set_module_icon(resolved.module_id)
         self.send_request(argument=resolved.argument or None)
 
     def _module_has_arguments(self, module_id: int) -> bool:
@@ -211,6 +216,7 @@ class HomeViewState:
     def refresh_module_suggestions(self, e) -> None:
         # Atualiza o dropdown de modulos quando o texto principal muda.
         self.sync_clear_button_visibility()
+        self._set_module_icon(None)
         self._dropdowns().refresh_module_suggestions(e)
 
     def show_module_suggestions_from_event(self, e) -> None:
@@ -384,6 +390,7 @@ class HomeViewState:
             controls.command_input_field.value = ""
             controls.argument_input_field.value = ""
             self._dropdowns().clear_selected_module()
+            self._set_module_icon(None)
             self.sync_clear_button_visibility()
             self.update_if_ready(controls.command_input_field)
             self.update_if_ready(controls.argument_input_field)
@@ -432,6 +439,7 @@ class HomeViewState:
 
         self._dropdowns().selected_module_id = module_id
         self._dropdowns().selected_module_path = module_path
+        self._set_module_icon(module_id)
         if self.home_service.module_has_arguments(module_id):
             self._dropdowns().open_argument_dropdown(
                 module_id,
@@ -477,6 +485,17 @@ class HomeViewState:
         controls.clear_button.visible = has_command or has_selected_module
         self.update_if_ready(controls.clear_button)
 
+    def _set_module_icon(self, module_id: int | None) -> None:
+        controls = self._controls()
+        icon_name = "explore"
+        if module_id is not None:
+            for option in self.module_options:
+                if ui.dropdowns.option_module_id(option) == module_id:
+                    icon_name = ui.dropdowns.option_icon(option)
+                    break
+        controls.module_icon.value = icon_name
+        self.update_if_ready(controls.module_icon)
+
 
 @dataclass
 class HomeViewCallbacks:
@@ -499,6 +518,7 @@ class HomeViewCallbacks:
 class HomeViewControls:
     root: ft.Container
     command_input_field: ft.TextField
+    module_icon: ft.Text
     argument_input_field: ft.TextField
     send_button: ft.Container
     clear_button: ft.Container
@@ -535,10 +555,17 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
         on_click=callbacks.on_command_click,
         on_tap_outside=callbacks.on_command_tap_outside,
     )
+    module_icon = ui.input.build_module_icon()
     send_button = ui.input.build_send_button(callbacks.on_send)
     voice_hint = ui.input.build_voice_hint()
     clear_button = ui.input.build_clear_button(callbacks.on_clear_command)
-    command_input = ui.input.build_command_input(command_input_field, clear_button, send_button, voice_hint)
+    command_input = ui.input.build_command_input(
+        command_input_field,
+        module_icon,
+        clear_button,
+        send_button,
+        voice_hint,
+    )
     input_shell = ui.input.build_input_shell(command_input)
     input_shell.on_click = callbacks.on_input_shell_click
     input_shell.on_hover = callbacks.on_input_shell_hover
@@ -553,6 +580,7 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
     return HomeViewControls(
         root=root,
         command_input_field=command_input_field,
+        module_icon=module_icon,
         argument_input_field=argument_input_field,
         send_button=send_button,
         clear_button=clear_button,

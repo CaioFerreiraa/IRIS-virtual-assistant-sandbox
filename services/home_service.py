@@ -4,6 +4,9 @@ from repositories.module_repository import ModuleRepository
 
 
 class HomeService:
+    def __init__(self, session_factory=SessionLocal) -> None:
+        self.session_factory = session_factory
+
     def module_has_arguments(self, module_id: int) -> bool:
         # Verifica se um modulo executavel possui busca de argumentos.
         processor, db = self._build_processor()
@@ -36,5 +39,5 @@ class HomeService:
 
     def _build_processor(self) -> tuple[CommandProcessor, object]:
         # Cria o processador com uma sessao de banco propria.
-        db = SessionLocal()
+        db = self.session_factory()
         return CommandProcessor(ModuleRepository(db)), db

@@ -84,6 +84,7 @@ class ModuleRegistryService:
                     "importação",
                     error,
                     module_public_key=manifest.module_public_key,
+                    parent_public_key=manifest.parent_public_key,
                 )
                 continue
 
@@ -95,6 +96,7 @@ class ModuleRegistryService:
                     "configuração",
                     error,
                     module_public_key=manifest.module_public_key,
+                    parent_public_key=manifest.parent_public_key,
                 )
                 continue
 
@@ -263,6 +265,7 @@ class ModuleRegistryService:
                         "configuração",
                         error,
                         module_public_key=public_key,
+                        parent_public_key=candidate.manifest.parent_public_key,
                     )
                 else:
                     synced_ids.append(module_id)
@@ -305,6 +308,7 @@ class ModuleRegistryService:
 
             module.name = manifest.name
             module.call_name = manifest.call_name
+            module.icon = manifest.icon
             module.description = manifest.description
             module.parent_module_id = parent.id if parent is not None else None
             module.request_method = "PYTHON" if manifest.runtime_type else None
@@ -397,6 +401,7 @@ class ModuleRegistryService:
                 "validação do manifesto",
                 error,
                 module_public_key=manifest.module_public_key,
+                parent_public_key=manifest.parent_public_key,
             )
 
     def _record_invalid(
@@ -405,6 +410,7 @@ class ModuleRegistryService:
         stage: str,
         error: Exception,
         module_public_key: str | None = None,
+        parent_public_key: str | None = None,
     ) -> None:
         message = str(error).strip() or "O módulo apresentou um erro técnico."
         log_path = append_module_error_log(folder, stage, error)
@@ -414,6 +420,7 @@ class ModuleRegistryService:
                 message=message,
                 log_path=str(log_path.resolve()),
                 module_public_key=module_public_key,
+                parent_public_key=parent_public_key,
             )
         )
 

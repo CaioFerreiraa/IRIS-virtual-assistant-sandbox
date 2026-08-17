@@ -8,6 +8,7 @@ import re
 SCHEMA_VERSION = 1
 PUBLIC_KEY_PATTERN = re.compile(r"^[a-z0-9._-]+$")
 VARIABLE_KEY_PATTERN = re.compile(r"^[a-z0-9._-]+$")
+MATERIAL_ICON_PATTERN = re.compile(r"^[a-z0-9_]+$")
 SUPPORTED_VARIABLE_TYPES = {"text"}
 SENSITIVE_VARIABLE_WORDS = {
     "credential",
@@ -52,6 +53,7 @@ class ModuleManifest:
     module_public_key: str
     name: str
     call_name: str
+    icon: str
     parent_public_key: str | None
     description: str
     readme_path: Path
@@ -82,6 +84,11 @@ def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
     _validate_public_key(module_public_key, "module_public_key")
     name = _required_string(module_data, "name")
     call_name = _required_string(module_data, "call_name")
+    icon = _optional_string(module_data, "icon", "extension")
+    if not icon or len(icon) > 100 or not MATERIAL_ICON_PATTERN.fullmatch(icon):
+        raise ManifestValidationError(
+            "O campo 'module.icon' deve conter um nome válido do Material Icons."
+        )
     parent_public_key = _nullable_string(module_data, "parent_public_key")
     if parent_public_key is not None:
         _validate_public_key(parent_public_key, "parent_public_key")
@@ -118,6 +125,7 @@ def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
         module_public_key=module_public_key,
         name=name,
         call_name=call_name,
+        icon=icon,
         parent_public_key=parent_public_key,
         description=description,
         readme_path=readme_path,

@@ -72,6 +72,7 @@ Campos:
 - `call_name`: nome padrão usado em comandos;
 - `custom_call_name`: nome personalizado;
 - `description`: explicação;
+- `icon`: nome da ligature do Material Icons usada pela interface;
 - `request_method`: modo de execução;
 - `request_url`: destino ou entry point;
 - `is_executable`: indica se pode ser executado;
@@ -213,6 +214,8 @@ Log
 3. insere ou atualiza módulos padrão legados;
 4. antes da abertura do Flet, o registry sincroniza `modules/installed`.
 
+Quando uma base já possui controle do Alembic, a inicialização aplica migrations pendentes até o `head`. Bases atuais recebem o campo `icon` pela migration `b7e4a1c9d2f6`; registros anteriores usam `extension` como valor de compatibilidade.
+
 A compatibilidade manual existe devido à evolução inicial do modelo. Ela não deve ser usada como padrão para novas mudanças.
 
 ## Seeds
@@ -249,7 +252,7 @@ Uma migration deve considerar:
 - downgrade possível;
 - compatibilidade com SQLite.
 
-A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão.
+A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos.
 
 ## Transações
 
