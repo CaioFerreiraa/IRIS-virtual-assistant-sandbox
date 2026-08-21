@@ -107,6 +107,8 @@ class VoiceSettingsTab:
         self.status_card: ft.Container | None = None
         self.fields: dict[str, ft.Control] = {}
         self.field_wrappers: dict[str, ft.Container] = {}
+        self.save_bar: ft.Container | None = None
+        self._saved_form_values: dict[str, object] = {}
         self.root: VoiceSettingsContent | None = None
         self.audio_device_service = AudioDeviceService()
         self.saved_microphone_index = self.settings.input_device_index
@@ -131,7 +133,10 @@ class VoiceSettingsTab:
     def build(self) -> ft.Stack:
         self.field_wrappers = {}
         self.fields = self._build_fields()
+        self._bind_form_change_handlers()
+        self._saved_form_values = self._current_form_values()
         self.status_card = self._build_status_card()
+        self.save_bar = build_floating_save_bar("Salvar", self.on_save, visible=False)
 
         self.root = VoiceSettingsContent(
             on_mount=self.load_microphones,
@@ -173,7 +178,7 @@ class VoiceSettingsTab:
             expand=True,
             controls=[
                 self.root,
-                build_floating_save_bar("Salvar", self.on_save),
+                self.save_bar,
             ],
         )
 
@@ -283,6 +288,7 @@ class VoiceSettingsTab:
         if not isinstance(microphone_field, ft.Dropdown):
             return
 
+        microphone_was_dirty = self._field_has_unsaved_change("input_device_index")
         self._microphones_by_id = {microphone["id"]: microphone for microphone in microphones}
         available_ids = set(self._microphones_by_id)
         selected_id = self.selected_microphone_id
@@ -332,9 +338,12 @@ class VoiceSettingsTab:
         if must_clear_saved_microphone:
             self._clear_saved_microphone(show_toast=False)
 
+        if not microphone_was_dirty:
+            self._saved_form_values["input_device_index"] = microphone_field.value
         self._update_microphone_controls()
         self._update_selected_microphone_status()
         self._start_level_monitor_for_selection()
+        self._sync_save_bar_visibility()
 
     def on_microphone_select(self, event: ft.ControlEvent | None = None) -> None:
         microphone_field = self.fields.get("input_device_index")
@@ -344,6 +353,7 @@ class VoiceSettingsTab:
                 self._clear_saved_microphone(show_toast=False)
         self._update_selected_microphone_status()
         self._start_level_monitor_for_selection()
+        self._sync_save_bar_visibility()
 
     def on_delete_microphone(self, event: ft.ControlEvent | None = None) -> None:
         self.selected_microphone_id = None
@@ -351,9 +361,11 @@ class VoiceSettingsTab:
         if isinstance(microphone_field, ft.Dropdown):
             microphone_field.value = self.selected_microphone_id
         self._clear_saved_microphone(show_toast=True)
+        self._saved_form_values["input_device_index"] = self._field_value("input_device_index")
         self._update_selected_microphone_status()
         self._update_microphone_controls()
         self._start_level_monitor_for_selection()
+        self._sync_save_bar_visibility()
 
     def _clear_saved_microphone(self, *, show_toast: bool) -> None:
         if self.saved_microphone_index is None:
@@ -658,6 +670,7 @@ class VoiceSettingsTab:
     def on_mode_change(self, event: ft.ControlEvent | None = None) -> None:
         for field_name, wrapper in self.field_wrappers.items():
             wrapper.visible = self._is_field_visible(field_name)
+        self._sync_save_bar_visibility()
         if event is not None and self._is_mounted(event.control):
             event.control.page.update()
 
@@ -693,6 +706,8 @@ class VoiceSettingsTab:
             else "Configurações salvas. O serviço de voz foi desativado."
         )
         self.toaster_handler.show_success(message, title="Configuração de voz")
+        self._saved_form_values = self._current_form_values()
+        self._sync_save_bar_visibility()
         self.sync_status_from_manager()
 
     def on_test_microphone(self, event: ft.ControlEvent) -> None:
@@ -736,6 +751,43 @@ class VoiceSettingsTab:
         if isinstance(field, ft.Container) and isinstance(field.data, ft.Switch):
             return field.data.value
         return getattr(field, "value", None)
+
+    def _bind_form_change_handlers(self) -> None:
+        for field_name, field in self.fields.items():
+            if field_name in {"mode", "input_device_index"}:
+                continue
+            if isinstance(field, ft.TextField):
+                field.on_change = self.on_form_change
+            elif isinstance(field, ft.Dropdown):
+                field.on_select = self.on_form_change
+            elif isinstance(field, ft.Container) and isinstance(field.data, ft.Switch):
+                field.data.on_change = self.on_form_change
+
+    def on_form_change(self, event: ft.ControlEvent | None = None) -> None:
+        del event
+        self._sync_save_bar_visibility()
+
+    def _current_form_values(self) -> dict[str, object]:
+        return {
+            field_name: self._field_value(field_name)
+            for field_name in self.fields
+        }
+
+    def _field_has_unsaved_change(self, field_name: str) -> bool:
+        return (
+            field_name in self._saved_form_values
+            and self._field_value(field_name) != self._saved_form_values[field_name]
+        )
+
+    def _sync_save_bar_visibility(self) -> None:
+        if self.save_bar is None:
+            return
+        has_changes = self._current_form_values() != self._saved_form_values
+        if self.save_bar.visible == has_changes:
+            return
+        self.save_bar.visible = has_changes
+        if self._is_mounted(self.save_bar):
+            self.save_bar.update()
 
     def _float_value(self, field_name: str) -> float:
         raw_value = str(self._field_value(field_name) or "").strip().replace(",", ".")

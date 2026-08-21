@@ -108,9 +108,8 @@ def build_floating_save_bar(
     visible: bool = True,
 ) -> ft.Container:
     return ft.Container(
-        expand=True,
-        alignment=ft.Alignment.BOTTOM_CENTER,
-        padding=ft.Padding(left=0, top=0, right=0, bottom=8),
+        align=ft.Alignment.BOTTOM_CENTER,
+        margin=ft.Margin(left=0, top=0, right=0, bottom=8),
         visible=visible,
         content=ft.Container(
             padding=8,

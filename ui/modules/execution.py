@@ -25,6 +25,7 @@ class ModuleExecutionMixin:
 
         custom_value = (self.custom_call_name_field.value or "").strip() or "-"
         self._set_model_value("Nome de chamada personalizado", custom_value)
+        self._reset_settings_save_state()
         self._show_success("Configurações salvas.")
 
     def on_auto_start_change(self, event: ft.ControlEvent) -> None:

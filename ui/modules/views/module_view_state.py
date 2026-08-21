@@ -66,6 +66,8 @@ class ModuleViewState(
         self.tab_views: dict[str, ft.Control] = {}
         self.variable_fields: dict[str, ft.TextField] = {}
         self.model_value_controls: dict[str, ft.Control] = {}
+        self.settings_save_bar: ft.Container | None = None
+        self._saved_settings_values: dict[str, str] = {}
         self.is_executing = False
 
         self.custom_call_name_field = build_text_field(

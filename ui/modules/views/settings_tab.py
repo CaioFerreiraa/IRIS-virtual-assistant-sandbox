@@ -61,6 +61,16 @@ class ModuleSettingsTabMixin:
 
         controls.append(ft.Container(height=74))
 
+        self.custom_call_name_field.on_change = self.on_settings_form_change
+        for field in self.variable_fields.values():
+            field.on_change = self.on_settings_form_change
+        self._saved_settings_values = self._current_settings_values()
+        self.settings_save_bar = build_floating_save_bar(
+            "Salvar configurações",
+            self.on_save_settings,
+            visible=False,
+        )
+
         content = ft.Column(
             expand=True,
             scroll=ft.ScrollMode.AUTO,
@@ -71,13 +81,41 @@ class ModuleSettingsTabMixin:
             expand=True,
             controls=[
                 content,
-                build_floating_save_bar(
-                    "Salvar configurações",
-                    self.on_save_settings,
-                    visible=bool(self.detail["is_available"]),
-                ),
+                self.settings_save_bar,
             ],
         )
+
+    def on_settings_form_change(self, event: ft.ControlEvent | None = None) -> None:
+        del event
+        self._sync_settings_save_bar_visibility()
+
+    def _current_settings_values(self) -> dict[str, str]:
+        values = {
+            "custom_call_name": self.custom_call_name_field.value or "",
+        }
+        values.update(
+            {
+                key: field.value or ""
+                for key, field in self.variable_fields.items()
+            }
+        )
+        return values
+
+    def _reset_settings_save_state(self) -> None:
+        self._saved_settings_values = self._current_settings_values()
+        self._sync_settings_save_bar_visibility()
+
+    def _sync_settings_save_bar_visibility(self) -> None:
+        if self.settings_save_bar is None:
+            return
+        has_changes = (
+            bool(self.detail["is_available"])
+            and self._current_settings_values() != self._saved_settings_values
+        )
+        if self.settings_save_bar.visible == has_changes:
+            return
+        self.settings_save_bar.visible = has_changes
+        self._update_if_mounted(self.settings_save_bar)
 
     def _build_quick_settings_section(self) -> ft.Container:
         controls = [

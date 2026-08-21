@@ -163,7 +163,7 @@ A rota `/modules/{module_id}` monta a tela consultando o banco e o estado prepar
 - **Erro**: aparece somente para falhas técnicas de descoberta, validação, importação, configuração ou inicialização do módulo ou de um submódulo. Quando existe, fica em primeiro lugar e é selecionada inicialmente.
 
 O switch “Iniciar com a IRIS” aparece somente para módulos raiz. Ele só fica habilitado para runtime Python raiz que declara `supports_auto_start`; nos demais casos, a própria tela explica por que a opção está desabilitada. Erros normais ocorridos durante uma requisição permanecem apenas no histórico e não criam a aba de erro.
-O botão “Salvar configurações” permanece flutuante no centro inferior da aba para evitar que o usuário precise rolar até o fim do formulário.
+O botão “Salvar configurações” aparece somente quando existem alterações pendentes e permanece flutuante no centro inferior da aba para evitar que o usuário precise rolar até o fim do formulário.
 
 IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos inválidos sem ID aparecem no diagnóstico da sidebar com pasta, mensagem curta e caminho do `module.log`, sem traceback.
 
@@ -309,7 +309,7 @@ O formulário de voz permite escolher modo básico ou tempo real, modelos, idiom
 
 Abaixo do estado do serviço existe um visualizador do nível do microfone efetivo: primeiro o selecionado, depois o salvo e, se ambos estiverem ausentes, nenhum. Quando o backend está pronto, o botão “Testar microfone” abre a rota `/settings/voice_checking` como um modal centralizado. Essa tela exibe transcrições brutas sem exigir a palavra de ativação e permite comparar RealtimeSTT e Faster-Whisper no modo completo.
 
-Salvamentos devem usar toaster para indicar sucesso ou erro. O botão “Salvar” da configuração de voz permanece flutuante no centro inferior da aba.
+Salvamentos devem usar toaster para indicar sucesso ou erro. O botão “Salvar” da configuração de voz aparece somente quando existem alterações pendentes e permanece flutuante no centro inferior da aba.
 
 ## Acessibilidade
 
