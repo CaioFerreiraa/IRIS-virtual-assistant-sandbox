@@ -1,0 +1,15 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "test.showcase.contracts",
+        "name": "Contratos de entrada",
+        "call_name": "contratos",
+        "icon": "account_tree",
+        "parent_public_key": "test.showcase",
+        "description": "Grupo organizacional para demonstrar execute, run e main.",
+        "readme": "README.md",
+        "is_executable": false
+    },
+    "runtime": null,
+    "variables": []
+}

@@ -1,0 +1,47 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "test.showcase",
+        "name": "Testes de módulos",
+        "call_name": "testes",
+        "icon": "science",
+        "parent_public_key": null,
+        "description": "Catálogo executável para demonstrar os contratos e estados suportados pelos módulos da IRIS.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": true
+    },
+    "variables": [
+        {
+            "key": "editable_text",
+            "label": "Texto editável",
+            "description": "Valor não sensível alterável na rota do módulo e enviado ao runtime.",
+            "type": "text",
+            "required": false,
+            "user_editable": true,
+            "default_value": "configuração padrão"
+        },
+        {
+            "key": "required_text",
+            "label": "Texto obrigatório",
+            "description": "Demonstra a validação de uma configuração obrigatória editável.",
+            "type": "text",
+            "required": true,
+            "user_editable": true,
+            "default_value": "valor obrigatório"
+        },
+        {
+            "key": "internal_text",
+            "label": "Texto interno",
+            "description": "Valor técnico não editável recebido do manifesto.",
+            "type": "text",
+            "required": true,
+            "user_editable": false,
+            "default_value": "definido no manifesto"
+        }
+    ]
+}

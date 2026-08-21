@@ -1,0 +1,38 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "weather.forecast",
+        "name": "Previsão do tempo",
+        "call_name": "previsão",
+        "icon": "partly_cloudy_day",
+        "parent_public_key": null,
+        "description": "Consulta localização e previsão do tempo nos endpoints públicos do Open-Meteo.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": false
+    },
+    "variables": [
+        {
+            "key": "default_location",
+            "label": "Local padrão",
+            "description": "Cidade, município ou código postal usado quando a requisição não informar um local.",
+            "type": "text",
+            "required": false,
+            "user_editable": true,
+            "default_value": ""
+        },
+        {
+            "key": "forecast_days",
+            "label": "Dias da previsão",
+            "description": "Quantidade de dias resumidos, entre 1 e 7.",
+            "type": "text",
+            "required": true,
+            "user_editable": true,
+            "default_value": "3"
+        }
+    ]
+}

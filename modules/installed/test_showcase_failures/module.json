@@ -1,0 +1,19 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "test.showcase.failures",
+        "name": "Falhas",
+        "call_name": "falhas",
+        "icon": "error",
+        "parent_public_key": "test.showcase",
+        "description": "Demonstra falha controlada e exceção durante uma execução normal.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": false
+    },
+    "variables": []
+}

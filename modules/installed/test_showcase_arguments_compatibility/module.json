@@ -1,0 +1,19 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "test.showcase.arguments_compatibility",
+        "name": "Argumentos compatíveis",
+        "call_name": "argumentos compatíveis",
+        "icon": "sync_alt",
+        "parent_public_key": "test.showcase",
+        "description": "Demonstra os fallbacks legados de busca e chamada posicional.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": false
+    },
+    "variables": []
+}

@@ -1,0 +1,19 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "test.showcase.contracts.execute",
+        "name": "Função execute",
+        "call_name": "execute",
+        "icon": "play_arrow",
+        "parent_public_key": "test.showcase.contracts",
+        "description": "Demonstra o entry point preferencial execute.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": false
+    },
+    "variables": []
+}

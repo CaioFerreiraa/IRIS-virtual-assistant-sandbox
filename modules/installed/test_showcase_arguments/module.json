@@ -1,0 +1,19 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "test.showcase.arguments",
+        "name": "Argumentos",
+        "call_name": "argumentos",
+        "icon": "manage_search",
+        "parent_public_key": "test.showcase",
+        "description": "Demonstra busca, filtragem, seleção e validação de argumentos.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": false
+    },
+    "variables": []
+}
