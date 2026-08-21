@@ -41,7 +41,7 @@ def build_argument_field(on_submit: Callable, on_change: Callable, on_tap_outsid
     return ft.TextField(
         height=42,
         expand=True,
-        hint_text="Buscar item da area de trabalho...",
+        hint_text="Informe ou busque um argumento...",
         hint_style=ft.TextStyle(color=TEXT_SECONDARY, size=13),
         text_style=ft.TextStyle(color=TEXT_PRIMARY, size=13),
         cursor_color=TEXT_PRIMARY,
@@ -195,3 +195,9 @@ def build_voice_hint() -> ft.Container:
         shadow=ft.BoxShadow(blur_radius=12, color="#28000000", offset=ft.Offset(0, 4)),
         content=ft.Text("“Enviar” para concluir", size=11, color=ft.Colors.WHITE, no_wrap=True),
     )
+
+
+def set_voice_hint_text(voice_hint: ft.Container, text: str) -> None:
+    # Mantém a mensagem do estado de voz no mesmo componente visual.
+    if isinstance(voice_hint.content, ft.Text):
+        voice_hint.content.value = text

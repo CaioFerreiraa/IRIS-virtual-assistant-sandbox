@@ -41,6 +41,7 @@ class HomeViewState:
         self.speech_manager = speech_manager
         self.is_loading = False
         self.is_voice_active = False
+        self.is_basic_capture_active = False
         self._argument_capability_cache: dict[int, bool] = {}
         self.controls: HomeViewControls | None = None
         self.dropdowns: ui.dropdowns.HomeDropdowns | None = None
@@ -128,8 +129,28 @@ class HomeViewState:
 
     async def _apply_speech_event(self, event: SpeechEvent) -> None:
         controls = self._controls()
+        if event.kind == SpeechEventKind.CAPTURE_STARTED:
+            self.is_basic_capture_active = True
+            if not self.is_voice_active:
+                ui.input.set_voice_hint_text(controls.voice_hint, "Ouvindo...")
+                controls.voice_hint.visible = True
+                ui.input.set_input_shell_voice_active(controls.input_shell, True, pulse=True)
+                self.update_if_ready(controls.voice_hint)
+                self.update_if_ready(controls.input_shell)
+            return
+
+        if event.kind == SpeechEventKind.CAPTURE_FINISHED:
+            self.is_basic_capture_active = False
+            if not self.is_voice_active:
+                controls.voice_hint.visible = False
+                ui.input.set_input_shell_voice_active(controls.input_shell, False)
+                self.update_if_ready(controls.voice_hint)
+                self.update_if_ready(controls.input_shell)
+            return
+
         if event.kind == SpeechEventKind.ACTIVATED:
             self.is_voice_active = True
+            ui.input.set_voice_hint_text(controls.voice_hint, "“Enviar” para concluir")
             controls.voice_hint.visible = True
             ui.input.set_input_shell_voice_active(controls.input_shell, True, pulse=True)
             self.update_if_ready(controls.input_shell)
@@ -149,6 +170,7 @@ class HomeViewState:
 
         if event.kind in {SpeechEventKind.DEACTIVATED, SpeechEventKind.ERROR, SpeechEventKind.STOPPED}:
             self.is_voice_active = False
+            self.is_basic_capture_active = False
             controls.voice_hint.visible = False
             ui.input.set_input_shell_voice_active(controls.input_shell, False)
             self.update_if_ready(controls.voice_hint)
@@ -332,7 +354,7 @@ class HomeViewState:
             self.show_module_error(str(error))
             return
 
-        if argument is None and self.home_service.module_has_arguments(module_id):
+        if argument is None and self.home_service.module_requires_argument(module_id):
             self._dropdowns().open_argument_dropdown(
                 module_id,
                 module_path,
@@ -440,7 +462,7 @@ class HomeViewState:
         self._dropdowns().selected_module_id = module_id
         self._dropdowns().selected_module_path = module_path
         self._set_module_icon(module_id)
-        if self.home_service.module_has_arguments(module_id):
+        if self.home_service.module_requires_argument(module_id):
             self._dropdowns().open_argument_dropdown(
                 module_id,
                 module_path,
@@ -474,7 +496,7 @@ class HomeViewState:
     def on_input_shell_hover(self, e) -> None:
         # Atualiza o visual do shell quando o mouse entra ou sai.
         controls = self._controls()
-        if not self.is_voice_active:
+        if not self.is_voice_active and not self.is_basic_capture_active:
             ui.input.set_input_shell_hovered(controls.input_shell, str(e.data).lower() == "true")
         self.update_if_ready(controls.input_shell)
 

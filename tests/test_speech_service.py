@@ -3,6 +3,8 @@ import types
 import unittest
 from unittest.mock import patch
 
+import numpy as np
+
 from services.speech_service import (
     FasterWhisperSpeechService,
     NoInputDeviceError,
@@ -85,6 +87,64 @@ class SpeechServiceTests(unittest.TestCase):
         self.assertIn("Caio", prompt)
         self.assertIn("Abrir aplicativos", prompt)
         self.assertIn("Spotify", prompt)
+
+    def test_basic_mode_reports_capture_around_final_transcription(self) -> None:
+        events = []
+        service = FasterWhisperSpeechService(
+            VoiceSettings(silence_duration=0.2),
+            events.append,
+        )
+
+        class FakeInputStream:
+            def __init__(self, **options):
+                self.callback = options["callback"]
+
+            def __enter__(self):
+                speaking = np.full(1600, 0.05, dtype=np.float32)
+                silence = np.zeros(1600, dtype=np.float32)
+                self.callback(speaking, len(speaking), None, None)
+                self.callback(silence, len(silence), None, None)
+                self.callback(silence, len(silence), None, None)
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+        class FakeWhisperModel:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def transcribe(self, audio, **kwargs):
+                service._stop_event.set()
+                return [types.SimpleNamespace(text=" Iris abrir aplicativo")], None
+
+        fake_sounddevice = types.SimpleNamespace(
+            default=types.SimpleNamespace(device=[1, 1]),
+            query_devices=lambda index: {"max_input_channels": 1},
+            InputStream=FakeInputStream,
+        )
+        fake_faster_whisper = types.SimpleNamespace(WhisperModel=FakeWhisperModel)
+
+        with patch.dict(
+            sys.modules,
+            {
+                "sounddevice": fake_sounddevice,
+                "faster_whisper": fake_faster_whisper,
+            },
+        ):
+            service._run()
+
+        event_kinds = [event.kind for event in events]
+        self.assertIn(SpeechEventKind.CAPTURE_STARTED, event_kinds)
+        self.assertIn(SpeechEventKind.CAPTURE_FINISHED, event_kinds)
+        self.assertLess(
+            event_kinds.index(SpeechEventKind.CAPTURE_STARTED),
+            event_kinds.index(SpeechEventKind.ACTIVATED),
+        )
+        self.assertLess(
+            event_kinds.index(SpeechEventKind.FINAL),
+            event_kinds.index(SpeechEventKind.CAPTURE_FINISHED),
+        )
 
     def test_invalid_saved_microphone_falls_back_to_system_default(self) -> None:
         fake_sounddevice = types.SimpleNamespace(

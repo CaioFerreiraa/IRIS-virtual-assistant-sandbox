@@ -24,6 +24,8 @@ MAX_BASIC_UTTERANCE_SECONDS = 30.0
 class SpeechEventKind(StrEnum):
     STARTING = "starting"
     READY = "ready"
+    CAPTURE_STARTED = "capture_started"
+    CAPTURE_FINISHED = "capture_finished"
     ACTIVATED = "activated"
     PARTIAL = "partial"
     FINAL = "final"
@@ -314,6 +316,7 @@ class FasterWhisperSpeechService(SpeechService):
                 self._transcribe_audio(audio)
             finally:
                 is_transcribing = False
+                self._emit(SpeechEventKind.CAPTURE_FINISHED)
                 while not self._audio_queue.empty():
                     try:
                         self._audio_queue.get_nowait()
@@ -353,6 +356,7 @@ class FasterWhisperSpeechService(SpeechService):
                     if not is_speaking:
                         audio_buffer = list(pre_roll)
                         pre_roll.clear()
+                        self._emit(SpeechEventKind.CAPTURE_STARTED)
                     is_speaking = True
                     silence_duration = 0.0
                     audio_buffer.append(data)
