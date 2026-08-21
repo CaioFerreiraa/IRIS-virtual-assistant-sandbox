@@ -42,6 +42,7 @@ CHILD_BACKGROUNDS = (
     GREY_400,
     GREY_500,
 )
+PARENT_SHADOW_COLOR = ft.Colors.with_opacity(0.16, PASTEL_DARK_PURPLE)
 
 
 @dataclass
@@ -273,13 +274,13 @@ def _build_module_item(
             ft.BoxShadow(
                 blur_radius=5,
                 color=parent_shadow_color,
-                offset=ft.Offset(0, -2),
+                offset=ft.Offset(0, -4),
             )
             if parent_shadow_color is not None
             else None
         ),
         ink=True,
-        ink_color=ft.Colors.with_opacity(0.10, PASTEL_PURPLE),
+        ink_color=ft.Colors.with_opacity(0.06, PASTEL_DARK_PURPLE),
         tooltip=ft.Tooltip(
             message=_build_tooltip_message(name, readme_content),
             padding=ft.Padding(left=12, top=9, right=12, bottom=9),
@@ -346,7 +347,7 @@ def _build_module_branch(
                 collapsed_module_ids,
                 branch_visited_ids,
                 depth + 1,
-                _module_background(depth) if child_index == 0 else None,
+                PARENT_SHADOW_COLOR if child_index == 0 else None,
             )
             for child_index, child in enumerate(node.children)
         ],

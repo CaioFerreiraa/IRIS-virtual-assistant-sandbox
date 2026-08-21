@@ -5,7 +5,7 @@ import flet as ft
 
 from ui.theme.colors import (
     BORDER,
-    PRIMARY_SOFT,
+    PASTEL_BLUE,
     SURFACE,
     BLUE_GREY,
     TEXT_PRIMARY,
@@ -48,7 +48,7 @@ def build_responsive_table(
 def _build_header(columns: Sequence[TableColumn]) -> ft.Container:
     return ft.Container(
         height=46,
-        bgcolor=PRIMARY_SOFT,
+        bgcolor=PASTEL_BLUE,
         border=ft.Border.only(bottom=ft.BorderSide(1, BORDER)),
         content=ft.Row(
             spacing=0,

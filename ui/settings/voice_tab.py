@@ -13,6 +13,7 @@ from services.voice_settings_service import VoiceSettingsService
 from ui.shared.components.audio_visualizer import AudioVisualizer
 from ui.shared.components.form_controls import (
     build_dropdown,
+    build_floating_save_bar,
     build_primary_button,
     build_text_field,
 )
@@ -127,7 +128,7 @@ class VoiceSettingsTab:
         self._level_monitor_token = 0
         self._level_monitor_selection: str | None = None
 
-    def build(self) -> ft.Column:
+    def build(self) -> ft.Stack:
         self.field_wrappers = {}
         self.fields = self._build_fields()
         self.status_card = self._build_status_card()
@@ -165,15 +166,16 @@ class VoiceSettingsTab:
                         self._field_grid("temperature", "condition_on_previous_text", "proper_names", "context", "hotwords"),
                     ],
                 ),
-                ft.Row(
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    controls=[
-                        build_primary_button("Salvar", self.on_save)
-                    ],
-                ),
+                ft.Container(height=74),
             ],
         )
-        return self.root
+        return ft.Stack(
+            expand=True,
+            controls=[
+                self.root,
+                build_floating_save_bar("Salvar", self.on_save),
+            ],
+        )
 
     def _build_fields(self) -> dict[str, ft.Control]:
         settings = self.settings

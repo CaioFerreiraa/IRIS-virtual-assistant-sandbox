@@ -77,7 +77,7 @@ O header contém:
 - indicador do estado do reconhecimento de voz;
 - ações da janela.
 
-O indicador de voz abre um diálogo ao ser clicado, independentemente do estado atual. O diálogo lista os estados possíveis do microfone com seus ícones e cores, destacando o estado ativo. Seu tooltip também descreve se o backend está carregando, com erro, pronto no modo básico, pronto no modo completo, desativado, indisponível ou pausado fora das rotas autorizadas. Durante uma ativação por “IRIS”, o indicador recebe uma sombra luminosa na cor do estado atual.
+O indicador de voz abre um diálogo ao ser clicado, independentemente do estado atual. O diálogo lista os estados possíveis do microfone com seus ícones e cores, destacando o estado ativo. Seu tooltip também descreve se o backend está carregando, com erro, pronto no modo básico, pronto no modo completo, desativado, indisponível ou pausado fora das rotas autorizadas. Durante uma ativação por “IRIS”, o indicador recebe uma sombra luminosa na cor do estado atual. No modo básico, o input também apresenta “Ouvindo...” enquanto uma frase é capturada; esse retorno antecede a transcrição final e não confirma por si só a palavra de ativação.
 
 ### Sidebar
 
@@ -151,18 +151,19 @@ A home possui:
 O ícone à esquerda do input acompanha o módulo selecionado. As sugestões também
 usam o ícone persistido; quando não há seleção, o input mostra `explore`.
 
-A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. A execução acontece em background para manter a interface responsiva.
+A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. O campo secundário usa uma instrução genérica porque pode receber arquivos, cidades ou outros tipos de argumento. Módulos com busca pedem esse valor por padrão, mas podem usar `should_request_argument(variables)` para dispensá-lo quando uma configuração já fornece o valor necessário. A execução acontece em background para manter a interface responsiva.
 
 ### Tela do módulo
 
 A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo e apresenta o botão primário “Executar” à esquerda do status quando a ação está disponível. O conteúdo é dividido em abas:
 
 - **Sobre**: descrição, README quando existe e `module.json` formatado com fonte Consolas quando existe;
-- **Configurações**: todos os campos persistidos do modelo em modo de leitura, `custom_call_name` editável, variáveis editáveis e argumento transitório quando o módulo oferece busca de argumentos;
-- **Log**: somente as execuções do módulo, usando a mesma tabela do histórico;
+- **Configurações**: primeiro apresenta `call_name` em modo de leitura, `custom_call_name` editável, argumento transitório e, somente para módulos raiz, a opção “Iniciar com a IRIS”; depois mostra os dados persistidos do módulo em formato de formulário e as variáveis editáveis quando existirem;
+- **Log**: aparece somente em módulos executáveis e lista as execuções do módulo, usando a mesma tabela do histórico;
 - **Erro**: aparece somente para falhas técnicas de descoberta, validação, importação, configuração ou inicialização do módulo ou de um submódulo. Quando existe, fica em primeiro lugar e é selecionada inicialmente.
 
-O switch “Iniciar com a IRIS” aparece para todo módulo disponível. Ele só fica habilitado para runtime Python raiz que declara `supports_auto_start`; nos demais casos, a própria tela explica por que a opção está desabilitada. Erros normais ocorridos durante uma requisição permanecem apenas no histórico e não criam a aba de erro.
+O switch “Iniciar com a IRIS” aparece somente para módulos raiz. Ele só fica habilitado para runtime Python raiz que declara `supports_auto_start`; nos demais casos, a própria tela explica por que a opção está desabilitada. Erros normais ocorridos durante uma requisição permanecem apenas no histórico e não criam a aba de erro.
+O botão “Salvar configurações” permanece flutuante no centro inferior da aba para evitar que o usuário precise rolar até o fim do formulário.
 
 IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos inválidos sem ID aparecem no diagnóstico da sidebar com pasta, mensagem curta e caminho do `module.log`, sem traceback.
 
@@ -308,7 +309,7 @@ O formulário de voz permite escolher modo básico ou tempo real, modelos, idiom
 
 Abaixo do estado do serviço existe um visualizador do nível do microfone efetivo: primeiro o selecionado, depois o salvo e, se ambos estiverem ausentes, nenhum. Quando o backend está pronto, o botão “Testar microfone” abre a rota `/settings/voice_checking` como um modal centralizado. Essa tela exibe transcrições brutas sem exigir a palavra de ativação e permite comparar RealtimeSTT e Faster-Whisper no modo completo.
 
-Salvamentos devem usar toaster para indicar sucesso ou erro.
+Salvamentos devem usar toaster para indicar sucesso ou erro. O botão “Salvar” da configuração de voz permanece flutuante no centro inferior da aba.
 
 ## Acessibilidade
 

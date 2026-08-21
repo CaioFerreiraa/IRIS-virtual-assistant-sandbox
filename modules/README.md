@@ -103,6 +103,21 @@ def execute(
 
 Chaves são únicas dentro do módulo e usam o mesmo conjunto simples de caracteres da chave pública. Campos obrigatórios são validados antes de salvar e antes de executar. Definições removidas do manifesto ficam inativas no banco; valores existentes não são apagados automaticamente.
 
+## Argumentos e solicitação condicional
+
+Um módulo pode fornecer `search_arguments(query)` ou o fallback legado `searchArguments(query)`. A presença dessa função faz a IRIS oferecer busca e sugestões de argumentos.
+
+Por padrão, todo módulo que oferece busca solicita um argumento antes de executar. Quando uma configuração pode substituir o argumento, o runtime pode decidir de forma explícita:
+
+```python
+def should_request_argument(
+    variables: dict[str, str] | None = None,
+) -> bool:
+    return not bool((variables or {}).get("default_city", "").strip())
+```
+
+O fallback camelCase `shouldRequestArgument` também é reconhecido. Sem uma função de busca, o resultado dessa decisão é ignorado. O callback deve ser rápido, não realizar rede e depender somente das configurações recebidas.
+
 ## README
 
 O README deve usar Markdown em UTF-8, sem HTML incorporado. O caminho é relativo à pasta do módulo e não pode escapar dela. Explique finalidade, argumentos, variáveis, dependências, permissões e limitações. Links não são abertos automaticamente pela tela do módulo.

@@ -18,6 +18,17 @@ class HomeService:
         finally:
             db.close()
 
+    def module_requires_argument(self, module_id: int) -> bool:
+        # Decide se a execucao atual precisa abrir o campo de argumento.
+        processor, db = self._build_processor()
+        try:
+            return processor.module_requires_argument_by_id(module_id)
+        except Exception as error:
+            print(error)
+            return processor.module_has_argument_search_by_id(module_id)
+        finally:
+            db.close()
+
     def search_module_arguments(self, module_id: int, query: str = "") -> list[dict[str, str]]:
         # Busca os argumentos disponiveis para um modulo.
         processor, db = self._build_processor()

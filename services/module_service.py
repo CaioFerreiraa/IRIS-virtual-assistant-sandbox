@@ -14,6 +14,9 @@ from services.module_registry_state import get_module_registry_state
 from core.module_runner import ModuleRunner
 
 
+DEFAULT_MODULES_ROOT = Path(__file__).resolve().parent.parent / "modules" / "default_modules"
+
+
 def get_module_detail(
     module_id: int,
     session_factory=SessionLocal,
@@ -91,6 +94,7 @@ def get_module_detail(
             "status": status,
             "supports_auto_start": bool(module.supports_auto_start),
             "auto_start_enabled": bool(module.auto_start_enabled),
+            "is_root_module": module.parent_module_id is None,
             "can_auto_start": bool(
                 module.is_available
                 and module.runtime_type == "python"
@@ -289,11 +293,15 @@ def _read_module_readme(
     manifest_directory: str | None,
     readme_path: str | None,
 ) -> tuple[str, str]:
-    if not manifest_directory or not readme_path:
+    if not readme_path:
         return "", ""
 
-    module_folder = Path(manifest_directory).resolve()
     resolved_readme = Path(readme_path).resolve()
+    module_folder = (
+        Path(manifest_directory).resolve()
+        if manifest_directory
+        else DEFAULT_MODULES_ROOT.resolve()
+    )
     try:
         resolved_readme.relative_to(module_folder)
     except ValueError:

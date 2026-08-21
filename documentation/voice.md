@@ -35,7 +35,7 @@ Fluxo:
 4. o áudio completo é enviado ao modelo Faster-Whisper já carregado;
 5. o texto final é interpretado como ativação ou comando.
 
-Esse modo usa menos componentes e não produz texto parcial.
+Esse modo usa menos componentes e não produz texto parcial. Assim que o limiar de volume inicia a captura, o input apresenta “Ouvindo...” como retorno visual. A palavra de ativação ainda só pode ser confirmada depois do silêncio e da transcrição final.
 
 ### Tempo real
 
@@ -64,6 +64,8 @@ Antes da ativação, transcrições comuns são ignoradas. Depois da ativação:
 - o texto parcial substitui o texto provisório anterior;
 - as recomendações são recalculadas;
 - a dica “Enviar para concluir” fica visível.
+
+No modo básico, o retorno “Ouvindo...” indica apenas que uma frase está sendo capturada. Ele não significa que a palavra “IRIS” já foi reconhecida. Não é necessário clicar no input: enquanto a voz está habilitada e a rota permite comandos, a captura permanece pronta para detectar fala.
 
 ## Conclusão por voz
 

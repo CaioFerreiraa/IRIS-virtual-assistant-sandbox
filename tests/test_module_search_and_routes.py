@@ -128,6 +128,28 @@ class ModuleSearchAndRouteTests(unittest.TestCase):
         self.assertEqual(1, len(detail["technical_errors"]))
         self.assertTrue(detail["technical_errors"][0]["is_submodule"])
 
+    def test_legacy_module_readme_is_loaded_from_default_modules(self) -> None:
+        readme_path = (
+            Path(__file__).resolve().parents[1]
+            / "modules"
+            / "default_modules"
+            / "open"
+            / "README.md"
+        )
+        db = self.session_factory()
+        try:
+            module = db.query(Module).filter(Module.id == self.module_id).one()
+            module.readme_path = str(readme_path)
+            db.commit()
+        finally:
+            db.close()
+
+        detail = get_module_detail(self.module_id, self.session_factory)
+
+        self.assertIn("# Abrir", detail["readme_content"])
+        self.assertEqual("", detail["readme_error"])
+        self.assertEqual("", detail["manifest_error"])
+
     def test_route_with_missing_or_invalid_id_is_friendly(self) -> None:
         missing_control = build_route_content(
             "/modules/99999",

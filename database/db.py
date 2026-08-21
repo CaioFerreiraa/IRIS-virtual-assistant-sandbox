@@ -6,6 +6,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = "sqlite:///iris.db"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_MODULES_ROOT = PROJECT_ROOT / "modules" / "default_modules"
 
 engine = create_engine(DATABASE_URL, echo=True)
 
@@ -43,6 +45,7 @@ DEFAULT_MODULE_TREE = (
         "call_name": "assistente",
         "icon": "auto_awesome",
         "description": "Módulo principal da IRIS.",
+        "readme_path": DEFAULT_MODULES_ROOT / "assistant" / "README.md",
     },
     {
         "module_public_key": "iris.calendar",
@@ -50,6 +53,7 @@ DEFAULT_MODULE_TREE = (
         "call_name": "agenda",
         "icon": "calendar_month",
         "description": "Módulo responsável por compromissos e eventos.",
+        "readme_path": DEFAULT_MODULES_ROOT / "calendar" / "README.md",
     },
     {
         "module_public_key": "iris.files",
@@ -57,6 +61,7 @@ DEFAULT_MODULE_TREE = (
         "call_name": "arquivos",
         "icon": "folder",
         "description": "Módulo responsável por localizar e organizar arquivos.",
+        "readme_path": DEFAULT_MODULES_ROOT / "files" / "README.md",
     },
     {
         "module_public_key": "iris.browser",
@@ -64,6 +69,7 @@ DEFAULT_MODULE_TREE = (
         "call_name": "navegador",
         "icon": "language",
         "description": "Módulo responsável por navegação e pesquisa.",
+        "readme_path": DEFAULT_MODULES_ROOT / "browser" / "README.md",
     },
     {
         "module_public_key": "iris.system",
@@ -71,6 +77,7 @@ DEFAULT_MODULE_TREE = (
         "call_name": "sistema",
         "icon": "computer",
         "description": "Módulo responsável por comandos do sistema.",
+        "readme_path": DEFAULT_MODULES_ROOT / "system" / "README.md",
     },
     {
         "module_public_key": "iris.images",
@@ -78,6 +85,7 @@ DEFAULT_MODULE_TREE = (
         "call_name": "imagens",
         "icon": "image",
         "description": "Módulo responsável por recursos de imagem.",
+        "readme_path": DEFAULT_MODULES_ROOT / "images" / "README.md",
         "children": (
             {
                 "module_public_key": "iris.images.numbers",
@@ -85,6 +93,7 @@ DEFAULT_MODULE_TREE = (
                 "call_name": "numeros",
                 "icon": "pin",
                 "description": "Submódulo de imagens com números.",
+                "readme_path": DEFAULT_MODULES_ROOT / "images" / "numbers" / "README.md",
                 "children": (
                     {
                         "module_public_key": "iris.images.numbers.five",
@@ -92,6 +101,7 @@ DEFAULT_MODULE_TREE = (
                         "call_name": "5",
                         "icon": "looks_5",
                         "description": "Submódulo de imagem do número 5.",
+                        "readme_path": DEFAULT_MODULES_ROOT / "images" / "numbers" / "five" / "README.md",
                     },
                 ),
             },
@@ -103,6 +113,7 @@ DEFAULT_MODULE_TREE = (
         "call_name": "abrir",
         "icon": "open_in_new",
         "description": "Módulo responsável por abrir recursos locais ou páginas.",
+        "readme_path": DEFAULT_MODULES_ROOT / "open" / "README.md",
         "children": (
             {
                 "module_public_key": "open.app",
@@ -110,6 +121,7 @@ DEFAULT_MODULE_TREE = (
                 "call_name": "app",
                 "icon": "apps",
                 "description": "Abre itens da area de trabalho.",
+                "readme_path": DEFAULT_MODULES_ROOT / "open" / "app" / "README.md",
                 "request_method": "PYTHON",
                 "request_url": "modules.default_modules.open.app.main",
                 "is_executable": True,
@@ -120,6 +132,7 @@ DEFAULT_MODULE_TREE = (
                 "call_name": "web",
                 "icon": "public",
                 "description": "Submódulo responsável por abrir páginas web.",
+                "readme_path": DEFAULT_MODULES_ROOT / "open" / "web" / "README.md",
                 "children": (
                     {
                         "module_public_key": "open.web.green",
@@ -127,6 +140,7 @@ DEFAULT_MODULE_TREE = (
                         "call_name": "verde",
                         "icon": "palette",
                         "description": "Abre uma página HTML com fundo verde.",
+                        "readme_path": DEFAULT_MODULES_ROOT / "open" / "web" / "green" / "README.md",
                         "request_method": "GET",
                         "request_url": "http://127.0.0.1:4101/web/verde",
                         "is_executable": True,
@@ -137,6 +151,7 @@ DEFAULT_MODULE_TREE = (
                         "call_name": "vermelho",
                         "icon": "palette",
                         "description": "Abre uma página HTML com fundo vermelho.",
+                        "readme_path": DEFAULT_MODULES_ROOT / "open" / "web" / "red" / "README.md",
                         "request_method": "GET",
                         "request_url": "http://127.0.0.1:4101/web/vermelho",
                         "is_executable": True,
@@ -351,6 +366,7 @@ def _seed_default_modules() -> None:
                         call_name=module_data["call_name"],
                         icon=module_data.get("icon", "extension"),
                         description=module_data.get("description", ""),
+                        readme_path=str(module_data["readme_path"]),
                         parent_module_id=parent_id,
                         request_method=module_data.get("request_method"),
                         request_url=module_data.get("request_url"),
@@ -363,6 +379,7 @@ def _seed_default_modules() -> None:
                     module.call_name = module_data["call_name"]
                     module.icon = module_data.get("icon", "extension")
                     module.description = module_data.get("description", module.description)
+                    module.readme_path = str(module_data["readme_path"])
                     module.request_method = module_data.get("request_method", module.request_method)
                     module.request_url = module_data.get("request_url", module.request_url)
                     module.is_executable = module_data.get("is_executable", module.is_executable)

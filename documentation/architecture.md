@@ -23,13 +23,14 @@ O fluxo atual de inicialização é:
 1. `main.py` chama `init_db()`;
 2. o SQLite é criado ou atualizado;
 3. os módulos padrão legados são inseridos ou atualizados;
-4. `ModuleRegistryService` descobre e sincroniza cada pasta de `modules/installed` isoladamente;
-5. o Flet inicia a aplicação;
-6. `ui/flet_app.py` monta janela, tema, header, sidebar e área de conteúdo;
-7. a rota inicial carrega a tela principal;
-8. módulos disponíveis no banco são transformados em opções de pesquisa, enquanto módulos indisponíveis permanecem visíveis para diagnóstico na sidebar;
-9. configurações de voz são carregadas;
-10. gerenciadores de voz e runtimes habilitados iniciam seus backends em threads isoladas.
+4. os caminhos dos READMEs dos módulos padrão são associados aos registros legados;
+5. `ModuleRegistryService` descobre e sincroniza cada pasta de `modules/installed` isoladamente;
+6. o Flet inicia a aplicação;
+7. `ui/flet_app.py` monta janela, tema, header, sidebar e área de conteúdo;
+8. a rota inicial carrega a tela principal;
+9. módulos disponíveis no banco são transformados em opções de pesquisa, enquanto módulos indisponíveis permanecem visíveis para diagnóstico na sidebar;
+10. configurações de voz são carregadas;
+11. gerenciadores de voz e runtimes habilitados iniciam seus backends em threads isoladas.
 
 ## Camadas e responsabilidades
 

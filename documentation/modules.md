@@ -15,6 +15,22 @@ A IRIS possui dois grupos de módulos:
 
 Novos desenvolvimentos devem usar o manifesto. O guia completo e o exemplo mínimo estão em [`modules/README.md`](../modules/README.md).
 
+Os módulos padrão legados também possuem README. O seed registra o caminho desses arquivos sem tratá-los como módulos instalados por manifesto, preservando a compatibilidade do fluxo antigo e permitindo que a rota apresente a documentação.
+
+## Catálogo de demonstração atual
+
+O repositório inclui módulos instalados voltados a demonstração e testes manuais:
+
+- `test.showcase`: catálogo raiz executável, configurações e auto start;
+- `test.showcase.contracts`: grupo organizacional com filhos dedicados a `execute`, `run` e `main`;
+- `test.showcase.arguments`: busca atual por `search_arguments(query)`;
+- `test.showcase.arguments_compatibility`: fallbacks `searchArguments()` e argumento posicional;
+- `test.showcase.responses`: respostas por `message`, `result`, `opened` e retorno simples;
+- `test.showcase.failures`: falha controlada e exceção;
+- `weather.forecast`: caminho feliz com geocodificação e previsão do Open-Meteo.
+
+Cada pasta possui um README próprio que enumera os comportamentos exercitados, forma de teste, dependências e limitações. Os casos de manifesto inválido permanecem na suíte automatizada para não manter o catálogo intencionalmente indisponível.
+
 ## Estrutura de um módulo instalado
 
 ```text
@@ -170,6 +186,15 @@ def execute(
 A execução da Home ocorre em background e devolve o resultado à thread visual do Flet. Toda execução normal gera log no SQLite.
 
 O comportamento legado `GET` ainda abre uma URL no navegador. Ele permanece separado do manifesto versão 1 e ainda não representa uma requisição HTTP completa.
+
+### Previsão do tempo com Open-Meteo
+
+O módulo atual `weather.forecast` realiza comunicação HTTP dentro do próprio runtime, fora da thread visual. Ele usa:
+
+1. o argumento informado na requisição; ou
+2. a variável opcional `default_location`, salva na rota do módulo.
+
+`should_request_argument(variables)` abre o campo de argumento somente quando `default_location` está vazio. Se uma chamada direta chegar sem as duas formas, o módulo orienta o usuário a informar o local. `search_arguments` consulta a geocodificação do Open-Meteo e a execução consulta a previsão por coordenadas. A configuração `forecast_days` aceita de 1 a 7 dias. A integração não usa credenciais, mas depende de internet e da disponibilidade do serviço externo.
 
 ## Auto start
 

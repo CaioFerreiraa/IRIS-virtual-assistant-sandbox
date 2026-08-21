@@ -11,7 +11,7 @@ from ui.shared.components.table import TableColumn, build_responsive_table
 from ui.theme.colors import (
     CANCEL,
     CONFIRM,
-    PRIMARY_SOFT,
+    PASTEL_BLUE,
     TEXT_PRIMARY,
     WARNING,
     BORDER,
@@ -82,8 +82,6 @@ class HistoryViewState:
     def _build_search_bar(self) -> ft.Container:
         return ft.Container(
             bgcolor=SURFACE,
-            border=ft.Border.all(1, BORDER),
-            border_radius=8,
             padding=ft.Padding(left=10, top=8, right=10, bottom=8),
             content=ft.Row(
                 spacing=8,
@@ -210,7 +208,7 @@ def _build_status_chip(status: str) -> ft.Container:
         "failed": CANCEL,
         "failure": CANCEL,
         "warning": WARNING,
-    }.get(normalized_status, PRIMARY_SOFT)
+    }.get(normalized_status, PASTEL_BLUE)
 
     return ft.Container(
         height=28,

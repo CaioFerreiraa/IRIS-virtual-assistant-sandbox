@@ -5,7 +5,7 @@ import textwrap
 
 import flet as ft
 
-from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE
+from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE
 from ui.shared.components.tooltip_container import build_tooltip_container
 
 
@@ -96,5 +96,36 @@ def build_primary_button(
         on_click=on_click,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=5),
+        ),
+    )
+
+
+def build_floating_save_bar(
+    label: str,
+    on_click: ControlCallback | None,
+    *,
+    disabled: bool = False,
+    visible: bool = True,
+) -> ft.Container:
+    return ft.Container(
+        expand=True,
+        alignment=ft.Alignment.BOTTOM_CENTER,
+        padding=ft.Padding(left=0, top=0, right=0, bottom=8),
+        visible=visible,
+        content=ft.Container(
+            padding=8,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
+            border_radius=8,
+            shadow=ft.BoxShadow(
+                blur_radius=14,
+                color=ft.Colors.with_opacity(0.14, ft.Colors.BLACK),
+                offset=ft.Offset(0, 4),
+            ),
+            content=build_primary_button(
+                label,
+                on_click,
+                disabled=disabled,
+            ),
         ),
     )

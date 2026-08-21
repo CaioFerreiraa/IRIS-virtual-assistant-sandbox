@@ -11,6 +11,11 @@ ARGUMENT_SEARCH_FUNCTION_NAMES = (
     "search_arguments",
     "searchArguments",
 )
+ARGUMENT_REQUEST_FUNCTION_NAMES = (
+    "should_request_argument",
+    "shouldRequestArgument",
+)
+
 
 class ModuleRunner:
     def __init__(self):
@@ -48,6 +53,25 @@ class ModuleRunner:
             return []
 
         return self._normalize_argument_results(self._call_with_optional_query(search_arguments, query))
+
+    def should_request_argument(
+        self,
+        entrypoint: str | None,
+        variables: dict[str, str] | None = None,
+        module_public_key: str = "module",
+    ) -> bool:
+        if not entrypoint:
+            return False
+
+        module = self._load_entrypoint(entrypoint, module_public_key)
+        if self._get_argument_search(module) is None:
+            return False
+
+        for function_name in ARGUMENT_REQUEST_FUNCTION_NAMES:
+            function = getattr(module, function_name, None)
+            if callable(function):
+                return bool(self._call_with_optional_variables(function, variables or {}))
+        return True
 
     def run_entrypoint(
         self,
@@ -116,6 +140,30 @@ class ModuleRunner:
         if accepts_positional_argument:
             return function(query)
 
+        return function()
+
+    def _call_with_optional_variables(
+        self,
+        function: Callable,
+        variables: dict[str, str],
+    ):
+        signature = inspect.signature(function)
+        parameters = signature.parameters
+        if "variables" in parameters or any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        ):
+            return function(variables=variables)
+        if any(
+            parameter.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.VAR_POSITIONAL,
+            )
+            for parameter in parameters.values()
+        ):
+            return function(variables)
         return function()
 
     def _normalize_argument_results(self, results) -> list[dict[str, str]]:

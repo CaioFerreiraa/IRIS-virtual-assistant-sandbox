@@ -62,6 +62,20 @@ class CommandProcessor:
         module = self.module_repository.get_by_id(module_id)
         return self._module_has_argument_search(module)
 
+    def module_requires_argument_by_id(self, module_id: int) -> bool:
+        module = self.module_repository.get_by_id(module_id)
+        if module is None or not self._module_has_argument_search(module):
+            return False
+        variables = get_effective_module_variables(
+            self.module_repository.db,
+            module.id,
+        )
+        return self.module_runner.should_request_argument(
+            module.request_url,
+            variables,
+            module.module_public_key,
+        )
+
     def _module_has_argument_search(self, module) -> bool:
         if module is None:
             return False

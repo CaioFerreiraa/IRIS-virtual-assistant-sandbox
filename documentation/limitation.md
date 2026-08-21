@@ -91,6 +91,8 @@ Internet poderá ser necessária para:
 
 Módulos locais podem funcionar sem conexão, dependendo de sua finalidade.
 
+O módulo atual `Previsão do tempo` requer internet para consultar geocodificação e previsão nos endpoints públicos do Open-Meteo. Indisponibilidade, timeout, limites ou mudanças no serviço externo podem impedir a execução mesmo quando a IRIS está funcionando normalmente. A previsão é uma estimativa meteorológica e não deve ser tratada como medição local garantida.
+
 ## Integrações
 
 A IRIS não consegue controlar automaticamente qualquer aplicativo ou site.
