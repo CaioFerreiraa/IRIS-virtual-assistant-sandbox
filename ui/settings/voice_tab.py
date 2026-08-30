@@ -12,6 +12,7 @@ from services.voice_settings import VoiceSettings
 from services.voice_settings_service import VoiceSettingsService
 from ui.shared.components.audio_visualizer import AudioVisualizer
 from ui.shared.components.form_controls import (
+    FloatingSaveBar,
     build_dropdown,
     build_floating_save_bar,
     build_primary_button,
@@ -107,7 +108,7 @@ class VoiceSettingsTab:
         self.status_card: ft.Container | None = None
         self.fields: dict[str, ft.Control] = {}
         self.field_wrappers: dict[str, ft.Container] = {}
-        self.save_bar: ft.Container | None = None
+        self.save_bar: FloatingSaveBar | None = None
         self._saved_form_values: dict[str, object] = {}
         self.root: VoiceSettingsContent | None = None
         self.audio_device_service = AudioDeviceService()
@@ -783,11 +784,9 @@ class VoiceSettingsTab:
         if self.save_bar is None:
             return
         has_changes = self._current_form_values() != self._saved_form_values
-        if self.save_bar.visible == has_changes:
+        if self.save_bar.is_visible == has_changes:
             return
-        self.save_bar.visible = has_changes
-        if self._is_mounted(self.save_bar):
-            self.save_bar.update()
+        self.save_bar.update_visibility(has_changes)
 
     def _float_value(self, field_name: str) -> float:
         raw_value = str(self._field_value(field_name) or "").strip().replace(",", ".")

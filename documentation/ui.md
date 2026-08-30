@@ -163,7 +163,22 @@ A rota `/modules/{module_id}` monta a tela consultando o banco e o estado prepar
 - **Erro**: aparece somente para falhas técnicas de descoberta, validação, importação, configuração ou inicialização do módulo ou de um submódulo. Quando existe, fica em primeiro lugar e é selecionada inicialmente.
 
 O switch “Iniciar com a IRIS” aparece somente para módulos raiz. Ele só fica habilitado para runtime Python raiz que declara `supports_auto_start`; nos demais casos, a própria tela explica por que a opção está desabilitada. Erros normais ocorridos durante uma requisição permanecem apenas no histórico e não criam a aba de erro.
-O botão “Salvar configurações” aparece somente quando existem alterações pendentes e permanece flutuante no centro inferior da aba para evitar que o usuário precise rolar até o fim do formulário.
+Ao executar pela tela, um card entra com animação acima das abas e mostra o
+status e o corpo estruturado completo do retorno. O corpo pode ser recolhido ou
+exibido novamente por um botão de seta no cabeçalho do card. O status do
+cabeçalho mantém a mesma altura do botão “Executar”.
+
+O card “Dados do módulo” fica sempre no fim da aba “Configurações”. Ele lista em
+modo desabilitado todas as colunas mapeadas pela entidade `Module`; novas colunas
+do modelo passam a aparecer automaticamente. O tooltip do input continua
+mostrando seu valor, enquanto o ícone de informação explica o significado do
+campo.
+
+O botão “Salvar configurações” aparece somente quando existem alterações
+pendentes e permanece flutuante no centro inferior da aba para evitar que o
+usuário precise rolar até o fim do formulário. A tela compara os snapshots
+`module_state_saved` e `module_state_edited`; o segundo começa nulo e é preenchido
+quando qualquer campo editável, inclusive o argumento transitório, muda.
 
 IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos inválidos sem ID aparecem no diagnóstico da sidebar com pasta, mensagem curta e caminho do `module.log`, sem traceback.
 
@@ -217,6 +232,17 @@ Apresenta:
 
 O toaster deve usar mensagens curtas e úteis.
 
+### Card de resultado
+
+`build_result_card`, definido em `ui/shared/components/result_card.py`, monta um
+card com status, corpo estruturado, cabeçalho fixo e botão de seta para alternar
+a exibição do conteúdo.
+
+O componente é responsável pela formatação do retorno, pelo estado interno de
+recolhimento, pela altura expandida ou recolhida e pelas dimensões do corpo.
+`height`, `width`, `body_height` e `body_width` são opcionais. Por padrão, o card
+e o corpo usam toda a largura disponibilizada pelo componente pai.
+
 ### Diálogo
 
 Utilizado quando uma ação exige:
@@ -235,6 +261,9 @@ Oferece estrutura reutilizável para listas com colunas.
 Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários.
 Campos de entrada devem preencher toda a largura disponível na célula da grid, independentemente do tamanho do texto exibido.
 Quando um campo possuir texto de ajuda, o mesmo conteúdo deve ficar disponível como tooltip.
+`build_floating_save_bar` mantém a barra de salvamento montada e anima sua
+entrada e saída com opacidade e deslocamento. O fundo do painel é branco com
+leve transparência para preservar a leitura do conteúdo abaixo.
 
 ### Tooltip
 

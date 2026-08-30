@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 import re
 
 from sqlalchemy.orm import Session
 
 from database.db import SessionLocal
-from database.models import ModuleVariableValue
+from database.models import Module, ModuleVariableValue
 from repositories.module_repository import ModuleRepository
 from services.module_registry_state import get_module_registry_state
 from core.module_runner import ModuleRunner
@@ -453,29 +454,60 @@ def _deduplicate_errors(
     return unique
 
 
-def _build_model_data(module) -> list[tuple[str, str]]:
-    return [
-        ("ID", str(module.id)),
-        ("Chave pública", module.module_public_key),
-        ("Nome", module.name),
-        ("Ícone", module.icon or "extension"),
-        ("Nome de chamada original", module.call_name),
-        ("Nome de chamada personalizado", module.custom_call_name or "-"),
-        ("Descrição", module.description or "-"),
-        ("Método de execução", module.request_method or "-"),
-        ("Destino", module.request_url or "-"),
-        ("Executável", _format_boolean(module.is_executable)),
-        ("Disponível", _format_boolean(module.is_available)),
-        ("Erro de validação", module.validation_error or "-"),
-        ("Diretório do manifesto", module.manifest_directory or "-"),
-        ("Caminho do README", module.readme_path or "-"),
-        ("Runtime", module.runtime_type or "-"),
-        ("Suporta iniciar com a IRIS", _format_boolean(module.supports_auto_start)),
-        ("Iniciar com a IRIS", _format_boolean(module.auto_start_enabled)),
-        ("ID do módulo pai", str(module.parent_module_id or "-")),
-        ("Criado em", _format_datetime(module.created_date)),
-        ("Editado em", _format_datetime(module.edited_date)),
-    ]
+MODEL_FIELD_PRESENTATION = {
+    "id": ("ID", "Identificador numérico interno do módulo no banco de dados."),
+    "module_public_key": ("Chave pública", "Chave pública única e estável usada para identificar o módulo."),
+    "name": ("Nome", "Nome do módulo apresentado na interface."),
+    "call_name": ("Nome de chamada original", "Nome definido pelo desenvolvedor para localizar e chamar o módulo."),
+    "custom_call_name": ("Nome de chamada personalizado", "Nome de chamada alternativo escolhido pelo usuário."),
+    "description": ("Descrição", "Resumo da capacidade oferecida pelo módulo."),
+    "icon": ("Ícone", "Nome do ícone Material Symbols usado para representar o módulo."),
+    "request_method": ("Método de execução", "Tipo de execução configurado para o módulo, como PYTHON ou GET legado."),
+    "request_url": ("Destino", "Caminho do entry point ou endereço usado durante a execução."),
+    "is_executable": ("Executável", "Indica se o módulo pode disparar uma ação."),
+    "is_available": ("Disponível", "Indica se o módulo passou pela validação e está disponível para uso."),
+    "validation_error": ("Erro de validação", "Motivo técnico que tornou o módulo inválido ou indisponível."),
+    "manifest_directory": ("Diretório do manifesto", "Pasta do módulo que contém o arquivo module.json."),
+    "readme_path": ("Caminho do README", "Caminho do arquivo de documentação do módulo."),
+    "runtime_type": ("Runtime", "Ambiente configurado para executar o módulo."),
+    "supports_auto_start": ("Suporta iniciar com a IRIS", "Indica se o runtime declara suporte à inicialização automática."),
+    "auto_start_enabled": ("Iniciar com a IRIS", "Preferência que inicia o módulo junto com a IRIS quando houver suporte."),
+    "parent_module_id": ("ID do módulo pai", "Identificador do módulo pai; vazio quando este é um módulo raiz."),
+    "created_date": ("Criado em", "Data e hora em que o registro do módulo foi criado."),
+    "edited_date": ("Editado em", "Data e hora da última alteração persistida no registro do módulo."),
+}
+
+
+def _build_model_data(module: Module) -> list[dict[str, str]]:
+    fields: list[dict[str, str]] = []
+    for column in Module.__table__.columns:
+        field_name = column.key
+        label, help_text = MODEL_FIELD_PRESENTATION.get(
+            field_name,
+            (
+                field_name.replace("_", " ").capitalize(),
+                f"Valor persistido na coluna '{field_name}' do módulo.",
+            ),
+        )
+        fields.append(
+            {
+                "name": field_name,
+                "label": label,
+                "value": _format_model_value(getattr(module, field_name)),
+                "help": help_text,
+            }
+        )
+    return fields
+
+
+def _format_model_value(value: object) -> str:
+    if value is None or value == "":
+        return "-"
+    if isinstance(value, bool):
+        return _format_boolean(value)
+    if isinstance(value, datetime):
+        return _format_datetime(value)
+    return str(value)
 
 
 def _format_boolean(value: object) -> str:

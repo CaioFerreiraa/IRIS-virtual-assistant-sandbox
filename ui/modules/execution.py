@@ -3,6 +3,7 @@ from __future__ import annotations
 import flet as ft
 
 from services.module_service import save_auto_start_preference, save_module_settings
+from ui.shared.components.result_card import build_result_card
 
 
 class ModuleExecutionMixin:
@@ -59,6 +60,10 @@ class ModuleExecutionMixin:
                 self._show_error("Informe o argumento antes de executar o módulo.")
                 return
 
+        self._show_execution_result(
+            "executando",
+            {"status": "executando", "message": "Aguardando retorno do módulo."},
+        )
         self._set_execute_loading(True)
         try:
             page = self.execute_button.page
@@ -107,17 +112,45 @@ class ModuleExecutionMixin:
         error: Exception | None,
     ) -> None:
         if error is not None:
+            self._show_execution_result(
+                "erro",
+                {
+                    "success": False,
+                    "error": str(error) or "Não foi possível executar o módulo.",
+                },
+            )
             self._show_error(str(error) or "Não foi possível executar o módulo.")
         elif result is not None and result.get("success", True):
+            self._show_execution_result("sucesso", result)
             self._show_success(
                 self._result_message(result) or "Módulo executado com sucesso."
             )
         else:
+            self._show_execution_result("erro", result or {"success": False})
             self._show_error(
                 self._result_message(result or {}) or "O módulo retornou erro."
             )
         self._set_execute_loading(False)
         self._refresh_logs()
+
+    def _build_execution_result_card(self) -> ft.Container:
+        return ft.Container(
+            opacity=0,
+            offset=ft.Offset(0, -0.25),
+            animate_opacity=180,
+            animate_offset=240,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        )
+
+    def _show_execution_result(
+        self,
+        status: str,
+        result: dict[str, object],
+    ) -> None:
+        self.execution_result_card.content = build_result_card(status, result)
+        self.execution_result_card.opacity = 1
+        self.execution_result_card.offset = ft.Offset(0, 0)
+        self._update_if_mounted(self.execution_result_card)
 
     def _set_execute_loading(self, is_loading: bool) -> None:
         self.is_executing = is_loading

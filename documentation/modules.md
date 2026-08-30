@@ -185,6 +185,12 @@ def execute(
 
 A execução da Home ocorre em background e devolve o resultado à thread visual do Flet. Toda execução normal gera log no SQLite.
 
+Na tela do próprio módulo, o botão “Executar” abre imediatamente um card de
+resultado acima das abas. Durante o processamento, o card informa que a ação
+está em andamento; ao concluir, apresenta o status de sucesso ou erro e o corpo
+estruturado completo devolvido pelo módulo. Exceções são representadas no mesmo
+card com `success: false`, sem expor traceback na interface.
+
 O comportamento legado `GET` ainda abre uma URL no navegador. Ele permanece separado do manifesto versão 1 e ainda não representa uma requisição HTTP completa.
 
 ### Previsão do tempo com Open-Meteo

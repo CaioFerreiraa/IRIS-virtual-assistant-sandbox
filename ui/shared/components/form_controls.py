@@ -10,6 +10,7 @@ from ui.shared.components.tooltip_container import build_tooltip_container
 
 
 ControlCallback = Callable[[ft.ControlEvent], None]
+FLOATING_SAVE_BAR_ANIMATION_DURATION = 180
 
 
 def build_dropdown(
@@ -100,20 +101,23 @@ def build_primary_button(
     )
 
 
-def build_floating_save_bar(
-    label: str,
-    on_click: ControlCallback | None,
-    *,
-    disabled: bool = False,
-    visible: bool = True,
-) -> ft.Container:
-    return ft.Container(
-        align=ft.Alignment.BOTTOM_CENTER,
-        margin=ft.Margin(left=0, top=0, right=0, bottom=8),
-        visible=visible,
-        content=ft.Container(
+class FloatingSaveBar(ft.Container):
+    def __init__(
+        self,
+        label: str,
+        on_click: ControlCallback | None,
+        *,
+        disabled: bool = False,
+        visible: bool = True,
+    ) -> None:
+        self.is_visible = visible
+        self.panel = ft.Container(
+            opacity=1 if visible else 0,
+            offset=ft.Offset(0, 0 if visible else 0.25),
+            animate_opacity=FLOATING_SAVE_BAR_ANIMATION_DURATION,
+            animate_offset=FLOATING_SAVE_BAR_ANIMATION_DURATION,
             padding=8,
-            bgcolor=SURFACE,
+            bgcolor=ft.Colors.with_opacity(0.88, SURFACE),
             border=ft.Border.all(1, BORDER),
             border_radius=8,
             shadow=ft.BoxShadow(
@@ -126,5 +130,46 @@ def build_floating_save_bar(
                 on_click,
                 disabled=disabled,
             ),
-        ),
+        )
+        super().__init__(
+            align=ft.Alignment.BOTTOM_CENTER,
+            margin=ft.Margin(left=0, top=0, right=0, bottom=8),
+            visible=True,
+            ignore_interactions=not visible,
+            content=self.panel,
+        )
+
+    def set_visible(self, visible: bool) -> None:
+        if self.is_visible == visible:
+            return
+        self.is_visible = visible
+        self.ignore_interactions = not visible
+        self.panel.opacity = 1 if visible else 0
+        self.panel.offset = ft.Offset(0, 0 if visible else 0.25)
+
+    def update_visibility(self, visible: bool) -> None:
+        self.set_visible(visible)
+        _update_if_mounted(self)
+
+
+def build_floating_save_bar(
+    label: str,
+    on_click: ControlCallback | None,
+    *,
+    disabled: bool = False,
+    visible: bool = True,
+) -> FloatingSaveBar:
+    return FloatingSaveBar(
+        label,
+        on_click,
+        disabled=disabled,
+        visible=visible,
     )
+
+
+def _update_if_mounted(control: ft.Control) -> None:
+    try:
+        if control.page is not None:
+            control.update()
+    except RuntimeError:
+        return

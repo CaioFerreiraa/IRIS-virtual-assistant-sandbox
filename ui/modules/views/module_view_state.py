@@ -13,7 +13,11 @@ from ui.modules.views.about_tab import ModuleAboutTabMixin
 from ui.modules.views.error_tab import ModuleErrorTabMixin
 from ui.modules.views.logs_tab import ModuleLogsTabMixin
 from ui.modules.views.settings_tab import ModuleSettingsTabMixin
-from ui.shared.components.form_controls import build_primary_button, build_text_field
+from ui.shared.components.form_controls import (
+    FloatingSaveBar,
+    build_primary_button,
+    build_text_field,
+)
 from ui.shared.components.material_icons import material_icon
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
@@ -66,8 +70,9 @@ class ModuleViewState(
         self.tab_views: dict[str, ft.Control] = {}
         self.variable_fields: dict[str, ft.TextField] = {}
         self.model_value_controls: dict[str, ft.Control] = {}
-        self.settings_save_bar: ft.Container | None = None
-        self._saved_settings_values: dict[str, str] = {}
+        self.settings_save_bar: FloatingSaveBar | None = None
+        self.module_state_saved: dict[str, str] = {}
+        self.module_state_edited: dict[str, str] | None = None
         self.is_executing = False
 
         self.custom_call_name_field = build_text_field(
@@ -98,6 +103,8 @@ class ModuleViewState(
                 and bool(detail["is_executable"])
             ),
         )
+        self.execute_button.height = 40
+        self.execution_result_card = self._build_execution_result_card()
         self.log_container = ft.Container(expand=True)
 
     def build(self) -> ft.Container:
@@ -127,6 +134,7 @@ class ModuleViewState(
                 expand=True,
                 spacing=16,
                 controls=[
+                    self.execution_result_card,
                     ft.Container(
                         border=ft.Border.only(bottom=ft.BorderSide(1, BORDER)),
                         content=ft.Row(

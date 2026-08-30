@@ -30,7 +30,6 @@ class ModuleSettingsTabMixin:
     def _build_settings_tab(self) -> ft.Stack:
         controls: list[ft.Control] = [
             self._build_quick_settings_section(),
-            self._build_model_data_section(),
         ]
 
         editable_variables = [
@@ -59,12 +58,20 @@ class ModuleSettingsTabMixin:
                 )
             )
 
+        # Os dados persistidos permanecem sempre como o último card. A lista é
+        # criada por introspecção do model, portanto novas colunas aparecem aqui
+        # sem exigir alteração na interface.
+        controls.append(self._build_model_data_section())
+
         controls.append(ft.Container(height=74))
 
         self.custom_call_name_field.on_change = self.on_settings_form_change
+        if self.argument_field is not None:
+            self.argument_field.on_change = self.on_settings_form_change
         for field in self.variable_fields.values():
             field.on_change = self.on_settings_form_change
-        self._saved_settings_values = self._current_settings_values()
+        self.module_state_saved = self._current_settings_values()
+        self.module_state_edited = None
         self.settings_save_bar = build_floating_save_bar(
             "Salvar configurações",
             self.on_save_settings,
@@ -87,11 +94,17 @@ class ModuleSettingsTabMixin:
 
     def on_settings_form_change(self, event: ft.ControlEvent | None = None) -> None:
         del event
+        self.module_state_edited = self._current_settings_values()
         self._sync_settings_save_bar_visibility()
 
     def _current_settings_values(self) -> dict[str, str]:
         values = {
             "custom_call_name": self.custom_call_name_field.value or "",
+            "argument": (
+                self.argument_field.value or ""
+                if self.argument_field is not None
+                else ""
+            ),
         }
         values.update(
             {
@@ -102,7 +115,8 @@ class ModuleSettingsTabMixin:
         return values
 
     def _reset_settings_save_state(self) -> None:
-        self._saved_settings_values = self._current_settings_values()
+        self.module_state_saved = self._current_settings_values()
+        self.module_state_edited = None
         self._sync_settings_save_bar_visibility()
 
     def _sync_settings_save_bar_visibility(self) -> None:
@@ -110,12 +124,12 @@ class ModuleSettingsTabMixin:
             return
         has_changes = (
             bool(self.detail["is_available"])
-            and self._current_settings_values() != self._saved_settings_values
+            and self.module_state_edited is not None
+            and self.module_state_saved != self.module_state_edited
         )
-        if self.settings_save_bar.visible == has_changes:
+        if self.settings_save_bar.is_visible == has_changes:
             return
-        self.settings_save_bar.visible = has_changes
-        self._update_if_mounted(self.settings_save_bar)
+        self.settings_save_bar.update_visibility(has_changes)
 
     def _build_quick_settings_section(self) -> ft.Container:
         controls = [
@@ -150,13 +164,12 @@ class ModuleSettingsTabMixin:
 
     def _build_model_data_section(self) -> ft.Container:
         fields = [
-            self._build_model_field(label, value)
-            for label, value in list(self.detail["model_data"])
-            if label not in {
-                "Nome de chamada original",
-                "Nome de chamada personalizado",
-                "Iniciar com a IRIS",
-            }
+            self._build_model_field(
+                str(field["label"]),
+                str(field["value"]),
+                str(field["help"]),
+            )
+            for field in list(self.detail["model_data"])
         ]
         rows = [
             self._field_grid(*fields[index:index + 2])
@@ -243,11 +256,16 @@ class ModuleSettingsTabMixin:
             ),
         )
 
-    def _build_model_field(self, label: str, value: str) -> ft.Container:
+    def _build_model_field(
+        self,
+        label: str,
+        value: str,
+        help_text: str,
+    ) -> ft.Container:
         field = build_text_field(label, value, disabled=True)
         field.tooltip = value
         self.model_value_controls[label] = field
-        return self._build_field_wrapper(field, value or label)
+        return self._build_field_wrapper(field, help_text)
 
     def _form_section(
         self,

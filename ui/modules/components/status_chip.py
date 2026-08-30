@@ -11,17 +11,20 @@ from ui.theme.colors import (
 )
 
 
-def build_status_chip(status: str) -> ft.Container:
+def build_status_chip(status: str, *, height: int = 40) -> ft.Container:
     color = {
         "disponível": CONFIRM,
         "online": CONFIRM,
+        "sucesso": CONFIRM,
         "iniciando": WARNING,
+        "executando": WARNING,
         "indisponível": PASTEL_BLUE,
         "inválido": CANCEL,
         "com erro": CANCEL,
+        "erro": CANCEL,
     }.get(status, PASTEL_BLUE)
     return ft.Container(
-        height=30,
+        height=height,
         padding=ft.Padding(left=12, top=0, right=12, bottom=0),
         alignment=ft.Alignment.CENTER,
         bgcolor=color,

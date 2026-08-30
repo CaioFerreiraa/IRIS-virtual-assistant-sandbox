@@ -200,6 +200,7 @@ Regras:
 - Use as constantes de `ui/theme/colors.py`.
 - Reutilize toaster(toaster_handler), tabelas(table), diálogos(custom_dialog), header, sidebar e controles existentes.
 - Não duplique estilos entre telas quando um componente compartilhado for adequado.
+- Ao criar ou extrair componentes compartilhados, concentre no componente o layout, o estado visual interno, as interações, as dimensões e as variações diretamente relacionadas à sua apresentação. A tela chamadora deve fornecer dados, callbacks de negócio e parâmetros públicos mínimos, sem duplicar a lógica visual interna do componente.
 - Operações lentas devem rodar fora da thread visual.
 - Atualizações disparadas por threads de áudio ou rede devem ser encaminhadas com segurança para a página Flet.
 - Textos visíveis devem permanecer em português do Brasil.
