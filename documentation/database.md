@@ -119,6 +119,21 @@ Campos:
 
 Valores não editáveis não precisam de registro e usam o padrão do manifesto. Estas tabelas não podem armazenar credenciais ou outros segredos.
 
+### ModuleHttpRequest
+
+Representa a requisição HTTP principal opcional de um módulo. A relação com `Module` é 1:1 opcional e a existência de `module.http_request` indica esse tipo de execução.
+
+Campos:
+
+- `module_id`, obrigatório e único;
+- `method` e `url`, inicialmente definidos pelo manifesto e personalizáveis pelo usuário;
+- `argument_enabled` e `argument`, uma string opcional com o último valor usado;
+- `params_json`, `authorization_json`, `headers_json`, `body_json` e `scripts_json`, serializados explicitamente em colunas `Text`;
+- `is_customized`, que distingue a definição sincronizada do manifesto da versão editada pelo usuário;
+- `created_at` e `updated_at`.
+
+Os JSONs são validados nos serviços e não dependem do tipo JSON específico do SQLite. A tabela não pode armazenar token, senha, API key ou credencial.
+
 ### Routine
 
 Representa uma rotina.
@@ -188,6 +203,7 @@ Module
  ├── logs
  └── routine_actions
  └── variable_definitions
+ └── http_request opcional
 
 ModuleVariableDefinition
  └── value opcional
@@ -252,7 +268,7 @@ Uma migration deve considerar:
 - downgrade possível;
 - compatibilidade com SQLite.
 
-A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos.
+A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes.
 
 ## Transações
 
@@ -289,6 +305,7 @@ Logs não devem armazenar:
 - chaves de API;
 - conteúdo sensível desnecessário;
 - cabeçalhos de autenticação.
+- corpo, cabeçalhos ou query string completos de requisições HTTP.
 
 ## Configurações
 

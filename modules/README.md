@@ -13,7 +13,7 @@ modules/
         └── main.py
 ```
 
-`module.json` declara o módulo. `README.md` explica seu uso em Markdown puro. `main.py` é necessário quando o módulo declara runtime Python. A interface de configuração é construída pela IRIS com controles Flet; o módulo não fornece HTML, inputs, switches ou botões.
+`module.json` declara o módulo. `README.md` explica seu uso em Markdown puro. `main.py` é necessário quando o módulo declara runtime Python. A interface de configuração é construída pela IRIS com controles Flet. Um módulo pode servir uma página externa como parte de sua própria ação, mas não fornece nem injeta controles na tela Flet da IRIS.
 
 ## Exemplo completo de `module.json`
 
@@ -58,7 +58,7 @@ modules/
 }
 ```
 
-Todos os quatro campos da raiz são obrigatórios. `runtime` pode ser `null` para módulos apenas organizacionais. `module.is_executable` é opcional: quando ausente, vale `true` se existir runtime e `false` caso contrário.
+Os quatro campos originais da raiz são obrigatórios. O campo `http_request` é opcional. `runtime` pode ser `null` para módulos organizacionais ou HTTP. `module.is_executable` é opcional: quando ausente, vale `true` se existir runtime Python ou `http_request`, e `false` caso contrário.
 
 `module.icon` recebe o nome de uma ligature do Material Icons, em letras minúsculas, números e underscores, por exemplo `partly_cloudy_day`. Quando o campo não é informado, a IRIS usa `extension` para manter compatibilidade com manifestos anteriores. A fonte Material Symbols Rounded é distribuída localmente em `assets/fonts` e a interface não depende dos ícones internos do Flet para representar módulos.
 
@@ -138,6 +138,44 @@ Um módulo executável fornece `execute()`, `run()` ou `main()`. Um backend com 
 
 `start()` deve retornar rapidamente. Se criar um `subprocess.Popen`, pode devolver esse handle para que a IRIS encerre somente o processo que ela iniciou. Para recursos no próprio processo, o módulo pode fornecer `stop()`.
 
+O catálogo `notes.javascript` demonstra como um `start()` Python mínimo pode
+iniciar um backend Node.js separado. O runtime do manifesto permanece Python;
+não existe `runtime.type: "node"`. Os filhos HTTP continuam cadastrados pelo
+registry comum, sem migration ou seed específico.
+
+## Requisição HTTP opcional
+
+Uma requisição simples pode ser declarada sem `main.py`:
+
+```json
+"runtime": null,
+"http_request": {
+    "method": "GET",
+    "url": "https://api.example.com/items",
+    "argument_enabled": true,
+    "params": [
+        {
+            "key": "search",
+            "value": "{{argument}}",
+            "description": "Texto pesquisado.",
+            "enabled": true
+        }
+    ],
+    "authorization": {"type": "none"},
+    "headers": [],
+    "body": {"mode": "none", "content": ""},
+    "scripts": {"pre_request": "", "post_response": ""}
+}
+```
+
+Os métodos aceitos são `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` e `OPTIONS`. A URL precisa começar com `http://` ou `https://`. Params e Headers recebem itens com `key`, `value`, `description` e `enabled`. O body aceita `none`, `raw_json`, `raw_text` e `form_urlencoded`.
+
+O placeholder literal `{{argument}}` é substituído na URL, nos parâmetros, nos cabeçalhos e no body. O argumento HTTP é somente uma string; seu último valor é persistido ao salvar a aba ou executar a requisição e recarregado na aba “Execução”. Essa aceitação não depende de `search_arguments()`, que permanece disponível para módulos Python.
+
+O `module.json` fornece a definição inicial distribuível. Na aba “Execução”, o usuário pode personalizar método, URL, argumento habilitado, argumento, parâmetros, Authorization, cabeçalhos, body e scripts. Depois do primeiro salvamento, o registry preserva a definição local; “Voltar ao module.json” reaplica o manifesto atual sem apagar o último argumento. Authorization aceita apenas `{"type":"none"}` e não pode conter credenciais. Scripts no manifesto precisam permanecer vazios; textos de script personalizados podem ser salvos e exibidos localmente, mas nunca são executados.
+
+Não combine runtime Python e `http_request` no mesmo módulo. Use Python para múltiplas requisições, regras complexas ou qualquer lógica personalizada. O `GET` legado persistido em `Module.request_method` continua abrindo uma URL no navegador e não é uma requisição HTTP declarativa.
+
 ## `module.log`
 
 Cada pasta é descoberta isoladamente. A IRIS acrescenta informações a `module.log` quando ocorre falha de:
@@ -165,4 +203,4 @@ Não declare nem armazene senhas, tokens, logins, chaves de API, credenciais, da
 7. teste o fluxo válido, valores obrigatórios, importação quebrada e auto start;
 8. execute a suíte completa com `python -m unittest discover -s tests -p "test_*.py"`.
 
-O exemplo mínimo está em [`examples/minimal`](examples/minimal). Ele não é descoberto nem instalado automaticamente.
+O exemplo Python mínimo está em [`examples/minimal`](examples/minimal) e o exemplo HTTP em [`examples/http_minimal`](examples/http_minimal). Eles não são descobertos nem instalados automaticamente.

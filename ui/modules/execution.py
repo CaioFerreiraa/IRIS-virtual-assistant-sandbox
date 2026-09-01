@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import json
+
 import flet as ft
 
-from services.module_service import save_auto_start_preference, save_module_settings
+from services.module_service import (
+    reset_http_request_definition,
+    save_auto_start_preference,
+    save_http_request_definition,
+    save_module_settings,
+)
 from ui.shared.components.result_card import build_result_card
 
 
@@ -53,10 +60,16 @@ class ModuleExecutionMixin:
         if self.is_executing:
             return
         argument = None
-        if self.argument_field is not None:
+        if self.http_request is not None:
+            if self._current_execution_values() != self.execution_state_saved:
+                if not self._save_execution_definition(show_feedback=False):
+                    return
+            if bool(self.http_argument_enabled_switch.value):
+                argument = self.argument_field.value or ""
+        elif self.argument_field is not None and not self.argument_field.disabled:
             argument = (self.argument_field.value or "").strip()
             if not argument:
-                self.on_select_tab("settings")
+                self.on_select_tab("execution")
                 self._show_error("Informe o argumento antes de executar o módulo.")
                 return
 
@@ -84,6 +97,101 @@ class ModuleExecutionMixin:
             page,
             argument,
         )
+
+    def on_save_execution(self, event: ft.ControlEvent | None) -> None:
+        del event
+        self._save_execution_definition(show_feedback=True)
+
+    def _save_execution_definition(self, *, show_feedback: bool) -> bool:
+        if self.http_request is None or self.argument_field is None:
+            return True
+        try:
+            values = self._build_http_request_values()
+            saved_request = save_http_request_definition(
+                int(self.detail["id"]),
+                values,
+                self.session_factory,
+            )
+        except Exception as error:
+            self._show_error(str(error))
+            return False
+
+        self.http_request = saved_request
+        self.detail["http_request"] = saved_request
+        self._reset_execution_save_state()
+        if show_feedback:
+            self._show_success("Requisição HTTP salva.")
+        return True
+
+    def _build_http_request_values(self) -> dict[str, object]:
+        values = self._current_execution_values()
+        body_mode = str(values["body_mode"])
+        body_content_text = str(values["body_content"])
+        if body_mode == "form_urlencoded":
+            try:
+                body_content: object = json.loads(body_content_text)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    "O conteúdo form_urlencoded deve conter uma lista JSON válida."
+                ) from error
+        else:
+            body_content = body_content_text
+
+        return {
+            "method": values["method"],
+            "url": values["url"],
+            "argument_enabled": values["argument_enabled"],
+            "argument": values["argument"],
+            "params_json": values["params_json"],
+            "authorization_json": values["authorization_json"],
+            "headers_json": values["headers_json"],
+            "body_json": json.dumps(
+                {"mode": body_mode, "content": body_content},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            "scripts_json": json.dumps(
+                {
+                    "pre_request": values["pre_request"],
+                    "post_response": values["post_response"],
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        }
+
+    def on_restore_http_request(self, event: ft.ControlEvent | None) -> None:
+        del event
+        try:
+            restored_request = reset_http_request_definition(
+                int(self.detail["id"]),
+                self.session_factory,
+            )
+        except Exception as error:
+            self._show_error(str(error))
+            return
+
+        self.http_request = restored_request
+        self.detail["http_request"] = restored_request
+        argument_enabled = bool(restored_request["argument_enabled"])
+        self.argument_explanation = (
+            "Informe a string que substituirá {{argument}} na requisição."
+            if argument_enabled
+            else "Este módulo não utiliza argumento de execução."
+        )
+        self.argument_field.value = str(restored_request.get("argument") or "")
+        self.argument_field.disabled = (
+            not bool(self.detail["is_available"])
+            or not argument_enabled
+        )
+        self.argument_field.helper = self.argument_explanation
+        self.argument_field.tooltip = self.argument_explanation
+        restored_tab = self._build_execution_tab()
+        self.tab_views["execution"] = restored_tab
+        if self.active_tab == "execution":
+            self.tab_content.content = restored_tab
+            self._update_if_mounted(self.tab_content)
+        self._show_success("Requisição restaurada a partir do module.json.")
 
     def _execute_background(
         self,

@@ -9,16 +9,16 @@ from repositories.module_repository import ModuleRepository
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.table import TableColumn, build_responsive_table
 from ui.theme.colors import (
+    BLUE_GREY,
+    BORDER,
     CANCEL,
     CONFIRM,
+    PASTEL_DARK_PURPLE,
     PASTEL_BLUE,
     TEXT_PRIMARY,
     WARNING,
-    BORDER,
-    PASTEL_DARK_PURPLE,
-    PASTEL_PURPLE,
     SURFACE,
-    TEXT_SECONDARY, BLUE_GREY,
+    TEXT_SECONDARY,
 )
 
 
@@ -50,8 +50,8 @@ class HistoryViewState:
         self.search_input = ft.TextField(
             prefix_icon=ft.Icons.SEARCH_ROUNDED,
             hint_text="Pesquisar no histórico...",
-            text_style=ft.TextStyle(size=14, color=TEXT_PRIMARY),
-            hint_style=ft.TextStyle(size=14, color=TEXT_SECONDARY),
+            text_style=ft.TextStyle(size=12, color=TEXT_PRIMARY),
+            hint_style=ft.TextStyle(size=12, color=TEXT_SECONDARY),
             border_color=BORDER,
             focused_border_color=BLUE_GREY,
             cursor_color=PASTEL_DARK_PURPLE,

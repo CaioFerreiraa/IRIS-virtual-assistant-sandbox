@@ -17,7 +17,11 @@ from services.module_registry_state import get_module_registry_state
 from services.module_runtime_service import module_runtime_manager
 from services.voice_settings_service import VoiceSettingsService
 from ui.shared.components.header import VOICE_ACTIVE_ROUTES, build_header
-from ui.shared.components.sidebar import DEFAULT_SIDEBAR_WIDTH, build_sidebar
+from ui.shared.components.sidebar import (
+    DEFAULT_SIDEBAR_WIDTH,
+    SidebarViewState,
+    build_sidebar,
+)
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import APP_BACKGROUND
 from ui.theme.fonts import DEFAULT_FONT, FONT_ASSETS
@@ -99,6 +103,7 @@ def get_app_container(
     sidebar_slot = ft.Container()
     route_slot = ft.Container(expand=True)
     sidebar_width = DEFAULT_SIDEBAR_WIDTH
+    sidebar_view_state = SidebarViewState()
     expanded_module_ids: set[int] = set()
     collapsed_module_ids: set[int] = set()
 
@@ -156,6 +161,10 @@ def get_app_container(
         for option in sidebar_module_options:
             module_id = option.get("module_id")
             if type(module_id) is int:
+                option["runtime_status"] = registry_state.runtime_statuses.get(
+                    module_id,
+                    "offline",
+                )
                 option["readme_content"] = registry_state.readme_contents.get(
                     module_id,
                     "",
@@ -167,7 +176,7 @@ def get_app_container(
             on_navigate=fatal_error_handler.guard_callback(navigate),
             speech_manager=speech_manager,
         )
-        sidebar_slot.content = build_sidebar(
+        sidebar = build_sidebar(
             active_module_id=active_module_id(current_route),
             on_select=fatal_error_handler.guard_callback(select_module),
             modules=sidebar_module_options,
@@ -176,7 +185,10 @@ def get_app_container(
             on_width_change=remember_sidebar_width,
             expanded_module_ids=expanded_module_ids,
             collapsed_module_ids=collapsed_module_ids,
+            view_state=sidebar_view_state,
         )
+        if sidebar_slot.content is not sidebar:
+            sidebar_slot.content = sidebar
         route_slot.content = build_route_content(
             current_route,
             module_options=module_options,

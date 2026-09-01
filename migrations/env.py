@@ -7,6 +7,7 @@ from database.db import Base
 from database.models import (
     Log,
     Module,
+    ModuleHttpRequest,
     ModuleVariableDefinition,
     ModuleVariableValue,
     Routine,

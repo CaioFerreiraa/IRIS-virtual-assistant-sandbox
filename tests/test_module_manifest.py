@@ -3,7 +3,11 @@ import unittest
 from pathlib import Path
 
 from services.module_manifest import ManifestValidationError, parse_module_manifest
-from tests.module_test_utils import build_manifest, create_module_folder
+from tests.module_test_utils import (
+    build_http_request,
+    build_manifest,
+    create_module_folder,
+)
 
 
 class ModuleManifestTests(unittest.TestCase):
@@ -37,6 +41,88 @@ class ModuleManifestTests(unittest.TestCase):
         self.assertEqual("weather", parsed.module_public_key)
         self.assertEqual("extension", parsed.icon)
         self.assertEqual("default_city", parsed.variables[0].key)
+
+    def test_schema_version_one_without_http_request_remains_valid(self) -> None:
+        parsed = self.parse(build_manifest())
+
+        self.assertEqual("python", parsed.runtime_type)
+        self.assertIsNone(parsed.http_request)
+        self.assertTrue(parsed.is_executable)
+
+    def test_valid_http_manifest_is_executable_without_python_runtime(self) -> None:
+        manifest = build_manifest(
+            runtime=None,
+            http_request=build_http_request(method="get"),
+        )
+
+        parsed = self.parse(manifest, create_entrypoint=False)
+
+        self.assertTrue(parsed.is_executable)
+        self.assertIsNone(parsed.runtime_type)
+        self.assertEqual("GET", parsed.http_request.method)
+
+    def test_invalid_http_method_is_rejected(self) -> None:
+        manifest = build_manifest(
+            runtime=None,
+            http_request=build_http_request(method="TRACE"),
+        )
+        with self.assertRaisesRegex(ManifestValidationError, "método HTTP"):
+            self.parse(manifest, create_entrypoint=False)
+
+    def test_invalid_http_url_is_rejected(self) -> None:
+        manifest = build_manifest(
+            runtime=None,
+            http_request=build_http_request(url="ftp://example.com"),
+        )
+        with self.assertRaisesRegex(ManifestValidationError, "http://"):
+            self.parse(manifest, create_entrypoint=False)
+
+    def test_python_runtime_and_http_request_are_rejected_together(self) -> None:
+        manifest = build_manifest(http_request=build_http_request())
+        with self.assertRaisesRegex(ManifestValidationError, "simultaneamente"):
+            self.parse(manifest)
+
+    def test_http_module_cannot_be_explicitly_non_executable(self) -> None:
+        manifest = build_manifest(
+            runtime=None,
+            http_request=build_http_request(),
+            is_executable=False,
+        )
+        with self.assertRaisesRegex(ManifestValidationError, "is_executable"):
+            self.parse(manifest, create_entrypoint=False)
+
+    def test_http_params_must_be_a_list(self) -> None:
+        http_request = build_http_request()
+        http_request["params"] = {"search": "{{argument}}"}
+        manifest = build_manifest(
+            runtime=None,
+            http_request=http_request,
+        )
+        with self.assertRaisesRegex(ManifestValidationError, "deve ser uma lista"):
+            self.parse(manifest, create_entrypoint=False)
+
+    def test_sensitive_http_authorization_is_rejected(self) -> None:
+        manifest = build_manifest(
+            runtime=None,
+            http_request=build_http_request(
+                authorization={"type": "bearer", "token": "example"},
+            ),
+        )
+        with self.assertRaisesRegex(ManifestValidationError, "credenciais"):
+            self.parse(manifest, create_entrypoint=False)
+
+    def test_non_empty_http_scripts_are_rejected(self) -> None:
+        manifest = build_manifest(
+            runtime=None,
+            http_request=build_http_request(
+                scripts={
+                    "pre_request": "console.log('no')",
+                    "post_response": "",
+                },
+            ),
+        )
+        with self.assertRaisesRegex(ManifestValidationError, "Scripts HTTP"):
+            self.parse(manifest, create_entrypoint=False)
 
     def test_invalid_material_icon_name(self) -> None:
         manifest = build_manifest()

@@ -1,18 +1,25 @@
 import webbrowser
 
+from sqlalchemy.orm import sessionmaker
+
 from core.logger_service import LoggerService
 from core.module_runner import PYTHON_REQUEST_METHOD, ModuleRunner
 from repositories.log_repository import LogRepository
 from repositories.module_repository import ModuleRepository
-from services.module_service import get_effective_module_variables
+from services.http_service import ModuleHttpRequestService
 from services.module_manifest import MATERIAL_ICON_PATTERN, PUBLIC_KEY_PATTERN
+from services.module_service import get_effective_module_variables
 
 
 class CommandProcessor:
-    def __init__(self, module_repository: ModuleRepository):
+    def __init__(self, module_repository: ModuleRepository, session_factory=None):
         self.module_repository = module_repository
         self.module_runner = ModuleRunner()
         self.logger_service = LoggerService(LogRepository(module_repository.db))
+        self.session_factory = session_factory or sessionmaker(
+            bind=module_repository.db.get_bind()
+        )
+        self.http_request_service = ModuleHttpRequestService(self.session_factory)
 
     def create_module(
         self,
@@ -62,8 +69,18 @@ class CommandProcessor:
         module = self.module_repository.get_by_id(module_id)
         return self._module_has_argument_search(module)
 
+    def module_accepts_argument_by_id(self, module_id: int) -> bool:
+        module = self.module_repository.get_by_id(module_id)
+        if module is None or not module.is_available:
+            return False
+        if module.http_request is not None:
+            return bool(module.http_request.argument_enabled)
+        return self._module_has_argument_search(module)
+
     def module_requires_argument_by_id(self, module_id: int) -> bool:
         module = self.module_repository.get_by_id(module_id)
+        if module is not None and module.is_available and module.http_request is not None:
+            return bool(module.http_request.argument_enabled)
         if module is None or not self._module_has_argument_search(module):
             return False
         variables = get_effective_module_variables(
@@ -145,7 +162,11 @@ class CommandProcessor:
             raise
 
         status = "success" if result.get("success", True) else "error"
-        self._create_execution_log(module.id, status, self._build_log_message(result))
+        self._create_execution_log(
+            module.id,
+            status,
+            self._build_log_message(result, module),
+        )
         return result
 
     def _execute_module(self, module, module_path: str, argument: str | None = None) -> dict:
@@ -158,12 +179,15 @@ class CommandProcessor:
                 f"O módulo '{module_path}' não possui execução configurada."
             )
 
+        if module.http_request is not None:
+            return self.http_request_service.execute(module.id, argument)
+
+        request_method = (module.request_method or "").upper()
+
         if not module.request_url:
             raise ValueError(
                 f"O módulo '{module_path}' não possui destino configurado."
             )
-
-        request_method = (module.request_method or "").upper()
 
         if request_method == PYTHON_REQUEST_METHOD:
             variables = get_effective_module_variables(
@@ -201,7 +225,22 @@ class CommandProcessor:
             message=message,
         )
 
-    def _build_log_message(self, result: dict) -> str:
+    def _build_log_message(self, result: dict, module=None) -> str:
+        if module is not None and module.http_request is not None:
+            method = str(module.http_request.method)
+            status_code = result.get("status_code")
+            duration = result.get("elapsed_ms")
+            status_summary = (
+                f"status {status_code}"
+                if status_code is not None
+                else "falha antes da resposta"
+            )
+            duration_summary = (
+                f" — {duration} ms"
+                if duration is not None
+                else ""
+            )
+            return f"HTTP {method} — {status_summary}{duration_summary}."
         if "message" in result:
             return str(result["message"])
         if "result" in result:

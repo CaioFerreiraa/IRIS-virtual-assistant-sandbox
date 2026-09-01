@@ -6,6 +6,7 @@ from ui.shared.components.sidebar import (
     MAX_SIDEBAR_WIDTH,
     MIN_SIDEBAR_WIDTH,
     MODULE_ITEM_HEIGHT,
+    SidebarViewState,
     STATUS_DOT_SIZE,
     _build_module_icons,
     _build_module_tree,
@@ -23,7 +24,7 @@ from ui.theme.colors import (
     GREY_300,
     GREY_400,
     GREY_500,
-    PASTEL_DARK_GREEN,
+    GREY_900,
     PASTEL_DARK_PURPLE,
     PASTEL_PURPLE,
     SURFACE,
@@ -155,7 +156,8 @@ class SidebarTests(unittest.TestCase):
 
         self.assertEqual(STATUS_DOT_SIZE, dot.width)
         self.assertEqual(STATUS_DOT_SIZE, dot.height)
-        self.assertEqual(PASTEL_DARK_GREEN, dot.bgcolor)
+        self.assertEqual(GREY_900, dot.bgcolor)
+        self.assertEqual("Módulo offline", dot.tooltip)
         self.assertEqual("Verde", label_column.controls[0].value)
 
     def test_organizational_module_does_not_have_status_dot(self) -> None:
@@ -248,6 +250,26 @@ class SidebarTests(unittest.TestCase):
         self.assertEqual(SURFACE, list_shell.bgcolor)
         self.assertTrue(module_list.expand)
         self.assertEqual(0, module_list.padding)
+
+    def test_reuses_sidebar_tree_when_the_active_route_changes(self) -> None:
+        view_state = SidebarViewState()
+        first_sidebar = build_sidebar(
+            None,
+            lambda *_: None,
+            modules=self.modules,
+            view_state=view_state,
+        )
+        first_module_list = _module_list(first_sidebar)
+
+        second_sidebar = build_sidebar(
+            3,
+            lambda *_: None,
+            modules=self.modules,
+            view_state=view_state,
+        )
+
+        self.assertIs(first_sidebar, second_sidebar)
+        self.assertIs(first_module_list, _module_list(second_sidebar))
 
     def test_module_items_keep_fixed_height(self) -> None:
         expanded_ids = {1, 2}

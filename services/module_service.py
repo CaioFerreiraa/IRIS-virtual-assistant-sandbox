@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from database.db import SessionLocal
 from database.models import Module, ModuleVariableValue
 from repositories.module_repository import ModuleRepository
+from services.http_service import ModuleHttpRequestService, build_http_request_detail
 from services.module_registry_state import get_module_registry_state
 from core.module_runner import ModuleRunner
 
@@ -31,7 +32,6 @@ def get_module_detail(
 
         registry_state = get_module_registry_state()
         runtime_status = registry_state.runtime_statuses.get(module.id)
-        status = _module_status(module.is_available, module.validation_error, runtime_status)
         variables = []
         for definition in repository.list_variable_definitions(module.id):
             persisted_value = repository.get_variable_value(definition.id)
@@ -74,11 +74,25 @@ def get_module_detail(
             technical_errors.append(
                 _build_technical_error(module, manifest_error)
             )
+        http_request, http_request_error = _build_http_request_detail(module)
+        if http_request_error:
+            technical_errors.append(
+                _build_technical_error(module, http_request_error)
+            )
         has_arguments, argument_error = _detect_argument_capability(module)
         if argument_error:
             technical_errors.append(
                 _build_technical_error(module, argument_error)
             )
+        effective_validation_error = module.validation_error or http_request_error
+        effective_is_available = bool(
+            module.is_available and not http_request_error
+        )
+        status = _module_status(
+            effective_is_available,
+            effective_validation_error,
+            runtime_status,
+        )
         return {
             "id": module.id,
             "module_public_key": module.module_public_key,
@@ -90,14 +104,14 @@ def get_module_detail(
             "request_method": module.request_method or "",
             "request_url": module.request_url or "",
             "is_executable": bool(module.is_executable),
-            "is_available": bool(module.is_available),
-            "validation_error": module.validation_error or "",
+            "is_available": effective_is_available,
+            "validation_error": effective_validation_error or "",
             "status": status,
             "supports_auto_start": bool(module.supports_auto_start),
             "auto_start_enabled": bool(module.auto_start_enabled),
             "is_root_module": module.parent_module_id is None,
             "can_auto_start": bool(
-                module.is_available
+                effective_is_available
                 and module.runtime_type == "python"
                 and module.supports_auto_start
                 and module.parent_module_id is None
@@ -108,12 +122,23 @@ def get_module_detail(
             "manifest_content": manifest_content,
             "manifest_error": manifest_error,
             "has_arguments": has_arguments,
+            "http_request": http_request,
             "technical_errors": _deduplicate_errors(technical_errors),
             "model_data": _build_model_data(module),
             "variables": variables,
         }
     finally:
         db.close()
+
+
+def _build_http_request_detail(module) -> tuple[dict[str, object] | None, str]:
+    if module.http_request is None:
+        return None, ""
+    try:
+        return build_http_request_detail(module.http_request), ""
+    except Exception as error:
+        message = str(error).strip() or "A configuração HTTP do módulo é inválida."
+        return None, message
 
 
 def save_custom_call_name(
@@ -135,6 +160,48 @@ def save_custom_call_name(
         raise
     finally:
         db.close()
+
+
+def save_http_request_argument(
+    module_id: int,
+    argument: str,
+    session_factory=SessionLocal,
+) -> None:
+    ModuleHttpRequestService(session_factory).save_argument(
+        module_id,
+        argument,
+    )
+
+
+def save_http_request_definition(
+    module_id: int,
+    values: Mapping[str, object],
+    session_factory=SessionLocal,
+) -> dict[str, object]:
+    argument_enabled = values.get("argument_enabled")
+    if type(argument_enabled) is not bool:
+        raise ValueError("O estado do argumento da execução deve ser booleano.")
+    return ModuleHttpRequestService(session_factory).save_definition(
+        module_id,
+        method=str(values.get("method", "")),
+        url=str(values.get("url", "")),
+        argument_enabled=argument_enabled,
+        argument=str(values.get("argument", "")),
+        params_json=str(values.get("params_json", "")),
+        authorization_json=str(values.get("authorization_json", "")),
+        headers_json=str(values.get("headers_json", "")),
+        body_json=str(values.get("body_json", "")),
+        scripts_json=str(values.get("scripts_json", "")),
+    )
+
+
+def reset_http_request_definition(
+    module_id: int,
+    session_factory=SessionLocal,
+) -> dict[str, object]:
+    return ModuleHttpRequestService(session_factory).reset_definition_from_manifest(
+        module_id
+    )
 
 
 def save_module_settings(
@@ -538,7 +605,7 @@ def _module_status(
         return runtime_status
     if not is_available:
         return "inválido" if validation_error else "indisponível"
-    return runtime_status or "disponível"
+    return runtime_status or "offline"
 
 
 def module_has_problem(module) -> bool:

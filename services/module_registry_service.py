@@ -9,8 +9,9 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from database.db import SessionLocal
-from database.models import Module, ModuleVariableDefinition
+from database.models import Module, ModuleHttpRequest, ModuleVariableDefinition
 from services.module_error_log import append_module_error_log
+from services.http_service import apply_manifest_http_request_definition
 from services.module_loader import load_python_entrypoint
 from services.module_manifest import (
     ManifestValidationError,
@@ -68,12 +69,20 @@ class ModuleRegistryService:
         for folder in sorted(self.installed_modules_dir.iterdir(), key=lambda path: path.name.casefold()):
             if not folder.is_dir():
                 continue
+            data: object = None
             try:
                 data = self._load_json(folder)
                 manifest = parse_module_manifest(data, folder)
                 readme_content = manifest.readme_path.read_text(encoding="utf-8")
             except Exception as error:
-                self._record_invalid(folder, "validação do manifesto", error)
+                module_public_key, parent_public_key = _extract_manifest_identity(data)
+                self._record_invalid(
+                    folder,
+                    "validação do manifesto",
+                    error,
+                    module_public_key=module_public_key,
+                    parent_public_key=parent_public_key,
+                )
                 continue
 
             try:
@@ -325,6 +334,7 @@ class ModuleRegistryService:
             module.runtime_type = manifest.runtime_type
             module.supports_auto_start = manifest.supports_auto_start
             db.flush()
+            self._sync_http_request(db, module, manifest)
             self._sync_variable_definitions(db, module, manifest)
             db.commit()
             return int(module.id)
@@ -333,6 +343,37 @@ class ModuleRegistryService:
             raise
         finally:
             db.close()
+
+    def _sync_http_request(
+        self,
+        db: Session,
+        module: Module,
+        manifest: ModuleManifest,
+    ) -> None:
+        existing_request = (
+            db.query(ModuleHttpRequest)
+            .filter(ModuleHttpRequest.module_id == module.id)
+            .one_or_none()
+        )
+        definition = manifest.http_request
+        if definition is None:
+            if existing_request is not None:
+                raise ManifestValidationError(
+                    "O manifesto deixou de declarar http_request, mas existe uma configuração HTTP persistida. "
+                    "A configuração anterior foi preservada e o módulo ficou indisponível."
+                )
+            return
+
+        if existing_request is None:
+            existing_request = ModuleHttpRequest(
+                module_id=module.id,
+                is_customized=False,
+            )
+            db.add(existing_request)
+        elif existing_request.is_customized:
+            return
+
+        apply_manifest_http_request_definition(existing_request, definition)
 
     def _sync_variable_definitions(
         self,
@@ -424,9 +465,24 @@ class ModuleRegistryService:
             )
         )
 
+
 def initialize_module_registry() -> ModuleRegistryState:
     try:
         return ModuleRegistryService().sync()
     except Exception:
         LOGGER.exception("A descoberta de módulos falhou sem interromper a IRIS.")
         return get_module_registry_state()
+
+
+def _extract_manifest_identity(data: object) -> tuple[str | None, str | None]:
+    if not isinstance(data, dict):
+        return None, None
+    module_data = data.get("module")
+    if not isinstance(module_data, dict):
+        return None, None
+    module_public_key = module_data.get("module_public_key")
+    parent_public_key = module_data.get("parent_public_key")
+    return (
+        module_public_key if isinstance(module_public_key, str) else None,
+        parent_public_key if isinstance(parent_public_key, str) else None,
+    )

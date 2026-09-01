@@ -16,6 +16,7 @@ def build_manifest(
     parent_public_key: str | None = None,
     variables: list[dict] | None = None,
     runtime: dict | None | object = ...,
+    http_request: dict | None | object = ...,
     is_executable: bool | None = None,
 ) -> dict:
     if runtime is ...:
@@ -35,11 +36,38 @@ def build_manifest(
     }
     if is_executable is not None:
         module["is_executable"] = is_executable
-    return {
+    manifest = {
         "schema_version": 1,
         "module": module,
         "runtime": runtime,
         "variables": variables or [],
+    }
+    if http_request is not ...:
+        manifest["http_request"] = http_request
+    return manifest
+
+
+def build_http_request(
+    *,
+    method: str = "GET",
+    url: str = "https://api.example.com/items",
+    argument_enabled: bool = True,
+    params: list[dict] | None = None,
+    headers: list[dict] | None = None,
+    body: dict | None = None,
+    authorization: dict | None = None,
+    scripts: dict | None = None,
+) -> dict:
+    return {
+        "method": method,
+        "url": url,
+        "argument_enabled": argument_enabled,
+        "params": params or [],
+        "authorization": authorization or {"type": "none"},
+        "headers": headers or [],
+        "body": body or {"mode": "none", "content": ""},
+        "scripts": scripts
+        or {"pre_request": "", "post_response": ""},
     }
 
 

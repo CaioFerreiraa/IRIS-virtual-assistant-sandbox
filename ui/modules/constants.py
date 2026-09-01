@@ -5,6 +5,7 @@ import flet as ft
 
 MODULE_TABS = (
     ("about", "Sobre", ft.Icons.INFO_OUTLINE_ROUNDED),
+    ("execution", "Execução", ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED),
     ("settings", "Configurações", ft.Icons.TUNE_ROUNDED),
     ("logs", "Log", ft.Icons.HISTORY_ROUNDED),
 )

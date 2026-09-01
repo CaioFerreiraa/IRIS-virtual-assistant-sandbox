@@ -96,10 +96,11 @@ após o nome do módulo. O item selecionado exibe somente uma linha roxa, poucos
 pixels abaixo do nome; sua borda externa não muda.
 
 O ícone aparece primeiro e mantém sempre as mesmas cores, sem variar conforme o
-estado do módulo. Entre ele e o nome fica uma bolinha de status pequena: verde
-para módulos executáveis e vermelha para módulos com problema. Itens
-organizacionais sem problema não exibem a bolinha. Módulos inválidos sem item na
-árvore continuam com o indicador vermelho na área de diagnóstico.
+estado do módulo. Entre ele e o nome fica uma bolinha de status pequena:
+`GREY_900` para módulos offline, verde para módulos online e vermelha para
+módulos com problema. Itens organizacionais sem problema não exibem a bolinha.
+Módulos inválidos sem item na árvore continuam com o indicador vermelho na área
+de diagnóstico.
 
 Módulos raiz usam sempre `SURFACE`. Submódulos não ganham recuo adicional e
 escurecem conforme a profundidade: `GREY_100` (`#F5F6FA`), `GREY_200`
@@ -111,6 +112,10 @@ na cor de fundo do pai para reforçar visualmente a profundidade da árvore.
 A `ListView` alcança as laterais internas do painel e expande verticalmente para
 usar todo o espaço disponível. Sua área externa também usa `SURFACE`, inclusive
 abaixo do último item quando a lista não ocupa toda a altura.
+
+Ao navegar para outra rota, a árvore visual e a `ListView` permanecem montadas.
+Somente os itens e o estado ativo são atualizados, preservando a posição de
+rolagem sem saltos visíveis.
 
 Ao manter o ponteiro sobre um item, o tooltip apresenta o nome do módulo e um
 resumo de até três linhas do README, com reticências quando houver mais texto.
@@ -155,18 +160,44 @@ A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção
 
 ### Tela do módulo
 
-A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo e apresenta o botão primário “Executar” à esquerda do status quando a ação está disponível. O conteúdo é dividido em abas:
+A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo. Em execuções Python e legadas, o botão primário “Executar” aparece à esquerda do status; em módulos HTTP, o mesmo botão fica junto de método e URL na aba “Execução”. O conteúdo é dividido em abas:
 
 - **Sobre**: descrição, README quando existe e `module.json` formatado com fonte Consolas quando existe;
-- **Configurações**: primeiro apresenta `call_name` em modo de leitura, `custom_call_name` editável, argumento transitório e, somente para módulos raiz, a opção “Iniciar com a IRIS”; depois mostra os dados persistidos do módulo em formato de formulário e as variáveis editáveis quando existirem;
+- **Execução**: aparece somente em módulos executáveis, concentra o argumento e permite personalizar a definição HTTP quando existe;
+- **Configurações**: primeiro apresenta `call_name` em modo de leitura, `custom_call_name` editável e, somente para módulos raiz, a opção “Iniciar com a IRIS”; depois mostra os dados persistidos do módulo em formato de formulário e as variáveis editáveis quando existirem;
 - **Log**: aparece somente em módulos executáveis e lista as execuções do módulo, usando a mesma tabela do histórico;
 - **Erro**: aparece somente para falhas técnicas de descoberta, validação, importação, configuração ou inicialização do módulo ou de um submódulo. Quando existe, fica em primeiro lugar e é selecionada inicialmente.
 
 O switch “Iniciar com a IRIS” aparece somente para módulos raiz. Ele só fica habilitado para runtime Python raiz que declara `supports_auto_start`; nos demais casos, a própria tela explica por que a opção está desabilitada. Erros normais ocorridos durante uma requisição permanecem apenas no histórico e não criam a aba de erro.
+
+Na aba “Execução”, o card “Argumento da execução” aparece primeiro e ocupa a
+largura disponível. Módulos Python mantêm o argumento transitório e o fluxo
+atual, sem um card informativo adicional. Módulos HTTP mostram método, URL, a
+ação “Voltar ao module.json” e o único botão “Executar”, seguidos das subabas
+“Parâmetros”, “Autorização”, “Cabeçalhos”, “Corpo” e “Scripts”. Todos os campos
+da definição HTTP podem ser editados. Params e Headers usam linhas com estado,
+chave, valor e descrição, incluindo ações para adicionar ou remover itens;
+Authorization usa o seletor “Sem autenticação”; o body separa modo e conteúdo;
+scripts são textos armazenados, mas não executados. Quando qualquer campo muda, a barra flutuante “Salvar
+requisição” aparece da mesma forma que a barra da aba “Configurações”. Salvar
+mantém a personalização no banco; executar salva alterações pendentes antes da
+chamada. “Voltar ao module.json” restaura a definição distribuída e preserva o
+último argumento utilizado.
+Quando `argument_enabled` é falso, o campo fica desabilitado e explica que o
+módulo não utiliza argumento de execução. Módulos executáveis indisponíveis
+mantêm a aba visível, com controles desabilitados e o motivo apresentado.
 Ao executar pela tela, um card entra com animação acima das abas e mostra o
 status e o corpo estruturado completo do retorno. O corpo pode ser recolhido ou
 exibido novamente por um botão de seta no cabeçalho do card. O status do
-cabeçalho mantém a mesma altura do botão “Executar”.
+cabeçalho mantém a mesma altura do botão “Executar”. O usuário também pode
+arrastar a borda inferior para redimensionar verticalmente o card; a altura
+mínima preserva somente o cabeçalho, e o corpo rolável ocupa o espaço escolhido
+sem receber uma altura fixa do fluxo de execução.
+
+Na demonstração Notas, o módulo raiz não possui aba “Execução” e apresenta o
+switch de auto start em “Configurações”. Seus quatro filhos possuem aba
+“Execução”; os três filhos HTTP exibem a definição estilo Postman e o filho
+“Abrir notas” abre a página externa servida pelo backend local.
 
 O card “Dados do módulo” fica sempre no fim da aba “Configurações”. Ele lista em
 modo desabilitado todas as colunas mapeadas pela entidade `Module`; novas colunas
@@ -178,7 +209,10 @@ O botão “Salvar configurações” aparece somente quando existem alteraçõe
 pendentes e permanece flutuante no centro inferior da aba para evitar que o
 usuário precise rolar até o fim do formulário. A tela compara os snapshots
 `module_state_saved` e `module_state_edited`; o segundo começa nulo e é preenchido
-quando qualquer campo editável, inclusive o argumento transitório, muda.
+quando um campo editável de Configurações muda. O argumento pertence à aba
+“Execução” e não participa desse snapshot nem da barra de Configurações. O
+a requisição HTTP completa possui um snapshot próprio da aba Execução;
+argumentos Python continuam temporários e são enviados somente na execução.
 
 IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos inválidos sem ID aparecem no diagnóstico da sidebar com pasta, mensagem curta e caminho do `module.log`, sem traceback.
 
@@ -258,12 +292,13 @@ Oferece estrutura reutilizável para listas com colunas.
 
 ### Controles de formulário
 
-Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários.
+Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários. Somente campos de entrada desabilitados usam fundo `GREY_100`, texto `TEXT_PRIMARY` e borda `TEXT_PRIMARY`. Campos habilitados preservam o fundo padrão, a borda `BORDER` e a borda de foco roxa. O valor, o rótulo e o placeholder dos campos usam tamanho 14; o texto auxiliar preserva o tamanho padrão do Flet.
 Campos de entrada devem preencher toda a largura disponível na célula da grid, independentemente do tamanho do texto exibido.
 Quando um campo possuir texto de ajuda, o mesmo conteúdo deve ficar disponível como tooltip.
 `build_floating_save_bar` mantém a barra de salvamento montada e anima sua
-entrada e saída com opacidade e deslocamento. O fundo do painel é branco com
-leve transparência para preservar a leitura do conteúdo abaixo.
+entrada de baixo para cima, com saída no sentido inverso e transição de
+opacidade. O fundo do painel é branco com leve transparência para preservar a
+leitura do conteúdo abaixo.
 
 ### Tooltip
 

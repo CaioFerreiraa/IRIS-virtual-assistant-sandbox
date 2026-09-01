@@ -2,7 +2,7 @@
 
 ## Conceito
 
-Módulos são as capacidades da IRIS. Um módulo pode organizar outros módulos, executar uma ação Python ou manter um backend iniciado junto com a aplicação.
+Módulos são as capacidades da IRIS. Um módulo pode organizar outros módulos, executar uma ação Python, declarar uma requisição HTTP simples ou manter um backend iniciado junto com a aplicação.
 
 Módulos e submódulos usam a mesma entidade `Module`. A hierarquia persistida usa `parent_module_id`, enquanto referências entre manifestos usam a chave pública estável `module_public_key`.
 
@@ -28,6 +28,13 @@ O repositório inclui módulos instalados voltados a demonstração e testes man
 - `test.showcase.responses`: respostas por `message`, `result`, `opened` e retorno simples;
 - `test.showcase.failures`: falha controlada e exceção;
 - `weather.forecast`: caminho feliz com geocodificação e previsão do Open-Meteo.
+- `notes.javascript`: módulo raiz não executável que controla um backend Node.js
+  por meio de auto start;
+- `notes.javascript.open`: adaptador Python que verifica o backend e abre sua
+  interface HTML;
+- `notes.javascript.create`, `notes.javascript.edit` e
+  `notes.javascript.delete`: filhos HTTP declarativos para demonstrar CRUD e
+  substituição de `{{argument}}`.
 
 Cada pasta possui um README próprio que enumera os comportamentos exercitados, forma de teste, dependências e limitações. Os casos de manifesto inválido permanecem na suíte automatizada para não manter o catálogo intencionalmente indisponível.
 
@@ -42,7 +49,10 @@ modules/
         └── main.py
 ```
 
-O `README.md` utiliza Markdown puro. A interface é criada pela IRIS com controles Flet nativos; módulos não fornecem HTML ou controles visuais.
+O `README.md` utiliza Markdown puro. A tela de configuração do módulo é criada
+pela IRIS com controles Flet nativos. Um módulo pode, como comportamento próprio,
+servir uma página externa no navegador; essa página não substitui nem injeta
+controles na interface Flet.
 
 ## Manifesto versão 1
 
@@ -78,7 +88,7 @@ O `README.md` utiliza Markdown puro. A interface é criada pela IRIS com control
 }
 ```
 
-Os campos da raiz são obrigatórios. `runtime` pode ser `null` para módulos organizacionais. `module.is_executable` é opcional; quando ausente, seu valor é inferido pela presença de runtime.
+Os quatro campos originais da raiz continuam obrigatórios. `http_request` é opcional e aditivo. `runtime` pode ser `null` para módulos organizacionais ou HTTP. `module.is_executable` é opcional; quando ausente, seu valor é inferido pela presença de runtime Python ou `http_request`.
 
 O campo opcional `module.icon` armazena o nome de uma ligature do Material Icons. A ausência usa `extension`. O nome aceita letras minúsculas, números e underscores. O registry persiste esse valor para a Home, a sidebar e a tela do módulo.
 
@@ -112,7 +122,7 @@ O `id` numérico continua sendo controlado pelo SQLite e é usado pela interface
 4. importar o entry point;
 5. validar chaves duplicadas e hierarquia;
 6. sincronizar o módulo pela chave pública;
-7. sincronizar definições de variáveis;
+7. sincronizar a requisição HTTP opcional e as definições de variáveis na mesma transação;
 8. marcar módulos ausentes ou inválidos como indisponíveis.
 
 Uma pasta quebrada não impede a sincronização das demais nem a abertura da IRIS. Um módulo inválido novo não recebe registro normal. Se já existia, permanece no banco com preferências e valores preservados, mas fica indisponível.
@@ -137,6 +147,10 @@ A versão atual rejeita:
 - tipo de variável diferente de texto;
 - variável obrigatória não editável sem valor padrão;
 - variáveis secretas, privadas, criptografadas ou com finalidade sensível.
+- método ou URL HTTP inválidos;
+- runtime Python e `http_request` declarados simultaneamente;
+- Authorization com segredo, cabeçalhos ou parâmetros sensíveis;
+- scripts HTTP não vazios.
 
 ## `module.log`
 
@@ -193,6 +207,28 @@ card com `success: false`, sem expor traceback na interface.
 
 O comportamento legado `GET` ainda abre uma URL no navegador. Ele permanece separado do manifesto versão 1 e ainda não representa uma requisição HTTP completa.
 
+## Execução HTTP opcional
+
+O manifesto versão 1 aceita o campo opcional `http_request` para uma única chamada simples. Métodos aceitos: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` e `OPTIONS`. A definição pode usar parâmetros, cabeçalhos e body nos modos `none`, `raw_json`, `raw_text` ou `form_urlencoded`.
+
+O placeholder literal `{{argument}}` pode aparecer na URL, nos parâmetros, nos cabeçalhos e no body. `argument_enabled` controla se a string pode ser informada; o último valor utilizado é salvo em `ModuleHttpRequest.argument` e recarregado na tela do módulo. Essa capacidade é independente de `search_arguments()`, que continua sendo um contrato dos módulos Python atuais.
+
+O registry cria ou atualiza `ModuleHttpRequest` pelo `module_id` e preserva o argumento salvo durante ressincronizações. Enquanto `is_customized` for falso, a definição acompanha o `module.json`. Depois que o usuário salva uma personalização, o registry preserva método, URL, argumento habilitado, parâmetros, Authorization, cabeçalhos, body e scripts do banco. A ação “Voltar ao module.json” reaplica a definição atual do manifesto, mantém o último argumento e limpa o estado de personalização.
+
+Um módulo novo copiado para `modules/installed` usa o mesmo fluxo de inicialização e não exige migration ou seed próprio. A restrição única de `module_id` impede mais de uma requisição principal por módulo.
+
+Na interface, método, URL, argumento habilitado, argumento, parâmetros,
+Authorization, cabeçalhos, body e scripts podem ser personalizados. Qualquer
+alteração exibe a barra flutuante “Salvar requisição”; executar também salva
+alterações pendentes e preserva o último argumento usado. Params e Headers são
+editados em linhas com estado, chave, valor e descrição, enquanto o body separa
+modo e conteúdo.
+Authorization aceita apenas `{"type":"none"}` e credenciais continuam
+proibidas. Scripts personalizados são armazenados e exibidos como texto, mas
+não são executados. O manifesto distribuído continua exigindo scripts vazios.
+
+Respostas HTTP são apresentadas de forma estruturada, com corpo limitado para exibição. O histórico persiste somente um resumo com método, status e duração; não salva corpo, cabeçalhos ou query string completos. Múltiplas requisições e lógica personalizada continuam sendo implementadas com Python.
+
 ### Previsão do tempo com Open-Meteo
 
 O módulo atual `weather.forecast` realiza comunicação HTTP dentro do próprio runtime, fora da thread visual. Ele usa:
@@ -201,6 +237,19 @@ O módulo atual `weather.forecast` realiza comunicação HTTP dentro do próprio
 2. a variável opcional `default_location`, salva na rota do módulo.
 
 `should_request_argument(variables)` abre o campo de argumento somente quando `default_location` está vazio. Se uma chamada direta chegar sem as duas formas, o módulo orienta o usuário a informar o local. `search_arguments` consulta a geocodificação do Open-Meteo e a execução consulta a previsão por coordenadas. A configuração `forecast_days` aceita de 1 a 7 dias. A integração não usa credenciais, mas depende de internet e da disponibilidade do serviço externo.
+
+### Demonstração Notas com backend JavaScript
+
+`notes.javascript` demonstra um backend comunitário externo sem introduzir um
+runtime Node.js nativo na IRIS. O manifesto raiz continua declarando runtime
+Python, e seu `main.py` apenas localiza o executável `node`, inicia `server.js`,
+aguarda o health check e devolve o `subprocess.Popen` ao gerenciador atual.
+
+O módulo raiz não é executável e concentra o switch “Iniciar com a IRIS”. Os
+quatro filhos são executáveis: “Abrir notas” usa Python exclusivamente para
+abrir o navegador, enquanto criar, editar e deletar usam `ModuleHttpRequest`.
+O backend escuta somente em `127.0.0.1:8765`, usa módulos nativos do Node.js e
+mantém os dados apenas em memória. Reiniciar o processo apaga todas as notas.
 
 ## Auto start
 

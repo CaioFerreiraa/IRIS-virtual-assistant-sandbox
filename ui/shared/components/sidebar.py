@@ -19,6 +19,7 @@ from ui.theme.colors import (
     GREY_300,
     GREY_400,
     GREY_500,
+    GREY_900,
     PASTEL_DARK_GREEN,
     PASTEL_DARK_PURPLE,
     PASTEL_PURPLE,
@@ -49,6 +50,44 @@ PARENT_SHADOW_COLOR = ft.Colors.with_opacity(0.16, PASTEL_DARK_PURPLE)
 class _ModuleNode:
     data: Mapping[str, object]
     children: list["_ModuleNode"] = field(default_factory=list)
+
+
+@dataclass
+class SidebarViewState:
+    module_list: ft.ListView = field(init=False)
+    module_list_shell: ft.Container = field(init=False)
+    panel_column: ft.Column = field(init=False)
+    root: ft.Container = field(init=False)
+    module_title: ft.Container | None = field(init=False, default=None)
+    module_count: int = field(init=False, default=-1)
+
+    def __post_init__(self) -> None:
+        self.module_list = ft.ListView(
+            spacing=0,
+            padding=0,
+            expand=True,
+        )
+        self.module_list_shell = ft.Container(
+            expand=True,
+            border_radius=0,
+            bgcolor=SURFACE,
+            content=self.module_list,
+        )
+        self.panel_column = ft.Column(expand=True, spacing=20)
+        self.root = ft.Container(expand=True)
+
+    def set_controls(self, controls: Sequence[ft.Control]) -> None:
+        self.module_list.controls = list(controls)
+
+    def get_module_title(self, module_count: int) -> ft.Container:
+        if self.module_title is None or self.module_count != module_count:
+            self.module_title = _build_section_title(
+                "Módulos",
+                ft.Icons.WIDGETS_OUTLINED,
+                module_count,
+            )
+            self.module_count = module_count
+        return self.module_title
 
 
 # Dados da árvore
@@ -139,8 +178,17 @@ def _build_status_dot(module: Mapping[str, object]) -> ft.Container | None:
         color = CANCEL
         tooltip = "Módulo com problema"
     elif bool(module.get("is_executable")):
-        color = PASTEL_DARK_GREEN
-        tooltip = "Módulo executável"
+        status = str(
+            module.get("runtime_status")
+            or module.get("status")
+            or "offline"
+        ).strip().casefold()
+        if status == "online":
+            color = PASTEL_DARK_GREEN
+            tooltip = "Módulo online"
+        else:
+            color = GREY_900
+            tooltip = "Módulo offline"
     else:
         return None
 
@@ -515,6 +563,7 @@ def build_sidebar(
     on_width_change: Callable[[float], None] | None = None,
     expanded_module_ids: set[int] | None = None,
     collapsed_module_ids: set[int] | None = None,
+    view_state: SidebarViewState | None = None,
 ) -> ft.Container:
     module_data = tuple(modules or ())
     expanded_ids = expanded_module_ids if expanded_module_ids is not None else set()
@@ -546,19 +595,12 @@ def build_sidebar(
             )
         ]
 
+    active_view_state = view_state or SidebarViewState()
+    active_view_state.set_controls(module_items)
+
     panel_controls: list[ft.Control] = [
-        _build_section_title("Módulos", ft.Icons.WIDGETS_OUTLINED, len(module_data)),
-        ft.Container(
-            expand=True,
-            border_radius=0,
-            bgcolor=SURFACE,
-            content=ft.ListView(
-                spacing=0,
-                padding=0,
-                expand=True,
-                controls=module_items,
-            ),
-        )
+        active_view_state.get_module_title(len(module_data)),
+        active_view_state.module_list_shell,
     ]
 
     invalid_items = [
@@ -583,39 +625,37 @@ def build_sidebar(
             ]
         )
 
-    sidebar_panel = ft.Container(
-        left=0,
-        top=0,
-        right=8,
-        bottom=0,
-        margin=ft.Margin(left=18, top=28, right=4, bottom=25),
-        padding=0,
-        bgcolor=BLUE_GREY,
-        border=ft.Border.all(1, BORDER),
-        border_radius=12,
-        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-        shadow=ft.BoxShadow(
-            blur_radius=18,
-            color=ft.Colors.with_opacity(0.06, PASTEL_DARK_PURPLE),
-            offset=ft.Offset(0, 5),
-        ),
-        content=ft.Column(
+    active_view_state.panel_column.controls = panel_controls
+    active_view_state.root.width = _clamp_sidebar_width(width)
+    if active_view_state.root.content is None:
+        sidebar_panel = ft.Container(
+            left=0,
+            top=0,
+            right=8,
+            bottom=0,
+            margin=ft.Margin(left=18, top=28, right=4, bottom=25),
+            padding=0,
+            bgcolor=BLUE_GREY,
+            border=ft.Border.all(1, BORDER),
+            border_radius=12,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            shadow=ft.BoxShadow(
+                blur_radius=18,
+                color=ft.Colors.with_opacity(0.06, PASTEL_DARK_PURPLE),
+                offset=ft.Offset(0, 5),
+            ),
+            content=active_view_state.panel_column,
+        )
+        resize_handle = _build_resize_handle(
+            active_view_state.root,
+            width,
+            on_width_change,
+        )
+        active_view_state.root.content = ft.Stack(
             expand=True,
-            spacing=20,
-            controls=panel_controls,
-        ),
-    )
-
-    root = ft.Container(
-        width=_clamp_sidebar_width(width),
-        expand=True,
-    )
-    resize_handle = _build_resize_handle(root, width, on_width_change)
-    root.content = ft.Stack(
-        expand=True,
-        controls=[sidebar_panel, resize_handle],
-    )
-    return root
+            controls=[sidebar_panel, resize_handle],
+        )
+    return active_view_state.root
 
 
 def _clamp_sidebar_width(width: float) -> float:

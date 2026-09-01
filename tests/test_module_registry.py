@@ -7,9 +7,18 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database.db import Base, enable_sqlite_foreign_keys
-from database.models import Module, ModuleVariableDefinition, ModuleVariableValue
+from database.models import (
+    Module,
+    ModuleHttpRequest,
+    ModuleVariableDefinition,
+    ModuleVariableValue,
+)
 from services.module_registry_service import ModuleRegistryService
-from tests.module_test_utils import build_manifest, create_module_folder
+from tests.module_test_utils import (
+    build_http_request,
+    build_manifest,
+    create_module_folder,
+)
 
 
 class ModuleRegistryTests(unittest.TestCase):
@@ -190,6 +199,247 @@ class ModuleRegistryTests(unittest.TestCase):
             self.assertIn("broken", module.validation_error)
         finally:
             db.close()
+
+    def test_http_module_is_registered_once_with_correct_module_id(self) -> None:
+        create_module_folder(
+            self.installed_root,
+            "http",
+            build_manifest(
+                "example.http",
+                runtime=None,
+                http_request=build_http_request(),
+            ),
+            create_entrypoint=False,
+        )
+
+        self.registry.sync()
+        self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            module = db.query(Module).filter_by(
+                module_public_key="example.http"
+            ).one()
+            requests = db.query(ModuleHttpRequest).all()
+            self.assertEqual(1, len(requests))
+            self.assertEqual(module.id, requests[0].module_id)
+            self.assertEqual("GET", requests[0].method)
+        finally:
+            db.close()
+
+    def test_http_resync_updates_definition_and_preserves_argument(self) -> None:
+        folder = create_module_folder(
+            self.installed_root,
+            "http",
+            build_manifest(
+                "example.http",
+                runtime=None,
+                http_request=build_http_request(),
+            ),
+            create_entrypoint=False,
+        )
+        self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            request = db.query(ModuleHttpRequest).one()
+            request.argument = "Campinas"
+            db.commit()
+        finally:
+            db.close()
+
+        updated_manifest = build_manifest(
+            "example.http",
+            runtime=None,
+            http_request=build_http_request(
+                method="POST",
+                url="https://api.example.com/search",
+                body={
+                    "mode": "raw_json",
+                    "content": '{"query":"{{argument}}"}',
+                },
+            ),
+        )
+        (folder / "module.json").write_text(
+            json.dumps(updated_manifest, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+
+        self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            request = db.query(ModuleHttpRequest).one()
+            self.assertEqual("POST", request.method)
+            self.assertEqual("https://api.example.com/search", request.url)
+            self.assertIn("raw_json", request.body_json)
+            self.assertEqual("Campinas", request.argument)
+        finally:
+            db.close()
+
+    def test_http_resync_preserves_user_customized_definition(self) -> None:
+        folder = create_module_folder(
+            self.installed_root,
+            "http-customized",
+            build_manifest(
+                "example.customized",
+                runtime=None,
+                http_request=build_http_request(),
+            ),
+            create_entrypoint=False,
+        )
+        self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            request = db.query(ModuleHttpRequest).one()
+            request.method = "DELETE"
+            request.url = "https://custom.example.com/items/7"
+            request.argument = "7"
+            request.is_customized = True
+            db.commit()
+        finally:
+            db.close()
+
+        updated_manifest = build_manifest(
+            "example.customized",
+            runtime=None,
+            http_request=build_http_request(
+                method="POST",
+                url="https://manifest.example.com/items",
+            ),
+        )
+        (folder / "module.json").write_text(
+            json.dumps(updated_manifest, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+
+        self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            request = db.query(ModuleHttpRequest).one()
+            self.assertEqual("DELETE", request.method)
+            self.assertEqual("https://custom.example.com/items/7", request.url)
+            self.assertEqual("7", request.argument)
+            self.assertTrue(request.is_customized)
+        finally:
+            db.close()
+
+    def test_two_http_modules_receive_separate_requests(self) -> None:
+        for public_key in ("example.first", "example.second"):
+            create_module_folder(
+                self.installed_root,
+                public_key,
+                build_manifest(
+                    public_key,
+                    runtime=None,
+                    http_request=build_http_request(),
+                ),
+                create_entrypoint=False,
+            )
+
+        self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            requests = db.query(ModuleHttpRequest).order_by(
+                ModuleHttpRequest.module_id
+            ).all()
+            self.assertEqual(2, len(requests))
+            self.assertNotEqual(requests[0].module_id, requests[1].module_id)
+        finally:
+            db.close()
+
+    def test_invalid_http_module_leaves_no_partial_record_and_does_not_block_others(self) -> None:
+        create_module_folder(
+            self.installed_root,
+            "invalid-http",
+            build_manifest(
+                "example.invalid",
+                runtime=None,
+                http_request=build_http_request(method="TRACE"),
+            ),
+            create_entrypoint=False,
+        )
+        create_module_folder(
+            self.installed_root,
+            "valid-http",
+            build_manifest(
+                "example.valid",
+                runtime=None,
+                http_request=build_http_request(),
+            ),
+            create_entrypoint=False,
+        )
+
+        state = self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            self.assertEqual(
+                0,
+                db.query(Module).filter_by(
+                    module_public_key="example.invalid"
+                ).count(),
+            )
+            self.assertEqual(1, db.query(ModuleHttpRequest).count())
+            self.assertEqual(
+                "example.valid",
+                db.query(ModuleHttpRequest).one().module.module_public_key,
+            )
+        finally:
+            db.close()
+        self.assertEqual(1, len(state.invalid_modules))
+        self.assertEqual(1, len(state.synced_module_ids))
+
+    def test_invalid_http_update_rolls_back_only_affected_module(self) -> None:
+        folder = create_module_folder(
+            self.installed_root,
+            "http",
+            build_manifest(
+                "example.http",
+                runtime=None,
+                http_request=build_http_request(),
+            ),
+            create_entrypoint=False,
+        )
+        self.registry.sync()
+        db = self.session_factory()
+        try:
+            request = db.query(ModuleHttpRequest).one()
+            request.argument = "preservado"
+            db.commit()
+        finally:
+            db.close()
+
+        invalid_manifest = build_manifest(
+            "example.http",
+            runtime=None,
+            http_request=build_http_request(method="TRACE"),
+        )
+        (folder / "module.json").write_text(
+            json.dumps(invalid_manifest, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+
+        state = self.registry.sync()
+
+        db = self.session_factory()
+        try:
+            module = db.query(Module).filter_by(
+                module_public_key="example.http"
+            ).one()
+            request = db.query(ModuleHttpRequest).filter_by(
+                module_id=module.id
+            ).one()
+            self.assertFalse(module.is_available)
+            self.assertIn("método HTTP", module.validation_error)
+            self.assertEqual("GET", request.method)
+            self.assertEqual("preservado", request.argument)
+        finally:
+            db.close()
+        self.assertEqual(1, len(state.invalid_modules))
 
 
 if __name__ == "__main__":

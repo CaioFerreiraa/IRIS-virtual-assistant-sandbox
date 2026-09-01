@@ -72,6 +72,60 @@ class Module(Base):
         order_by="ModuleVariableDefinition.display_order",
         passive_deletes=True,
     )
+    http_request = relationship(
+        "ModuleHttpRequest",
+        back_populates="module",
+        uselist=False,
+        passive_deletes=True,
+    )
+
+
+class ModuleHttpRequest(Base):
+    __tablename__ = "module_http_requests"
+    __table_args__ = (
+        UniqueConstraint(
+            "module_id",
+            name="uq_module_http_requests_module_id",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    module_id = Column(
+        Integer,
+        ForeignKey("modules.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    method = Column(String(10), nullable=False)
+    url = Column(Text, nullable=False)
+    argument_enabled = Column(Boolean, nullable=False, default=False)
+    argument = Column(Text, nullable=True)
+    params_json = Column(Text, nullable=False, default="[]")
+    authorization_json = Column(
+        Text,
+        nullable=False,
+        default='{"type":"none"}',
+    )
+    headers_json = Column(Text, nullable=False, default="[]")
+    body_json = Column(
+        Text,
+        nullable=False,
+        default='{"mode":"none","content":""}',
+    )
+    scripts_json = Column(
+        Text,
+        nullable=False,
+        default='{"pre_request":"","post_response":""}',
+    )
+    is_customized = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    module = relationship("Module", back_populates="http_request")
 
 
 class ModuleVariableDefinition(Base):

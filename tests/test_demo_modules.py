@@ -42,7 +42,7 @@ class DemoModuleRegistryTests(unittest.TestCase):
         ).sync()
 
         self.assertEqual((), state.invalid_modules)
-        self.assertEqual(10, len(state.synced_module_ids))
+        self.assertEqual(15, len(state.synced_module_ids))
         self.assertTrue(all(content.strip() for content in state.readme_contents.values()))
         self.assertTrue(
             all("O que" in content for content in state.readme_contents.values())
@@ -60,11 +60,18 @@ class DemoModuleRegistryTests(unittest.TestCase):
             weather = db.query(Module).filter_by(
                 module_public_key="weather.forecast"
             ).one()
+            notes = db.query(Module).filter_by(
+                module_public_key="notes.javascript"
+            ).one()
             self.assertIsNone(root.parent_module_id)
             self.assertEqual(root.id, contracts.parent_module_id)
             self.assertEqual(contracts.id, execute_module.parent_module_id)
             self.assertTrue(root.supports_auto_start)
             self.assertTrue(weather.is_executable)
+            self.assertEqual("PYTHON", weather.request_method)
+            self.assertIsNone(weather.http_request)
+            self.assertFalse(notes.is_executable)
+            self.assertTrue(notes.supports_auto_start)
         finally:
             db.close()
 

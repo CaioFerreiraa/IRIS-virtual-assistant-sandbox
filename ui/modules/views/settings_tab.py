@@ -21,7 +21,6 @@ from ui.theme.colors import (
 FIELD_HELP = {
     "call_name": "Nome definido pelo manifesto do módulo. Ele não pode ser alterado pela interface.",
     "custom_call_name": "Nome opcional escolhido pelo usuário para substituir o nome de chamada original.",
-    "argument": "Valor transitório enviado somente na próxima execução do módulo.",
     "auto_start": "Define se o módulo raiz deve iniciar automaticamente na abertura da IRIS.",
 }
 
@@ -66,8 +65,6 @@ class ModuleSettingsTabMixin:
         controls.append(ft.Container(height=74))
 
         self.custom_call_name_field.on_change = self.on_settings_form_change
-        if self.argument_field is not None:
-            self.argument_field.on_change = self.on_settings_form_change
         for field in self.variable_fields.values():
             field.on_change = self.on_settings_form_change
         self.module_state_saved = self._current_settings_values()
@@ -100,11 +97,6 @@ class ModuleSettingsTabMixin:
     def _current_settings_values(self) -> dict[str, str]:
         values = {
             "custom_call_name": self.custom_call_name_field.value or "",
-            "argument": (
-                self.argument_field.value or ""
-                if self.argument_field is not None
-                else ""
-            ),
         }
         values.update(
             {
@@ -140,10 +132,6 @@ class ModuleSettingsTabMixin:
             self._build_field_wrapper(
                 self.custom_call_name_field,
                 FIELD_HELP["custom_call_name"],
-            ),
-            self._build_field_wrapper(
-                self._build_argument_field(),
-                FIELD_HELP["argument"],
             ),
         ]
 
@@ -189,16 +177,6 @@ class ModuleSettingsTabMixin:
         )
         self.model_value_controls["Nome de chamada original"] = field
         return field
-
-    def _build_argument_field(self) -> ft.Control:
-        if self.argument_field is not None:
-            return self.argument_field
-        return build_text_field(
-            "Argumento da execução",
-            "",
-            helper="Este módulo não solicita argumento de execução.",
-            disabled=True,
-        )
 
     def _build_auto_start_field(self) -> ft.Container | None:
         if not bool(self.detail.get("is_root_module", False)):

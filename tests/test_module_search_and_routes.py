@@ -101,6 +101,7 @@ class ModuleSearchAndRouteTests(unittest.TestCase):
         texts = _collect_text_values(control)
         self.assertIn("Clima", texts)
         self.assertIn("Sobre", texts)
+        self.assertIn("Execução", texts)
         self.assertIn("Configurações", texts)
         self.assertIn("Log", texts)
         self.assertNotIn("Erro", texts)

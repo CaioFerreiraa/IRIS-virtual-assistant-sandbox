@@ -5,12 +5,23 @@ import textwrap
 
 import flet as ft
 
-from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE
+from ui.theme.colors import (
+    BLUE_GREY,
+    BORDER,
+    GREY_200,
+    PASTEL_DARK_PURPLE,
+    PASTEL_PURPLE,
+    SURFACE,
+    TEXT_PRIMARY, GREY_100,
+)
 from ui.shared.components.tooltip_container import build_tooltip_container
 
 
 ControlCallback = Callable[[ft.ControlEvent], None]
 FLOATING_SAVE_BAR_ANIMATION_DURATION = 180
+FLOATING_SAVE_BAR_BOTTOM = 8
+FLOATING_SAVE_BAR_HIDDEN_BOTTOM = -72
+INPUT_TEXT_SIZE = 14
 
 
 def build_dropdown(
@@ -36,8 +47,23 @@ def build_dropdown(
         tooltip=build_tooltip_container(helper) if helper else None,
         disabled=disabled,
         expand=expand,
-        border_color=BORDER,
-        focused_border_color=PASTEL_PURPLE,
+        bgcolor=GREY_100 if disabled else None,
+        color=TEXT_PRIMARY if disabled else None,
+        text_style=ft.TextStyle(
+            size=INPUT_TEXT_SIZE,
+            color=TEXT_PRIMARY if disabled else None,
+        ),
+        label_style=ft.TextStyle(
+            size=INPUT_TEXT_SIZE,
+            color=TEXT_PRIMARY if disabled else None,
+        ),
+        hint_style=ft.TextStyle(
+            size=INPUT_TEXT_SIZE,
+            color=TEXT_PRIMARY if disabled else None,
+        ),
+        helper_style=ft.TextStyle(color=TEXT_PRIMARY) if disabled else None,
+        border_color=TEXT_PRIMARY if disabled else BORDER,
+        focused_border_color=TEXT_PRIMARY if disabled else PASTEL_PURPLE,
         border_radius=8,
         dense=True,
         enable_search=True,
@@ -66,10 +92,27 @@ def build_text_field(
         min_lines=2 if multiline else None,
         max_lines=3 if multiline else 1,
         tooltip=build_tooltip_container(helper) if helper else None,
+        helper=helper,
         disabled=disabled,
         expand=expand,
-        border_color=BORDER,
-        focused_border_color=PASTEL_PURPLE,
+        bgcolor=GREY_100 if disabled else None,
+        focused_bgcolor=GREY_100 if disabled else None,
+        text_style=ft.TextStyle(
+            size=INPUT_TEXT_SIZE,
+            color=TEXT_PRIMARY if disabled else None,
+        ),
+        label_style=ft.TextStyle(
+            size=INPUT_TEXT_SIZE,
+            color=TEXT_PRIMARY if disabled else None,
+        ),
+        hint_style=ft.TextStyle(
+            size=INPUT_TEXT_SIZE,
+            color=TEXT_PRIMARY if disabled else None,
+        ),
+        helper_style=ft.TextStyle(color=TEXT_PRIMARY) if disabled else None,
+        cursor_color=TEXT_PRIMARY if disabled else None,
+        border_color=TEXT_PRIMARY if disabled else BORDER,
+        focused_border_color=TEXT_PRIMARY if disabled else PASTEL_PURPLE,
         border_radius=8,
         dense=not multiline,
     )
@@ -101,6 +144,30 @@ def build_primary_button(
     )
 
 
+def build_secondary_button(
+    label: str,
+    on_click: ControlCallback | None,
+    *,
+    disabled: bool = False,
+    expand: bool = False,
+    visible: bool = True,
+    tooltip: str | None = None,
+) -> ft.FilledButton:
+    return ft.FilledButton(
+        content=ft.Text(label),
+        tooltip=build_tooltip_container(tooltip) if tooltip else None,
+        bgcolor=BLUE_GREY,
+        color=TEXT_PRIMARY,
+        disabled=disabled,
+        expand=expand,
+        visible=visible,
+        on_click=on_click,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=5),
+        ),
+    )
+
+
 class FloatingSaveBar(ft.Container):
     def __init__(
         self,
@@ -113,11 +180,9 @@ class FloatingSaveBar(ft.Container):
         self.is_visible = visible
         self.panel = ft.Container(
             opacity=1 if visible else 0,
-            offset=ft.Offset(0, 0 if visible else 0.25),
             animate_opacity=FLOATING_SAVE_BAR_ANIMATION_DURATION,
-            animate_offset=FLOATING_SAVE_BAR_ANIMATION_DURATION,
             padding=8,
-            bgcolor=ft.Colors.with_opacity(0.88, SURFACE),
+            bgcolor=ft.Colors.with_opacity(0.50, SURFACE),
             border=ft.Border.all(1, BORDER),
             border_radius=8,
             shadow=ft.BoxShadow(
@@ -132,8 +197,15 @@ class FloatingSaveBar(ft.Container):
             ),
         )
         super().__init__(
-            align=ft.Alignment.BOTTOM_CENTER,
-            margin=ft.Margin(left=0, top=0, right=0, bottom=8),
+            left=0,
+            right=0,
+            bottom=(
+                FLOATING_SAVE_BAR_BOTTOM
+                if visible
+                else FLOATING_SAVE_BAR_HIDDEN_BOTTOM
+            ),
+            alignment=ft.Alignment.CENTER,
+            animate_position=FLOATING_SAVE_BAR_ANIMATION_DURATION,
             visible=True,
             ignore_interactions=not visible,
             content=self.panel,
@@ -145,7 +217,11 @@ class FloatingSaveBar(ft.Container):
         self.is_visible = visible
         self.ignore_interactions = not visible
         self.panel.opacity = 1 if visible else 0
-        self.panel.offset = ft.Offset(0, 0 if visible else 0.25)
+        self.bottom = (
+            FLOATING_SAVE_BAR_BOTTOM
+            if visible
+            else FLOATING_SAVE_BAR_HIDDEN_BOTTOM
+        )
 
     def update_visibility(self, visible: bool) -> None:
         self.set_visible(visible)

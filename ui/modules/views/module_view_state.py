@@ -11,6 +11,7 @@ from ui.modules.constants import ERROR_TAB, MODULE_TABS
 from ui.modules.execution import ModuleExecutionMixin
 from ui.modules.views.about_tab import ModuleAboutTabMixin
 from ui.modules.views.error_tab import ModuleErrorTabMixin
+from ui.modules.views.execution_tab import ModuleExecutionTabMixin
 from ui.modules.views.logs_tab import ModuleLogsTabMixin
 from ui.modules.views.settings_tab import ModuleSettingsTabMixin
 from ui.shared.components.form_controls import (
@@ -47,6 +48,7 @@ def build_module_view(
 
 class ModuleViewState(
     ModuleExecutionMixin,
+    ModuleExecutionTabMixin,
     ModuleAboutTabMixin,
     ModuleSettingsTabMixin,
     ModuleLogsTabMixin,
@@ -71,9 +73,13 @@ class ModuleViewState(
         self.variable_fields: dict[str, ft.TextField] = {}
         self.model_value_controls: dict[str, ft.Control] = {}
         self.settings_save_bar: FloatingSaveBar | None = None
+        self.execution_save_bar: FloatingSaveBar | None = None
         self.module_state_saved: dict[str, str] = {}
         self.module_state_edited: dict[str, str] | None = None
+        self.execution_state_saved: dict[str, object] = {}
+        self.execution_state_edited: dict[str, object] | None = None
         self.is_executing = False
+        self.http_request = detail.get("http_request")
 
         self.custom_call_name_field = build_text_field(
             "Nome de chamada personalizado",
@@ -81,14 +87,41 @@ class ModuleViewState(
             helper="Opcional. Substitui o nome personalizado anterior.",
             disabled=not bool(detail["is_available"]),
         )
+        http_argument_enabled = bool(
+            self.http_request
+            and self.http_request.get("argument_enabled")
+        )
+        accepts_argument = (
+            http_argument_enabled
+            if self.http_request is not None
+            else bool(detail["has_arguments"])
+        )
+        self.argument_explanation = (
+            "Este módulo não utiliza argumento de execução."
+            if self.http_request is not None and not http_argument_enabled
+            else (
+                "Informe a string que substituirá {{argument}} na requisição."
+                if self.http_request is not None
+                else (
+                    "Informe o argumento que será enviado ao módulo ao executar."
+                    if accepts_argument
+                    else "Este módulo não utiliza argumento de execução."
+                )
+            )
+        )
         self.argument_field = (
             build_text_field(
                 "Argumento da execução",
-                "",
-                helper="Informe o argumento que será enviado ao módulo ao executar.",
-                disabled=not bool(detail["is_available"]),
+                str(self.http_request.get("argument") or "")
+                if self.http_request is not None
+                else "",
+                helper=self.argument_explanation,
+                disabled=(
+                    not bool(detail["is_available"])
+                    or not accepts_argument
+                ),
             )
-            if bool(detail["has_arguments"])
+            if bool(detail["is_executable"])
             else None
         )
         self.execute_button = build_primary_button(
@@ -99,8 +132,7 @@ class ModuleViewState(
                 and bool(detail["is_executable"])
             ),
             visible=(
-                bool(detail["is_available"])
-                and bool(detail["is_executable"])
+                bool(detail["is_executable"])
             ),
         )
         self.execute_button.height = 40
@@ -116,6 +148,7 @@ class ModuleViewState(
             "settings": self._build_settings_tab(),
         }
         if bool(self.detail["is_executable"]):
+            self.tab_views["execution"] = self._build_execution_tab()
             self.tab_views["logs"] = self._build_log_tab()
         if self.technical_errors:
             self.tab_views["error"] = self._build_error_tab()
@@ -150,21 +183,23 @@ class ModuleViewState(
     def _build_tab_definitions(self) -> tuple[tuple[str, str, object], ...]:
         module_tabs = tuple(
             tab for tab in MODULE_TABS
-            if tab[0] != "logs" or bool(self.detail["is_executable"])
+            if tab[0] not in {"execution", "logs"}
+            or bool(self.detail["is_executable"])
         )
         if self.technical_errors:
             return (ERROR_TAB, *module_tabs)
         return module_tabs
 
     def _build_header_trailing(self) -> ft.Row:
+        controls: list[ft.Control] = []
+        if self.http_request is None:
+            controls.append(self.execute_button)
+        controls.append(build_status_chip(str(self.detail["status"])))
         return ft.Row(
             tight=True,
             spacing=12,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            controls=[
-                self.execute_button,
-                build_status_chip(str(self.detail["status"])),
-            ],
+            controls=controls,
         )
 
     def _build_breadcrumb(self) -> ft.Row:

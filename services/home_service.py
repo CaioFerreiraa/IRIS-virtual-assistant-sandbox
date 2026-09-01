@@ -8,10 +8,10 @@ class HomeService:
         self.session_factory = session_factory
 
     def module_has_arguments(self, module_id: int) -> bool:
-        # Verifica se um modulo executavel possui busca de argumentos.
+        # Verifica se um modulo executavel aceita argumento.
         processor, db = self._build_processor()
         try:
-            return processor.module_has_argument_search_by_id(module_id)
+            return processor.module_accepts_argument_by_id(module_id)
         except Exception as error:
             print(error)
             return False
@@ -51,4 +51,4 @@ class HomeService:
     def _build_processor(self) -> tuple[CommandProcessor, object]:
         # Cria o processador com uma sessao de banco propria.
         db = self.session_factory()
-        return CommandProcessor(ModuleRepository(db)), db
+        return CommandProcessor(ModuleRepository(db), self.session_factory), db

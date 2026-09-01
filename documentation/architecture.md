@@ -141,7 +141,7 @@ Um módulo pode:
 - executar código Python;
 - pesquisar argumentos;
 - abrir um recurso;
-- futuramente chamar um serviço HTTP;
+- executar uma requisição HTTP declarativa opcional;
 - devolver resultado estruturado.
 - declarar metadados, README, runtime e variáveis em `module.json`.
 
@@ -179,7 +179,7 @@ O fluxo atual de um comando digitado é:
 4. o serviço da home cria uma sessão de banco;
 5. a resolução produz o `module_id` e o `CommandProcessor` carrega esse registro;
 6. o sistema valida se o módulo é executável;
-7. a Home despacha a operação para background e o `ModuleRunner` executa o entry point Python, ou o legado abre a URL configurada;
+7. a Home despacha a operação para background e o core escolhe entre a requisição HTTP declarada, o `ModuleRunner` para Python ou a abertura de URL do `GET` legado;
 8. o resultado é transformado em resposta estruturada;
 9. um log de sucesso ou erro é salvo;
 10. a interface apresenta um toaster;
@@ -247,15 +247,36 @@ Os resultados são normalizados para:
 }
 ```
 
+### Requisição HTTP declarativa
+
+Um manifesto pode declarar uma única requisição HTTP simples por meio do campo opcional `http_request`. A definição é validada pelo registry e sincronizada na relação opcional 1:1 `Module.http_request`. O `module.json` permanece como definição distribuível inicial. Enquanto a requisição não tiver sido personalizada, novas sincronizações atualizam o banco pelo manifesto; depois do primeiro salvamento do usuário, o banco passa a preservar a definição local. A ação “Voltar ao module.json” reaplica o manifesto validado e mantém o último argumento utilizado.
+
+O argumento HTTP é uma string persistida separadamente das configurações do módulo, ao salvar a aba Execução ou disparar a requisição, e pode substituir o placeholder literal `{{argument}}` na URL, nos parâmetros, nos cabeçalhos e no body.
+
+O serviço HTTP monta somente os campos habilitados, executa com timeout fixo e redirecionamentos habilitados e devolve status, duração, cabeçalhos e corpo limitado para exibição. Authorization com segredo continua proibida. Scripts vazios são exigidos no manifesto; textos de script personalizados podem ser armazenados localmente e exibidos, mas nunca são executados. Fluxos com múltiplas chamadas ou lógica personalizada continuam pertencendo a runtimes Python.
+
+### Processo externo iniciado por adaptador Python
+
+O runtime reconhecido pelo manifesto continua sendo Python. Um módulo raiz com
+auto start pode usar seu `start()` como adaptador mínimo para iniciar um processo
+externo e devolver um handle compatível com `subprocess.Popen`. O
+`ModuleRuntimeManager` mantém a propriedade desse handle e encerra somente o
+processo iniciado pela IRIS.
+
+O módulo comunitário `notes.javascript` aplica esse contrato para iniciar um
+servidor Node.js separado. A regra de notas, a API e a página HTML permanecem no
+módulo; o núcleo conhece apenas o adaptador Python, o processo devolvido e as
+requisições HTTP declaradas pelos filhos. Isso não transforma Node.js em runtime
+nativo da IRIS.
+
 ### URL
 
-O comportamento atual marcado como `GET` abre a URL no navegador. Ele ainda não representa uma implementação completa de comunicação HTTP entre núcleo e módulo.
+O comportamento legado marcado como `GET` continua abrindo a URL no navegador. Ele não utiliza `ModuleHttpRequest` e não mudou de significado com a execução HTTP declarativa.
 
-A arquitetura futura deve distinguir claramente:
+A arquitetura distingue:
 
 - abrir URL;
-- realizar `GET`;
-- realizar `POST`;
+- realizar uma requisição HTTP declarativa;
 - executar processo local;
 - executar entry point Python.
 
@@ -292,6 +313,8 @@ Erros de execução devem:
 O `FatalErrorHandler` protege eventos gerais, enquanto erros esperados de módulo devem ser tratados no fluxo da própria funcionalidade.
 
 Falhas de descoberta, validação, importação, configuração ou inicialização não entram no histórico de execução. Elas tornam somente o módulo afetado indisponível, aparecem de forma resumida no diagnóstico e são detalhadas no `module.log` local.
+
+Execuções HTTP registram somente método, status e duração. Corpo, cabeçalhos e query string completos não são persistidos no histórico.
 
 A rota do módulo também agrega falhas técnicas dos submódulos na aba “Erro”. Erros de uma execução normal continuam separados nessa decisão: são registrados no SQLite e aparecem na aba “Log”, sem transformar a requisição em falha estrutural do módulo.
 

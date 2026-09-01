@@ -23,8 +23,7 @@ ControlDimension = int | float | None
 
 DEFAULT_RESULT_CARD_HEIGHT = 180
 DEFAULT_RESULT_CARD_WIDTH = float("inf")
-DEFAULT_RESULT_CARD_COLLAPSED_HEIGHT = 62
-DEFAULT_RESULT_BODY_WIDTH = float("inf")
+MIN_RESULT_CARD_HEIGHT = 62
 
 
 def build_result_card(
@@ -33,32 +32,28 @@ def build_result_card(
     *,
     title: str = "Resultado da execução",
     body_title: str = "Corpo de retorno",
-    height: ControlDimension = DEFAULT_RESULT_CARD_HEIGHT,
     width: ControlDimension = DEFAULT_RESULT_CARD_WIDTH,
-    collapsed_height: ControlDimension = DEFAULT_RESULT_CARD_COLLAPSED_HEIGHT,
-    body_height: ControlDimension = None,
-    body_width: ControlDimension = DEFAULT_RESULT_BODY_WIDTH,
     expanded: bool = True,
 ) -> ft.Container:
     body_container = ft.Container(
-        expand=_should_expand_body(expanded, height, body_height),
+        expand=True,
         visible=expanded,
-        height=body_height,
-        width=body_width,
+        width=float("inf"),
         padding=12,
         bgcolor=BLUE_GREY,
         border_radius=6,
         content=_build_result_body(body_title, result),
     )
     toggle_button = _build_toggle_button(expanded)
-    card = ft.Container(
-        height=height if expanded else collapsed_height,
-        width=width,
+    card_content = ft.Container(
+        left=0,
+        top=0,
+        right=0,
+        bottom=0,
         padding=ft.Padding(left=18, top=14, right=18, bottom=16),
         bgcolor=SURFACE,
         border=ft.Border.all(1, BORDER),
         border_radius=8,
-        animate_size=240,
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         content=ft.Column(
             spacing=10,
@@ -81,16 +76,85 @@ def build_result_card(
             ],
         ),
     )
+    card = ft.Container(
+        height=(
+            DEFAULT_RESULT_CARD_HEIGHT
+            if expanded
+            else MIN_RESULT_CARD_HEIGHT
+        ),
+        width=width,
+        animate_size=240,
+    )
+    expanded_height = [DEFAULT_RESULT_CARD_HEIGHT]
+
+    resize_line = ft.Container(
+        width=54,
+        height=3,
+        border_radius=2,
+        bgcolor=BORDER,
+    )
+
+    def set_resize_highlighted(highlighted: bool) -> None:
+        resize_line.bgcolor = PASTEL_DARK_PURPLE if highlighted else BORDER
+        resize_line.height = 4 if highlighted else 3
+        _update_if_mounted(resize_line)
+
+    def on_resize(event: ft.DragUpdateEvent) -> None:
+        delta = event.primary_delta
+        if delta is None and event.local_delta is not None:
+            delta = event.local_delta.y
+        if delta is None:
+            return
+
+        current_height = float(card.height or MIN_RESULT_CARD_HEIGHT)
+        new_height = max(
+            float(MIN_RESULT_CARD_HEIGHT),
+            current_height + float(delta),
+        )
+        if new_height == card.height:
+            return
+        if not body_container.visible and new_height > MIN_RESULT_CARD_HEIGHT:
+            body_container.visible = True
+            _sync_toggle_button(toggle_button, True)
+            _update_if_mounted(toggle_button)
+            _update_if_mounted(body_container)
+        card.height = new_height
+        expanded_height[0] = new_height
+        _update_if_mounted(card)
+
+    resize_handle = ft.GestureDetector(
+        left=18,
+        right=18,
+        bottom=0,
+        height=12,
+        mouse_cursor=ft.MouseCursor.RESIZE_UP_DOWN,
+        tooltip="Arraste para redimensionar o resultado",
+        on_enter=lambda _: set_resize_highlighted(True),
+        on_exit=lambda _: set_resize_highlighted(False),
+        on_vertical_drag_start=lambda _: set_resize_highlighted(True),
+        on_vertical_drag_update=on_resize,
+        on_vertical_drag_end=lambda _: set_resize_highlighted(False),
+        content=ft.Container(
+            alignment=ft.Alignment.CENTER,
+            content=resize_line,
+        ),
+    )
+    card.content = ft.Stack(
+        expand=True,
+        controls=[card_content, resize_handle],
+    )
 
     def on_toggle(_: ft.ControlEvent) -> None:
         next_expanded = not body_container.visible
         body_container.visible = next_expanded
-        body_container.expand = _should_expand_body(
-            next_expanded,
-            height,
-            body_height,
-        )
-        card.height = height if next_expanded else collapsed_height
+        if next_expanded:
+            card.height = expanded_height[0]
+        else:
+            expanded_height[0] = max(
+                float(card.height or DEFAULT_RESULT_CARD_HEIGHT),
+                float(MIN_RESULT_CARD_HEIGHT),
+            )
+            card.height = MIN_RESULT_CARD_HEIGHT
         _sync_toggle_button(toggle_button, next_expanded)
         _update_if_mounted(toggle_button)
         _update_if_mounted(body_container)
@@ -188,14 +252,6 @@ def _format_result(result: Mapping[str, object]) -> str:
         indent=2,
         default=str,
     )
-
-
-def _should_expand_body(
-    expanded: bool,
-    height: ControlDimension,
-    body_height: ControlDimension,
-) -> bool:
-    return expanded and height is not None and body_height is None
 
 
 def _update_if_mounted(control: ft.Control) -> None:
