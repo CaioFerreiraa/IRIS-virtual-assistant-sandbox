@@ -150,6 +150,11 @@ Quando o serviço está pronto, a configuração de voz apresenta o botão “Te
 
 O nível do áudio também aparece abaixo do cartão de estado na configuração de voz. Somente o nível normalizado é encaminhado à interface; o áudio bruto permanece no serviço.
 
+No Windows, o monitor de nível inicializa o apartamento COM dentro da própria
+thread de captura antes de abrir o stream do PortAudio. Essa inicialização
+preserva a responsividade da interface e evita que endpoints WASAPI sejam
+apresentados como “Sem sinal” quando o dispositivo está entregando áudio.
+
 ## Ciclo de vida
 
 Ao iniciar a aplicação:

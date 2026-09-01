@@ -1,6 +1,10 @@
+import asyncio
+import ctypes
 import sys
 import unittest
 from unittest.mock import patch
+
+import numpy as np
 
 from services.audio_device_service import AudioDeviceService, MicrophoneLevelMonitor
 
@@ -111,6 +115,59 @@ class AudioDeviceServiceTests(unittest.TestCase):
 
         self.assertEqual([0.0], levels)
         self.assertEqual([True], errors)
+
+    @unittest.skipUnless(sys.platform == "win32", "Requer a API COM do Windows.")
+    def test_level_monitor_captures_audio_from_its_windows_worker(self) -> None:
+        class ComAwareInputStream:
+            def __init__(self, *, callback, **options):
+                del options
+                self.callback = callback
+
+            def __enter__(self):
+                context_token = ctypes.c_size_t()
+                result = ctypes.windll.ole32.CoGetContextToken(
+                    ctypes.byref(context_token)
+                )
+                if result != 0:
+                    raise OSError("A worker de áudio não inicializou COM.")
+                self.callback(
+                    np.array([[0.25]], dtype=np.float32),
+                    1,
+                    None,
+                    None,
+                )
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+        class ComAwareSoundDevice:
+            class default:
+                device = (17, -1)
+
+            InputStream = ComAwareInputStream
+
+            @staticmethod
+            def query_devices(index):
+                return {
+                    "index": index,
+                    "max_input_channels": 1,
+                    "default_samplerate": 48000,
+                }
+
+        levels = []
+        errors = []
+        monitor = MicrophoneLevelMonitor(
+            lambda level: (levels.append(level), monitor.stop()),
+            input_device_index=17,
+            on_error=lambda: errors.append(True),
+        )
+
+        with patch.dict(sys.modules, {"sounddevice": ComAwareSoundDevice()}):
+            asyncio.run(monitor.start())
+
+        self.assertEqual([1.0], levels)
+        self.assertEqual([], errors)
 
 
 if __name__ == "__main__":
