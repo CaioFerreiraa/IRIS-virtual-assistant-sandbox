@@ -311,6 +311,11 @@ dos campos.
 ### Controles da janela
 
 Como a janela usa moldura personalizada, ações de minimizar, maximizar e fechar precisam manter comportamento consistente.
+A área externa da aplicação possui regiões transparentes nas quatro bordas e nos
+quatro cantos. Essas regiões iniciam o redimensionamento nativo da janela e
+preservam o tamanho mínimo de 1000 × 650 pixels configurado pelo Flet. O header
+continua responsável por mover, maximizar e restaurar a janela, enquanto a
+borda interna da sidebar redimensiona somente o menu lateral.
 
 ## Estados visuais
 

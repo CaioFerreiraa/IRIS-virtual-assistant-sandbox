@@ -23,6 +23,7 @@ from ui.shared.components.sidebar import (
     build_sidebar,
 )
 from ui.shared.components.toaster_handler import ToasterHandler
+from ui.shared.components.window_resize import build_window_resize_handles
 from ui.theme.colors import APP_BACKGROUND
 from ui.theme.fonts import DEFAULT_FONT, FONT_ASSETS
 
@@ -202,23 +203,27 @@ def get_app_container(
     page.on_route_change = fatal_error_handler.guard_callback(render_layout)
     fatal_error_handler.guard_call(render_layout)
 
+    layout = ft.Column(
+        expand=True,
+        spacing=0,
+        controls=[
+            ft.WindowDragArea(content=header_slot),
+            ft.Row(
+                expand=True,
+                spacing=0,
+                vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                controls=[
+                    sidebar_slot,
+                    route_slot,
+                ],
+            ),
+        ],
+    )
     return ft.Container(
         expand=True,
         bgcolor=APP_BACKGROUND,
-        content=ft.Column(
+        content=ft.Stack(
             expand=True,
-            spacing=0,
-            controls=[
-                ft.WindowDragArea(content=header_slot),
-                ft.Row(
-                    expand=True,
-                    spacing=0,
-                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
-                    controls=[
-                        sidebar_slot,
-                        route_slot,
-                    ],
-                ),
-            ],
+            controls=[layout, *build_window_resize_handles(page)],
         ),
     )
