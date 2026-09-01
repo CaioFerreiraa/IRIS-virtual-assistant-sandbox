@@ -1,0 +1,19 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "notes.javascript.open",
+        "name": "Abrir notas",
+        "call_name": "abrir notas",
+        "icon": "open_in_browser",
+        "parent_public_key": "notes.javascript",
+        "description": "Abre a interface local do serviço de notas no navegador.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": false
+    },
+    "variables": []
+}

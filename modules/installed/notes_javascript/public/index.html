@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Notas</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --background: #f8f6fb;
+            --surface: #ffffff;
+            --primary: #6f5b7c;
+            --primary-soft: #eee7f4;
+            --border: #ddd5e3;
+            --text: #332b38;
+            --muted: #756c7b;
+            --success: #dff2e5;
+            --error: #f7dfe3;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--background);
+            color: var(--text);
+            font-family: "Segoe UI", sans-serif;
+        }
+
+        main {
+            width: min(760px, calc(100% - 32px));
+            margin: 40px auto;
+        }
+
+        header { margin-bottom: 24px; }
+        h1 { margin: 0 0 6px; font-size: 32px; }
+        header p { margin: 0; color: var(--muted); }
+
+        .card {
+            margin-bottom: 18px;
+            padding: 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(71, 61, 83, 0.08);
+        }
+
+        form { display: grid; gap: 12px; }
+
+        textarea {
+            width: 100%;
+            min-height: 96px;
+            resize: vertical;
+            padding: 12px;
+            color: var(--text);
+            background: #fcfbfd;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            font: inherit;
+        }
+
+        textarea:focus {
+            outline: 2px solid var(--primary-soft);
+            border-color: var(--primary);
+        }
+
+        button {
+            min-height: 38px;
+            padding: 8px 14px;
+            color: #ffffff;
+            background: var(--primary);
+            border: 0;
+            border-radius: 5px;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 600;
+        }
+
+        button.secondary { color: var(--text); background: var(--primary-soft); }
+        button.danger { color: #7b303b; background: var(--error); }
+        button:disabled { cursor: wait; opacity: 0.65; }
+
+        .feedback {
+            display: none;
+            margin-bottom: 18px;
+            padding: 12px 14px;
+            border-radius: 7px;
+        }
+
+        .feedback.visible { display: block; }
+        .feedback.success { background: var(--success); }
+        .feedback.error { background: var(--error); }
+
+        .list-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .list-header h2 { margin: 0; font-size: 20px; }
+        .loading, .empty { padding: 24px 8px; text-align: center; color: var(--muted); }
+        .notes { display: grid; gap: 10px; }
+
+        .note {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 14px;
+            align-items: center;
+            padding: 14px;
+            background: #fcfbfd;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .note-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .note-id { margin-top: 5px; color: var(--muted); font-size: 12px; }
+        .actions { display: flex; gap: 8px; }
+
+        @media (max-width: 560px) {
+            main { margin: 24px auto; }
+            .note { grid-template-columns: 1fr; }
+            .actions { justify-content: flex-end; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <h1>Notas</h1>
+            <p>Demonstração local integrada à IRIS.</p>
+        </header>
+
+        <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+
+        <section class="card" aria-labelledby="create-title">
+            <h2 id="create-title">Nova nota</h2>
+            <form id="note-form">
+                <textarea id="note-text" maxlength="500" required placeholder="Digite o texto da nota"></textarea>
+                <button id="create-button" type="submit">Criar nota</button>
+            </form>
+        </section>
+
+        <section class="card" aria-labelledby="notes-title">
+            <div class="list-header">
+                <h2 id="notes-title">Notas salvas</h2>
+                <button id="refresh-button" class="secondary" type="button">Atualizar</button>
+            </div>
+            <div id="loading" class="loading" hidden>Carregando notas...</div>
+            <div id="empty" class="empty" hidden>Nenhuma nota cadastrada.</div>
+            <div id="notes" class="notes"></div>
+        </section>
+    </main>
+
+    <script>
+        const feedback = document.querySelector("#feedback");
+        const form = document.querySelector("#note-form");
+        const noteText = document.querySelector("#note-text");
+        const createButton = document.querySelector("#create-button");
+        const refreshButton = document.querySelector("#refresh-button");
+        const loading = document.querySelector("#loading");
+        const empty = document.querySelector("#empty");
+        const notesContainer = document.querySelector("#notes");
+
+        function showFeedback(message, success) {
+            feedback.textContent = message;
+            feedback.className = `feedback visible ${success ? "success" : "error"}`;
+        }
+
+        function setLoading(isLoading) {
+            loading.hidden = !isLoading;
+            createButton.disabled = isLoading;
+            refreshButton.disabled = isLoading;
+        }
+
+        async function requestJson(path, options = {}) {
+            const response = await fetch(path, options);
+            const payload = await response.json();
+            if (!response.ok || payload.success === false) {
+                throw new Error(payload.message || "Não foi possível concluir a operação.");
+            }
+            return payload;
+        }
+
+        function buildNoteElement(note) {
+            const article = document.createElement("article");
+            article.className = "note";
+
+            const content = document.createElement("div");
+            const text = document.createElement("p");
+            text.className = "note-text";
+            text.textContent = note.text;
+            const identifier = document.createElement("div");
+            identifier.className = "note-id";
+            identifier.textContent = `Nota #${note.id}`;
+            content.append(text, identifier);
+
+            const actions = document.createElement("div");
+            actions.className = "actions";
+            const editButton = document.createElement("button");
+            editButton.type = "button";
+            editButton.className = "secondary";
+            editButton.textContent = "Editar";
+            editButton.addEventListener("click", () => editNote(note));
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.className = "danger";
+            deleteButton.textContent = "Excluir";
+            deleteButton.addEventListener("click", () => deleteNote(note));
+            actions.append(editButton, deleteButton);
+
+            article.append(content, actions);
+            return article;
+        }
+
+        function renderNotes(notes) {
+            notesContainer.replaceChildren();
+            empty.hidden = notes.length !== 0;
+            notes.forEach((note) => notesContainer.append(buildNoteElement(note)));
+        }
+
+        async function loadNotes() {
+            setLoading(true);
+            try {
+                const payload = await requestJson("/api/notes");
+                renderNotes(payload.data);
+            } catch (error) {
+                showFeedback(error.message, false);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function createNote(event) {
+            event.preventDefault();
+            setLoading(true);
+            try {
+                const payload = await requestJson("/api/notes", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: noteText.value }),
+                });
+                noteText.value = "";
+                showFeedback(payload.message, true);
+                await loadNotes();
+            } catch (error) {
+                showFeedback(error.message, false);
+                setLoading(false);
+            }
+        }
+
+        async function editNote(note) {
+            const updatedText = window.prompt("Novo texto da nota:", note.text);
+            if (updatedText === null) {
+                return;
+            }
+            setLoading(true);
+            try {
+                const payload = await requestJson(`/api/notes/${note.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: updatedText }),
+                });
+                showFeedback(payload.message, true);
+                await loadNotes();
+            } catch (error) {
+                showFeedback(error.message, false);
+                setLoading(false);
+            }
+        }
+
+        async function deleteNote(note) {
+            if (!window.confirm(`Excluir a nota #${note.id}?`)) {
+                return;
+            }
+            setLoading(true);
+            try {
+                const payload = await requestJson(`/api/notes/${note.id}`, {
+                    method: "DELETE",
+                });
+                showFeedback(payload.message, true);
+                await loadNotes();
+            } catch (error) {
+                showFeedback(error.message, false);
+                setLoading(false);
+            }
+        }
+
+        form.addEventListener("submit", createNote);
+        refreshButton.addEventListener("click", loadNotes);
+        loadNotes();
+    </script>
+</body>
+</html>

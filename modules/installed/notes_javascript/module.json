@@ -1,0 +1,19 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "notes.javascript",
+        "name": "Notas",
+        "call_name": "notas",
+        "icon": "note_stack",
+        "parent_public_key": null,
+        "description": "Serviço local de notas executado por um backend JavaScript.",
+        "readme": "README.md",
+        "is_executable": false
+    },
+    "runtime": {
+        "type": "python",
+        "entrypoint": "main.py",
+        "supports_auto_start": true
+    },
+    "variables": []
+}

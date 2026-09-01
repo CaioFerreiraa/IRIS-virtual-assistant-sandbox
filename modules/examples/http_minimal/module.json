@@ -1,0 +1,40 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "example.http",
+        "name": "Exemplo HTTP",
+        "call_name": "exemplo http",
+        "icon": "http",
+        "parent_public_key": null,
+        "description": "Executa uma requisição HTTP simples de demonstração.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": null,
+    "http_request": {
+        "method": "GET",
+        "url": "https://httpbin.org/anything",
+        "argument_enabled": true,
+        "params": [
+            {
+                "key": "search",
+                "value": "{{argument}}",
+                "description": "Texto de demonstração enviado como query parameter.",
+                "enabled": true
+            }
+        ],
+        "authorization": {
+            "type": "none"
+        },
+        "headers": [],
+        "body": {
+            "mode": "none",
+            "content": ""
+        },
+        "scripts": {
+            "pre_request": "",
+            "post_response": ""
+        }
+    },
+    "variables": []
+}

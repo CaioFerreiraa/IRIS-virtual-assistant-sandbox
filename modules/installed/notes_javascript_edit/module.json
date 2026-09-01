@@ -1,0 +1,40 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "notes.javascript.edit",
+        "name": "Editar nota",
+        "call_name": "editar nota",
+        "icon": "edit_note",
+        "parent_public_key": "notes.javascript",
+        "description": "Atualiza uma nota existente no backend JavaScript local.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": null,
+    "http_request": {
+        "method": "PUT",
+        "url": "http://127.0.0.1:8765/api/notes/{{argument}}",
+        "argument_enabled": true,
+        "params": [],
+        "authorization": {
+            "type": "none"
+        },
+        "headers": [
+            {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "Indica que o corpo contém JSON.",
+                "enabled": true
+            }
+        ],
+        "body": {
+            "mode": "raw_json",
+            "content": "{\"text\":\"Nota {{argument}} atualizada pela IRIS\"}"
+        },
+        "scripts": {
+            "pre_request": "",
+            "post_response": ""
+        }
+    },
+    "variables": []
+}

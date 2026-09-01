@@ -1,0 +1,33 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "notes.javascript.delete",
+        "name": "Deletar nota",
+        "call_name": "deletar nota",
+        "icon": "delete_sweep",
+        "parent_public_key": "notes.javascript",
+        "description": "Exclui uma nota existente do backend JavaScript local.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": null,
+    "http_request": {
+        "method": "DELETE",
+        "url": "http://127.0.0.1:8765/api/notes/{{argument}}",
+        "argument_enabled": true,
+        "params": [],
+        "authorization": {
+            "type": "none"
+        },
+        "headers": [],
+        "body": {
+            "mode": "none",
+            "content": ""
+        },
+        "scripts": {
+            "pre_request": "",
+            "post_response": ""
+        }
+    },
+    "variables": []
+}
