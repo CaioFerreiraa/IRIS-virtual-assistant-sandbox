@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from typing import TypedDict
 
 import numpy as np
@@ -198,6 +199,23 @@ MicrophoneLevelCallback = Callable[[float], None]
 MicrophoneErrorCallback = Callable[[], None]
 
 
+@contextmanager
+def _windows_com_apartment():
+    if sys.platform != "win32":
+        yield
+        return
+
+    import ctypes
+
+    result = ctypes.windll.ole32.CoInitializeEx(None, 0)
+    if result not in (0, 1):
+        raise OSError(f"Não foi possível inicializar COM (HRESULT {result}).")
+    try:
+        yield
+    finally:
+        ctypes.windll.ole32.CoUninitialize()
+
+
 class MicrophoneLevelMonitor:
     """Captura somente o nível do microfone selecionado para o visualizador."""
 
@@ -218,12 +236,16 @@ class MicrophoneLevelMonitor:
     async def start(self) -> None:
         self._running = True
         try:
-            await asyncio.to_thread(self._capture)
+            await asyncio.to_thread(self._capture_in_audio_context)
         finally:
             self._running = False
 
     def stop(self) -> None:
         self._running = False
+
+    def _capture_in_audio_context(self) -> None:
+        with _windows_com_apartment():
+            self._capture()
 
     def _capture(self) -> None:
         try:

@@ -19,6 +19,11 @@ WAKE_WORD_PATTERN = re.compile(r"\b[ií]ris\b", re.IGNORECASE)
 LEADING_WAKE_WORD_PATTERN = re.compile(r"^\s*[ií]ris\b[\s,.!?;:-]*", re.IGNORECASE)
 SEND_WORD_PATTERN = re.compile(r"(?:^|\s)enviar[.!?,;:]*\s*$", re.IGNORECASE)
 MAX_BASIC_UTTERANCE_SECONDS = 30.0
+BASIC_TRANSCRIPTION_SAMPLE_RATE = 16000
+
+
+class UnsupportedBasicAudioFormatError(RuntimeError):
+    """Indica que o microfone escolhido não oferece um formato compatível."""
 
 
 class SpeechEventKind(StrEnum):
@@ -62,11 +67,22 @@ class SpeechService(ABC):
         self._on_event = on_event
         self._stop_event = threading.Event()
         self._worker: threading.Thread | None = None
+        self._command_lock = threading.RLock()
         self._command_enabled = True
         self._last_audio_event_at = 0.0
         self._voice_active = False
         self._last_command = ""
         self._committed_command = ""
+
+    def replace_active_command(self, text: str) -> None:
+        """Substitui o comando acumulado quando o usuário edita o input."""
+        with self._command_lock:
+            if not self._voice_active:
+                return
+
+            normalized_text = " ".join((text or "").strip().split())
+            self._last_command = normalized_text
+            self._committed_command = normalized_text
 
     @property
     def is_running(self) -> bool:
@@ -91,26 +107,33 @@ class SpeechService(ABC):
         if worker and worker is not threading.current_thread():
             worker.join(timeout=3)
         self._worker = None
-        self._voice_active = False
-        self._last_command = ""
-        self._committed_command = ""
+        with self._command_lock:
+            self._voice_active = False
+            self._last_command = ""
+            self._committed_command = ""
 
     def deactivate_command(self) -> None:
-        if not self._voice_active:
-            return
-        self._voice_active = False
-        self._last_command = ""
-        self._committed_command = ""
-        self._emit(SpeechEventKind.DEACTIVATED)
+        with self._command_lock:
+            if not self._voice_active:
+                return
+            self._voice_active = False
+            self._last_command = ""
+            self._committed_command = ""
+            self._emit(SpeechEventKind.DEACTIVATED)
 
     def set_command_enabled(self, enabled: bool) -> None:
         """Permite a palavra de ativação somente no contexto visual autorizado."""
-        self._command_enabled = enabled
-        if not enabled:
-            self.deactivate_command()
+        with self._command_lock:
+            self._command_enabled = enabled
+            if not enabled:
+                self.deactivate_command()
 
     def process_transcription(self, text: str, *, is_partial: bool) -> None:
         """Converte transcrições do backend em eventos de comando da IRIS."""
+        with self._command_lock:
+            self._process_transcription(text, is_partial=is_partial)
+
+    def _process_transcription(self, text: str, *, is_partial: bool) -> None:
         if not self._command_enabled:
             return
 
@@ -280,11 +303,31 @@ class FasterWhisperSpeechService(SpeechService):
         self._audio_queue: queue.Queue[Any] = queue.Queue(maxsize=100)
 
     def _run(self) -> None:
+        if self.settings.sample_rate != BASIC_TRANSCRIPTION_SAMPLE_RATE:
+            raise ValueError(
+                "O modo básico aceita somente a taxa de amostragem de 16.000 Hz nesta versão. "
+                "Ajuste a configuração de voz antes de iniciar o reconhecimento."
+            )
+
         import numpy as np
         import sounddevice as sd
         from faster_whisper import WhisperModel
 
-        input_device_index = self._resolve_input_device_index()
+        input_device_index = self._resolve_basic_input_device_index(
+            sd,
+            self.settings.input_device_index,
+        )
+        extra_settings, capture_strategy, host_api_name = self._resolve_basic_input_format(
+            sd,
+            input_device_index,
+        )
+        logging.info(
+            "Captura básica configurada: device_index=%s host_api=%s sample_rate=%s strategy=%s",
+            input_device_index,
+            host_api_name or "unknown",
+            BASIC_TRANSCRIPTION_SAMPLE_RATE,
+            capture_strategy,
+        )
         if self._model is None:
             self._model = WhisperModel(
                 self.settings.model_size,
@@ -341,9 +384,13 @@ class FasterWhisperSpeechService(SpeechService):
             "blocksize": block_size,
         }
         stream_options["device"] = input_device_index
+        if extra_settings is not None:
+            stream_options["extra_settings"] = extra_settings
+
+        ready_message = self._basic_ready_message(capture_strategy)
 
         with sd.InputStream(**stream_options):
-            self._emit(SpeechEventKind.READY, message="Voz pronta. Diga “IRIS” para começar.")
+            self._emit(SpeechEventKind.READY, message=ready_message)
             while not self._stop_event.is_set():
                 try:
                     data = self._audio_queue.get(timeout=0.2)
@@ -376,6 +423,89 @@ class FasterWhisperSpeechService(SpeechService):
                 if silence_duration < self.settings.silence_duration:
                     continue
                 finish_utterance()
+
+    @staticmethod
+    def _basic_ready_message(capture_strategy: str) -> str:
+        if capture_strategy == "wasapi_auto_convert_16000":
+            return (
+                "Voz pronta com ajuste de compatibilidade do Windows. "
+                "Diga “IRIS” para começar."
+            )
+        return "Voz pronta. Diga “IRIS” para começar."
+
+    @staticmethod
+    def _resolve_basic_input_device_index(sd: Any, input_device_index: int | None = None) -> int:
+        """Mantém uma seleção explícita e usa o padrão apenas quando solicitado."""
+        if input_device_index is not None:
+            try:
+                device_info = sd.query_devices(input_device_index)
+                if int(device_info.get("max_input_channels", 0)) > 0:
+                    return input_device_index
+            except Exception:
+                pass
+            raise NoInputDeviceError(
+                "O microfone selecionado não está disponível. "
+                "Nenhum outro microfone foi usado. Recarregue a lista e escolha um dispositivo válido."
+            )
+
+        default_device = sd.default.device
+        if isinstance(default_device, (list, tuple)):
+            default_device = default_device[0] if default_device else None
+        try:
+            default_index = int(default_device)
+            device_info = sd.query_devices(default_index)
+            if default_index >= 0 and int(device_info.get("max_input_channels", 0)) > 0:
+                return default_index
+        except Exception:
+            pass
+        raise NoInputDeviceError(
+            "Nenhum microfone disponível. Conecte um microfone ou selecione um dispositivo válido."
+        )
+
+    @staticmethod
+    def _resolve_basic_input_format(sd: Any, input_device_index: int) -> tuple[Any | None, str, str]:
+        """Seleciona captura direta ou conversão WASAPI no mesmo dispositivo."""
+        device_info = sd.query_devices(input_device_index)
+        host_api_index = int(device_info.get("hostapi", -1))
+        host_api_name = ""
+        if host_api_index >= 0:
+            try:
+                host_api_name = str(sd.query_hostapis(host_api_index).get("name", ""))
+            except Exception:
+                host_api_name = ""
+
+        format_options = {
+            "device": input_device_index,
+            "channels": 1,
+            "dtype": "float32",
+            "samplerate": BASIC_TRANSCRIPTION_SAMPLE_RATE,
+        }
+        check_input_settings = getattr(sd, "check_input_settings", None)
+        if not callable(check_input_settings):
+            return None, "direct_16000", host_api_name
+        try:
+            check_input_settings(**format_options)
+            return None, "direct_16000", host_api_name
+        except Exception:
+            if "wasapi" not in host_api_name.casefold():
+                raise UnsupportedBasicAudioFormatError(
+                    "O microfone selecionado não aceita captura compatível em 16.000 Hz. "
+                    "Nenhum outro microfone foi usado. Verifique o formato do dispositivo no Windows."
+                ) from None
+
+        wasapi_settings = sd.WasapiSettings(exclusive=False, auto_convert=True)
+        try:
+            check_input_settings(
+                **format_options,
+                extra_settings=wasapi_settings,
+            )
+        except Exception:
+            raise UnsupportedBasicAudioFormatError(
+                "O microfone selecionado não aceita captura compatível em 16.000 Hz, "
+                "mesmo com o ajuste de compatibilidade do Windows. Nenhum outro microfone foi usado. "
+                "Verifique o formato do dispositivo ou escolha outro microfone."
+            ) from None
+        return wasapi_settings, "wasapi_auto_convert_16000", host_api_name
 
     def _transcribe_audio(self, audio: Any) -> None:
         segments, _ = self._model.transcribe(
@@ -423,6 +553,8 @@ class RealtimeSpeechService(SpeechService):
             realtime_processing_pause=self.settings.realtime_processing_pause,
             post_speech_silence_duration=self.settings.silence_duration,
             min_length_of_recording=self.settings.min_recording_duration,
+            on_recording_start=self._on_recording_start,
+            on_recording_stop=self._on_recording_stop,
             silero_sensitivity=self.settings.silero_sensitivity,
             webrtc_sensitivity=self.settings.webrtc_sensitivity,
             faster_whisper_vad_filter=self.settings.vad_filter,
@@ -436,6 +568,14 @@ class RealtimeSpeechService(SpeechService):
 
         while not self._stop_event.is_set():
             self._recorder.text(self._on_final)
+
+    def _on_recording_start(self) -> None:
+        if not self._stop_event.is_set():
+            self._emit(SpeechEventKind.CAPTURE_STARTED)
+
+    def _on_recording_stop(self) -> None:
+        if not self._stop_event.is_set():
+            self._emit(SpeechEventKind.CAPTURE_FINISHED)
 
     def _on_partial(self, text: str) -> None:
         if not self._stop_event.is_set():

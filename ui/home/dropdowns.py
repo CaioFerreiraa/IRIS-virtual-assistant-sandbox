@@ -289,6 +289,62 @@ def resolve_voice_module_option(
             )
 
     if not candidates:
+        for module_option in module_options:
+            if not option_is_executable(module_option):
+                continue
+            module_path = option_path(module_option)
+            for command_path in option_command_paths(module_option):
+                leaf_command = command_path.rsplit("/", 1)[-1].strip()
+                leaf_words = [
+                    word
+                    for word in ui.text_utils.normalize(leaf_command).split()
+                    if word
+                ]
+                if not leaf_words or normalized_words[: len(leaf_words)] != leaf_words:
+                    continue
+                argument = " ".join(original_words[len(leaf_words):]).strip(" ,.!?;:")
+                candidates.append(
+                    (
+                        len(leaf_words),
+                        option_module_id(module_option),
+                        module_path,
+                        argument,
+                    )
+                )
+
+    if not candidates:
+        for group_option in module_options:
+            if option_is_executable(group_option):
+                continue
+            group_path = option_path(group_option)
+            for command_path in option_command_paths(group_option):
+                group_command = command_path.rsplit("/", 1)[-1].strip()
+                group_words = [
+                    word
+                    for word in ui.text_utils.normalize(group_command).split()
+                    if word
+                ]
+                if not group_words or normalized_words[: len(group_words)] != group_words:
+                    continue
+                argument = " ".join(original_words[len(group_words):]).strip(" ,.!?;:")
+                descendant_prefix = f"{group_path} / "
+                for module_option in module_options:
+                    module_path = option_path(module_option)
+                    if not (
+                        option_is_executable(module_option)
+                        and module_path.startswith(descendant_prefix)
+                    ):
+                        continue
+                    candidates.append(
+                        (
+                            len(group_words),
+                            option_module_id(module_option),
+                            module_path,
+                            argument,
+                        )
+                    )
+
+    if not candidates:
         return None
     longest_match = max(candidate[0] for candidate in candidates)
     best_candidates = [candidate for candidate in candidates if candidate[0] == longest_match]

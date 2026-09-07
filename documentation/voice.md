@@ -37,9 +37,15 @@ Fluxo:
 
 Esse modo usa menos componentes e não produz texto parcial. Assim que o limiar de volume inicia a captura, o input apresenta “Ouvindo...” como retorno visual. A palavra de ativação ainda só pode ser confirmada depois do silêncio e da transcrição final.
 
+Nesta etapa, o modo básico aceita somente áudio de entrada em 16.000 Hz, pois entrega um array NumPy diretamente ao Faster-Whisper. No Windows, a IRIS primeiro tenta abrir o microfone selecionado nesse formato. Quando o endpoint usa WASAPI e não aceita 16.000 Hz diretamente, a aplicação pode solicitar ao mixer compartilhado do Windows a conversão automática da taxa, mantendo o mesmo dispositivo selecionado.
+
+Essa compatibilidade possui duas estratégias técnicas: `direct_16000` e `wasapi_auto_convert_16000`. Ela nunca representa a troca para outro microfone. Se o dispositivo explicitamente selecionado estiver indisponível ou se as duas estratégias falharem, o modo básico informa o erro e não usa o microfone padrão silenciosamente.
+
+Quando a conversão WASAPI é necessária, o evento de prontidão informa “Voz pronta com ajuste de compatibilidade do Windows” sem apresentar nome ou índice do dispositivo. Na captura direta, a mensagem de prontidão permanece inalterada.
+
 ### Tempo real
 
-O modo avançado usa o RealtimeSTT com Faster-Whisper como mecanismo de transcrição.
+O modo avançado usa o RealtimeSTT com Faster-Whisper como mecanismo de transcrição. Os callbacks de início e fim de gravação do RealtimeSTT alimentam o mesmo retorno visual “Ouvindo...” usado pelo modo básico.
 
 Por padrão, podem ser carregados:
 
@@ -47,6 +53,8 @@ Por padrão, podem ser carregados:
 - um modelo menor para atualizações parciais.
 
 O intervalo parcial, o modelo em tempo real e o `beam size` permitem equilibrar latência e consumo. Intervalos muito baixos ou modelos grandes podem aumentar significativamente CPU, GPU e memória.
+
+A conversão automática WASAPI descrita para o modo básico não é usada pelo RealtimeSTT. A compatibilidade de taxa e a identidade do dispositivo no modo em tempo real continuam dependendo do fluxo próprio dessa biblioteca e exigem validação separada.
 
 ## Palavra de ativação
 
@@ -59,17 +67,60 @@ A aceitação da palavra de ativação fica habilitada na rota Início e na rota
 Antes da ativação, transcrições comuns são ignoradas. Depois da ativação:
 
 - a palavra “IRIS” é retirada da consulta;
+- a dica visual muda de “Ouvindo...” para “IRIS ativada” e permanece assim durante o comando;
 - o input recebe foco;
 - a borda e a sombra ficam roxas;
 - o texto parcial substitui o texto provisório anterior;
 - as recomendações são recalculadas;
-- a dica “Enviar para concluir” fica visível.
+- a dica de ativação fica visível até o comando ser concluído ou cancelado.
 
-No modo básico, o retorno “Ouvindo...” indica apenas que uma frase está sendo capturada. Ele não significa que a palavra “IRIS” já foi reconhecida. Não é necessário clicar no input: enquanto a voz está habilitada e a rota permite comandos, a captura permanece pronta para detectar fala.
+Se o usuário editar manualmente o texto durante uma interação ativa, o conteúdo
+visível substitui o comando acumulado pelo serviço. As transcrições seguintes
+continuam a partir dessa versão corrigida, e apagar o input impede que trechos
+antigos reapareçam. Atualizações programáticas produzidas pela própria voz não
+disparam essa sincronização de volta para o serviço.
+
+O retorno “Ouvindo...” indica apenas que uma frase está sendo capturada. Ele não significa que a palavra “IRIS” já foi reconhecida. Não é necessário clicar no input: enquanto a voz está habilitada e a rota permite comandos, a captura permanece pronta para detectar fala.
 
 ## Conclusão por voz
 
-O comando somente é executado automaticamente quando “enviar” aparece no final da fala.
+Um comando resolvido de forma inequívoca é executado automaticamente depois de
+dois segundos adicionais sem fala ou edição. Esse atraso é independente de
+`silence_duration`, que pertence ao transcritor e apenas encerra a frase.
+`silence_duration` define quando uma fala terminou; `submit_delay`, atualmente
+fixado em 2 segundos na Home, é a espera adicional antes da execução automática.
+
+A resolução aceita tanto o caminho falado completo quanto o nome isolado de uma
+folha executável. Por exemplo, “verde” pode resolver `Abrir / Web / Verde` quando
+essa correspondência é única. Falar o nome de um grupo como “web” não escolhe
+silenciosamente entre seus descendentes: quando existem vários executáveis, a
+Home mostra as opções e aguarda uma escolha.
+
+Nova fala ou edição cancela a espera anterior. Ao terminar o atraso, a Home
+resolve novamente o texto atual e confirma que a sessão de voz, a rota, a
+pré-seleção, o argumento e o estado de execução continuam válidos. Comandos
+ambíguos, módulos organizacionais, argumentos obrigatórios vazios e pesquisas
+com vários argumentos permanecem aguardando interação. Quando a pesquisa de
+argumentos retorna uma única opção, ela é pré-selecionada antes do envio.
+
+Uma sugestão de argumento ainda não equivale a uma confirmação. Pesquisas
+pendentes ou com mais de um resultado impedem o envio automático. Um resultado
+único pode ser pré-selecionado e enviado por silêncio somente quando a interação
+não começou com um argumento padrão salvo.
+
+Quando o módulo possui argumento padrão salvo, a Home mostra esse valor, mas
+exige confirmação explícita por “enviar” ou pelo botão. Essa exigência permanece
+durante toda a interação: falar ou editar outro valor substitui apenas o texto
+transitório enviado na execução atual e não modifica a configuração persistida.
+Por isso, o silêncio também não executa depois dessa substituição.
+
+O envio automático fica bloqueado quando não há módulo, a resolução é ambígua,
+o item é apenas organizacional, a Home não está ativa, outra execução está em
+andamento, falta um argumento obrigatório, a pesquisa ainda está pendente, há
+vários argumentos compatíveis ou existe um argumento padrão salvo.
+
+O comando também pode ser executado imediatamente quando “enviar” aparece no
+final da fala.
 
 Exemplo:
 
@@ -149,6 +200,11 @@ Quando o serviço está pronto, a configuração de voz apresenta o botão “Te
 - as frases reconhecidas ficam visíveis apenas durante a sessão da tela e não são persistidas.
 
 O nível do áudio também aparece abaixo do cartão de estado na configuração de voz. Somente o nível normalizado é encaminhado à interface; o áudio bruto permanece no serviço.
+
+No Windows, o monitor de nível inicializa o apartamento COM dentro da própria
+thread de captura antes de abrir o stream do PortAudio. Essa inicialização
+preserva a responsividade da interface e evita que endpoints WASAPI sejam
+apresentados como “Sem sinal” quando o dispositivo está entregando áudio.
 
 ## Ciclo de vida
 

@@ -77,7 +77,7 @@ O header contém:
 - indicador do estado do reconhecimento de voz;
 - ações da janela.
 
-O indicador de voz abre um diálogo ao ser clicado, independentemente do estado atual. O diálogo lista os estados possíveis do microfone com seus ícones e cores, destacando o estado ativo. Seu tooltip também descreve se o backend está carregando, com erro, pronto no modo básico, pronto no modo completo, desativado, indisponível ou pausado fora das rotas autorizadas. Durante uma ativação por “IRIS”, o indicador recebe uma sombra luminosa na cor do estado atual. No modo básico, o input também apresenta “Ouvindo...” enquanto uma frase é capturada; esse retorno antecede a transcrição final e não confirma por si só a palavra de ativação.
+O indicador de voz abre um diálogo ao ser clicado, independentemente do estado atual. O diálogo lista os estados possíveis do microfone com seus ícones e cores, destacando o estado ativo. Seu tooltip também descreve se o backend está carregando, com erro, pronto no modo básico, pronto no modo completo, desativado, indisponível ou pausado fora das rotas autorizadas. Durante uma ativação por “IRIS”, o indicador recebe uma sombra luminosa na cor do estado atual. O input apresenta “Ouvindo...” enquanto uma frase é capturada; depois da confirmação da palavra de ativação, muda para “IRIS ativada” e permanece assim enquanto o comando está em andamento.
 
 ### Sidebar
 
@@ -155,6 +155,11 @@ A home possui:
 
 O ícone à esquerda do input acompanha o módulo selecionado. As sugestões também
 usam o ícone persistido; quando não há seleção, o input mostra `explore`.
+
+Os dropdowns de módulos e argumentos fecham ao clicar no fundo, na logo ou no
+título da Home. Cliques no input e dentro dos próprios dropdowns preservam a
+interação até a seleção, e fechar uma lista não apaga o texto nem o módulo já
+selecionado.
 
 A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. O campo secundário usa uma instrução genérica porque pode receber arquivos, cidades ou outros tipos de argumento. Módulos com busca pedem esse valor por padrão, mas podem usar `should_request_argument(variables)` para dispensá-lo quando uma configuração já fornece o valor necessário. A execução acontece em background para manter a interface responsiva.
 
@@ -311,6 +316,11 @@ dos campos.
 ### Controles da janela
 
 Como a janela usa moldura personalizada, ações de minimizar, maximizar e fechar precisam manter comportamento consistente.
+A área externa da aplicação possui regiões transparentes nas quatro bordas e nos
+quatro cantos. Essas regiões iniciam o redimensionamento nativo da janela e
+preservam o tamanho mínimo de 1000 × 650 pixels configurado pelo Flet. O header
+continua responsável por mover, maximizar e restaurar a janela, enquanto a
+borda interna da sidebar redimensiona somente o menu lateral.
 
 ## Estados visuais
 

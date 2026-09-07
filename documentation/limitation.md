@@ -147,6 +147,10 @@ Limitações esperadas:
 - necessidade de configurar o microfone;
 - risco de falsos positivos na palavra de ativação.
 
+No modo básico, a captura suporta 16.000 Hz diretamente ou, em endpoints WASAPI compatíveis, por meio da conversão automática do mixer compartilhado do Windows. As duas tentativas mantêm o mesmo microfone selecionado. Dispositivos que não aceitem nenhuma estratégia permanecem indisponíveis e devem apresentar erro, sem troca silenciosa para outra entrada.
+
+Essa compatibilidade não se aplica ao modo em tempo real. O RealtimeSTT possui captura, validação de atividade de voz e tratamento de taxa próprios, que ainda precisam ser verificados separadamente em diferentes dispositivos Windows.
+
 A voz vem desativada por padrão. O primeiro uso pode baixar modelos grandes. A interface lista os microfones por solicitação do usuário, mas a descoberta ainda depende do PortAudio e dos drivers disponibilizados pelo sistema operacional.
 
 ## Rotinas

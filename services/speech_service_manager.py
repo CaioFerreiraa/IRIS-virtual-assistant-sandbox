@@ -97,6 +97,13 @@ class SpeechServiceManager:
         if service is not None:
             service.deactivate_command()
 
+    def replace_active_command(self, text: str) -> None:
+        """Sincroniza uma edição manual com a sessão de voz ativa."""
+        with self._lock:
+            service = self._service
+        if service is not None:
+            service.replace_active_command(text)
+
     def set_command_enabled(self, enabled: bool) -> None:
         """Habilita comandos falados apenas enquanto a rota Início está ativa."""
         with self._lock:

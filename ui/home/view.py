@@ -4,9 +4,15 @@ from dataclasses import dataclass
 
 import flet as ft
 import ui.home as ui
-from services.home_service import HomeService
+from services.home_service import HomeService, ModuleArgumentContext
 from services.speech_service import SpeechEvent, SpeechEventKind
 from services.speech_service_manager import SpeechServiceManager
+from services.voice_submission_service import (
+    ArgumentSource,
+    VoiceSubmissionReason,
+    VoiceSubmissionService,
+    VoiceSubmissionState,
+)
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import PASTEL_DARK_PURPLE
@@ -15,6 +21,8 @@ from ui.theme.fonts import TITLE_FONT
 
 LOGO_PATH = "assets/images/logo_transparent.png"
 DROPDOWN_HEIGHT = 360
+VOICE_SUBMIT_DELAY_SECONDS = 2.0
+HOME_ROUTES = {"", "/", "/home"}
 
 
 def build_home_view(
@@ -42,21 +50,25 @@ class HomeViewState:
         self.is_loading = False
         self.is_voice_active = False
         self.is_basic_capture_active = False
-        self._argument_capability_cache: dict[int, bool] = {}
+        self.active_voice_session_id = ""
+        self.command_revision = 0
+        self._voice_submit_task = None
+        self.argument_source = ArgumentSource.EMPTY
+        self.requires_explicit_confirmation = False
+        self.argument_match_count: int | None = None
+        self._argument_context_cache: dict[int, ModuleArgumentContext] = {}
         self.controls: HomeViewControls | None = None
         self.dropdowns: ui.dropdowns.HomeDropdowns | None = None
 
     def build(self) -> ft.Container:
         # Monta a view e inicializa o gerenciador de dropdowns.
         callbacks = HomeViewCallbacks(
-            on_send=self.send_request,
+            on_send=self.attempt_explicit_submit,
             on_command_change=self.refresh_module_suggestions,
             on_command_focus=self.show_module_suggestions_from_event,
             on_command_click=self.show_module_suggestions_from_event,
-            on_command_tap_outside=self.hide_dropdowns,
             on_argument_submit=self.execute_argument_from_event,
             on_argument_change=self.show_argument_suggestions_from_event,
-            on_argument_tap_outside=self.hide_dropdowns,
             on_dropdown_click=self.keep_dropdowns_open,
             on_background_click=self.hide_dropdowns,
             on_input_shell_click=self.show_module_suggestions_from_shell,
@@ -106,9 +118,13 @@ class HomeViewState:
 
     def clear_command_input(self, e=None) -> None:
         # Limpa texto, argumento e selecao atual do modulo.
+        self._cancel_voice_submit()
         controls = self._controls()
         controls.command_input_field.value = ""
         controls.argument_input_field.value = ""
+        self.argument_source = ArgumentSource.EMPTY
+        self.requires_explicit_confirmation = False
+        self.argument_match_count = None
         self._dropdowns().clear_selected_module()
         self._set_module_icon(None)
         self.sync_clear_button_visibility()
@@ -130,6 +146,7 @@ class HomeViewState:
     async def _apply_speech_event(self, event: SpeechEvent) -> None:
         controls = self._controls()
         if event.kind == SpeechEventKind.CAPTURE_STARTED:
+            self._cancel_voice_submit()
             self.is_basic_capture_active = True
             if not self.is_voice_active:
                 ui.input.set_voice_hint_text(controls.voice_hint, "Ouvindo...")
@@ -149,8 +166,10 @@ class HomeViewState:
             return
 
         if event.kind == SpeechEventKind.ACTIVATED:
+            self._cancel_voice_submit()
             self.is_voice_active = True
-            ui.input.set_voice_hint_text(controls.voice_hint, "“Enviar” para concluir")
+            self.active_voice_session_id = event.session_id
+            ui.input.set_voice_hint_text(controls.voice_hint, "IRIS ativada")
             controls.voice_hint.visible = True
             ui.input.set_input_shell_voice_active(controls.input_shell, True, pulse=True)
             self.update_if_ready(controls.input_shell)
@@ -163,14 +182,19 @@ class HomeViewState:
             return
 
         if event.kind in {SpeechEventKind.PARTIAL, SpeechEventKind.FINAL}:
+            self._cancel_voice_submit()
             self._apply_voice_text(event.text)
             if event.should_submit:
-                self._submit_voice_command(event.text)
+                self.attempt_explicit_submit()
+            elif event.kind == SpeechEventKind.FINAL:
+                self._schedule_voice_submit()
             return
 
         if event.kind in {SpeechEventKind.DEACTIVATED, SpeechEventKind.ERROR, SpeechEventKind.STOPPED}:
+            self._cancel_voice_submit()
             self.is_voice_active = False
             self.is_basic_capture_active = False
+            self.active_voice_session_id = ""
             controls.voice_hint.visible = False
             ui.input.set_input_shell_voice_active(controls.input_shell, False)
             self.update_if_ready(controls.voice_hint)
@@ -178,58 +202,97 @@ class HomeViewState:
             if event.kind == SpeechEventKind.ERROR and self.toaster_handler:
                 self.toaster_handler.show_error(event.message, title="Voz indisponível")
 
-    def _apply_voice_text(self, text: str) -> None:
+    def _apply_voice_text(
+        self,
+        text: str,
+        argument_source: ArgumentSource = ArgumentSource.VOICE,
+    ) -> None:
         controls = self._controls()
         controls.command_input_field.value = text
-        self._dropdowns().clear_selected_module()
-        self._set_module_icon(None)
         self.sync_clear_button_visibility()
         self.update_if_ready(controls.command_input_field)
 
         resolved = ui.dropdowns.resolve_voice_module_option(text, self.module_options)
         if resolved is None:
+            self._clear_transient_selection()
             self._dropdowns().show_module_suggestions(text)
             return
         if resolved.ambiguous or resolved.module_id is None:
+            self._clear_transient_selection()
             self._dropdowns().show_module_suggestions(text)
             return
 
-        self._set_module_icon(resolved.module_id)
-
-        if resolved.argument and self._module_has_arguments(resolved.module_id):
-            self._dropdowns().open_argument_dropdown(
-                resolved.module_id,
-                resolved.path,
-                load_suggestions=False,
-            )
-            controls.argument_input_field.value = resolved.argument
-            self._request_argument_suggestions(resolved.argument)
-            self.update_if_ready(controls.argument_input_field)
-            return
-
-        self._dropdowns().show_module_suggestions(resolved.path)
-
-    def _submit_voice_command(self, text: str) -> None:
-        resolved = ui.dropdowns.resolve_voice_module_option(text, self.module_options)
-        if resolved is None:
-            self.show_module_error("Não encontrei um módulo compatível com o comando falado.")
-            return
-        if resolved.ambiguous:
-            self.show_module_error("O comando corresponde a mais de um módulo. Escolha um item da lista.")
-            return
-        if resolved.module_id is None:
-            self.show_module_error("Não foi possível identificar o módulo selecionado.")
-            return
-
+        previous_module_id = self._dropdowns().selected_module_id
+        if previous_module_id != resolved.module_id:
+            self._clear_transient_selection()
         self._dropdowns().selected_module_id = resolved.module_id
         self._dropdowns().selected_module_path = resolved.path
         self._set_module_icon(resolved.module_id)
-        self.send_request(argument=resolved.argument or None)
+        context = self._module_argument_context(resolved.module_id)
+        self.requires_explicit_confirmation = context.saved_default is not None
+
+        if resolved.argument:
+            self.argument_source = argument_source
+            self._open_argument_dropdown(resolved.module_id, resolved.path)
+            controls.argument_input_field.value = resolved.argument
+            self.update_if_ready(controls.argument_input_field)
+            if context.supports_search:
+                self._request_argument_suggestions(resolved.argument)
+            else:
+                self.argument_match_count = 0
+            return
+
+        if context.saved_default is not None:
+            self.argument_source = ArgumentSource.SAVED_DEFAULT
+            self._open_argument_dropdown(resolved.module_id, resolved.path)
+            controls.argument_input_field.value = context.saved_default
+            self.update_if_ready(controls.argument_input_field)
+            if context.supports_search:
+                self._request_argument_suggestions(context.saved_default)
+            else:
+                self.argument_match_count = 0
+            return
+
+        if context.required:
+            self.argument_source = ArgumentSource.EMPTY
+            self._open_argument_dropdown(resolved.module_id, resolved.path)
+            self._request_argument_suggestions("")
+            return
+
+        self.argument_match_count = 0
+        self._dropdowns().show_module_suggestions(resolved.path)
+
+    def _open_argument_dropdown(self, module_id: int, module_path: str) -> None:
+        self._dropdowns().open_argument_dropdown(
+            module_id,
+            module_path,
+            load_suggestions=False,
+        )
+
+    def _clear_transient_selection(self) -> None:
+        controls = self._controls()
+        controls.argument_input_field.value = ""
+        self.argument_source = ArgumentSource.EMPTY
+        self.requires_explicit_confirmation = False
+        self.argument_match_count = None
+        self._dropdowns().clear_selected_module()
+        self._dropdowns().hide_argument_suggestions()
+        self._set_module_icon(None)
+        self.update_if_ready(controls.argument_input_field)
+
+    def _module_argument_context(self, module_id: int) -> ModuleArgumentContext:
+        if module_id not in self._argument_context_cache:
+            self._argument_context_cache[module_id] = (
+                self.home_service.get_module_argument_context(module_id)
+            )
+        return self._argument_context_cache[module_id]
 
     def _module_has_arguments(self, module_id: int) -> bool:
-        if module_id not in self._argument_capability_cache:
-            self._argument_capability_cache[module_id] = self.home_service.module_has_arguments(module_id)
-        return self._argument_capability_cache[module_id]
+        return self._module_argument_context(module_id).supports_search
+
+    def _submit_voice_command(self, text: str) -> None:
+        self._apply_voice_text(text)
+        self.attempt_explicit_submit()
 
     def keep_dropdowns_open(self, e=None) -> None:
         # Mantem cliques internos dos dropdowns sem fechar nada.
@@ -237,6 +300,19 @@ class HomeViewState:
 
     def refresh_module_suggestions(self, e) -> None:
         # Atualiza o dropdown de modulos quando o texto principal muda.
+        self._cancel_voice_submit()
+        if self.speech_manager is not None:
+            self.speech_manager.replace_active_command(e.control.value or "")
+        if self.is_voice_active:
+            self._apply_voice_text(
+                e.control.value or "",
+                argument_source=ArgumentSource.MANUAL,
+            )
+            self._schedule_voice_submit()
+            return
+        self.argument_source = ArgumentSource.EMPTY
+        self.requires_explicit_confirmation = False
+        self.argument_match_count = None
         self.sync_clear_button_visibility()
         self._set_module_icon(None)
         self._dropdowns().refresh_module_suggestions(e)
@@ -251,25 +327,44 @@ class HomeViewState:
 
     def show_argument_suggestions_from_event(self, e) -> None:
         # Atualiza sugestoes de argumentos a partir do input secundario.
-        self._request_argument_suggestions(e.control.value or "")
+        self._cancel_voice_submit()
+        argument = (e.control.value or "").strip()
+        self.argument_source = ArgumentSource.MANUAL if argument else ArgumentSource.EMPTY
+        if self.is_voice_active and self.speech_manager is not None:
+            module_path = self._dropdowns().selected_module_path or ""
+            command = self._voice_command_with_argument(module_path, argument)
+            self.speech_manager.replace_active_command(command)
+        self._request_argument_suggestions(argument)
+        if self.is_voice_active:
+            self._schedule_voice_submit()
 
     def _request_argument_suggestions(self, query: str) -> None:
         dropdowns = self._dropdowns()
         module_id = dropdowns.selected_module_id
         if module_id is None:
             return
+        self.argument_match_count = None
         try:
             page = self._controls().root.page
         except RuntimeError:
             page = None
         if page is None:
-            dropdowns.show_argument_suggestions(query)
+            arguments = self.home_service.search_module_arguments(module_id, query)
+            self._apply_argument_suggestion_results(
+                module_id,
+                query,
+                self.command_revision,
+                self.active_voice_session_id,
+                arguments,
+            )
             return
         page.run_thread(
             self._search_arguments_background,
             page,
             module_id,
             query,
+            self.command_revision,
+            self.active_voice_session_id,
         )
 
     def _search_arguments_background(
@@ -277,12 +372,16 @@ class HomeViewState:
         page: ft.Page,
         module_id: int,
         query: str,
+        request_revision: int,
+        request_session_id: str,
     ) -> None:
         arguments = self.home_service.search_module_arguments(module_id, query)
         page.run_task(
             self._apply_argument_suggestions,
             module_id,
             query,
+            request_revision,
+            request_session_id,
             arguments,
         )
 
@@ -290,15 +389,213 @@ class HomeViewState:
         self,
         module_id: int,
         query: str,
+        request_revision: int,
+        request_session_id: str,
         arguments: Sequence[ui.argument_dropdown.ArgumentOption],
     ) -> None:
+        was_applied = self._apply_argument_suggestion_results(
+            module_id,
+            query,
+            request_revision,
+            request_session_id,
+            arguments,
+        )
+        if was_applied and self.is_voice_active:
+            self._schedule_voice_submit()
+
+    def _apply_argument_suggestion_results(
+        self,
+        module_id: int,
+        query: str,
+        request_revision: int,
+        request_session_id: str,
+        arguments: Sequence[ui.argument_dropdown.ArgumentOption],
+    ) -> bool:
         dropdowns = self._dropdowns()
-        if dropdowns.selected_module_id != module_id:
-            return
+        if (
+            request_revision != self.command_revision
+            or request_session_id != self.active_voice_session_id
+            or dropdowns.selected_module_id != module_id
+        ):
+            return False
         current_query = self._controls().argument_input_field.value or ""
         if current_query != query:
-            return
+            return False
+        self.argument_match_count = len(arguments)
         dropdowns.apply_argument_suggestions(arguments)
+        if self.is_voice_active and len(arguments) == 1:
+            argument = ui.argument_dropdown.argument_value(arguments[0])
+            self._controls().argument_input_field.value = argument
+            self.update_if_ready(self._controls().argument_input_field)
+            if (
+                self.speech_manager is not None
+                and self.argument_source != ArgumentSource.SAVED_DEFAULT
+            ):
+                command = self._voice_command_with_argument(
+                    dropdowns.selected_module_path or "",
+                    argument,
+                )
+                self.speech_manager.replace_active_command(command)
+        return True
+
+    def _cancel_voice_submit(self) -> None:
+        self.command_revision += 1
+        task = self._voice_submit_task
+        self._voice_submit_task = None
+        if task is not None and not task.done():
+            task.cancel()
+
+    def _schedule_voice_submit(self) -> None:
+        if not self.is_voice_active:
+            return
+        try:
+            page = self._controls().root.page
+        except RuntimeError:
+            return
+        if page is None:
+            return
+
+        state = self._build_voice_submission_state(page)
+        if not VoiceSubmissionService.evaluate_silence(state).can_submit:
+            return
+
+        self._cancel_voice_submit()
+        revision = self.command_revision
+        session_id = self.active_voice_session_id
+        self._voice_submit_task = page.run_task(
+            self._submit_voice_command_after_silence,
+            page,
+            revision,
+            session_id,
+        )
+
+    async def _submit_voice_command_after_silence(
+        self,
+        page: ft.Page,
+        revision: int,
+        session_id: str,
+    ) -> None:
+        try:
+            await asyncio.sleep(VOICE_SUBMIT_DELAY_SECONDS)
+        except asyncio.CancelledError:
+            return
+        if revision != self.command_revision:
+            return
+        if not self.is_voice_active or session_id != self.active_voice_session_id:
+            return
+        self._voice_submit_task = None
+        self.attempt_silence_submit(page=page)
+
+    def _build_voice_submission_state(self, page: ft.Page | None = None) -> VoiceSubmissionState:
+        controls = self._controls()
+        resolved = ui.dropdowns.resolve_voice_module_option(
+            controls.command_input_field.value or "",
+            self.module_options,
+        )
+        dropdowns = self._dropdowns()
+        module_id = resolved.module_id if resolved is not None else None
+        module_path = resolved.path if resolved is not None else ""
+        is_ambiguous = bool(resolved and resolved.ambiguous)
+        is_preselected = bool(
+            module_id is not None
+            and dropdowns.selected_module_id == module_id
+            and dropdowns.selected_module_path == module_path
+        )
+        if not is_preselected:
+            module_id = None
+            module_path = ""
+        context = (
+            self._module_argument_context(module_id)
+            if module_id is not None
+            else ModuleArgumentContext(False, False, None)
+        )
+        argument = (controls.argument_input_field.value or "").strip()
+        if page is None:
+            try:
+                page = controls.root.page
+            except RuntimeError:
+                page = None
+        return VoiceSubmissionState(
+            session_id=self.active_voice_session_id,
+            command_revision=self.command_revision,
+            module_id=module_id,
+            module_path=module_path,
+            is_executable=bool(module_path and self.executable_lookup.get(module_path, False)),
+            is_ambiguous=is_ambiguous,
+            argument=argument,
+            argument_source=self.argument_source,
+            argument_required=context.required,
+            argument_match_count=(
+                self.argument_match_count if context.supports_search else 0
+            ),
+            requires_explicit_confirmation=self.requires_explicit_confirmation,
+            is_home_active=bool(page is not None and (page.route or "/") in HOME_ROUTES),
+            is_executing=self.is_loading,
+        )
+
+    def attempt_silence_submit(self, page: ft.Page | None = None) -> None:
+        state = self._build_voice_submission_state(page)
+        if not VoiceSubmissionService.evaluate_silence(state).can_submit:
+            return
+        self.send_request(
+            argument=state.argument or None,
+            module_id=state.module_id,
+            module_path=state.module_path,
+        )
+
+    def attempt_explicit_submit(self, e: ft.ControlEvent | None = None) -> None:
+        self._ensure_current_module_preselected()
+        state = self._build_voice_submission_state()
+        decision = VoiceSubmissionService.evaluate_explicit(state)
+        if not decision.can_submit:
+            self._show_submission_decision_error(decision.reason)
+            return
+        self._cancel_voice_submit()
+        self.send_request(
+            argument=state.argument or None,
+            module_id=state.module_id,
+            module_path=state.module_path,
+        )
+
+    def _ensure_current_module_preselected(self) -> None:
+        controls = self._controls()
+        resolved = ui.dropdowns.resolve_voice_module_option(
+            controls.command_input_field.value or "",
+            self.module_options,
+        )
+        if resolved is None or resolved.ambiguous or resolved.module_id is None:
+            return
+        dropdowns = self._dropdowns()
+        if (
+            dropdowns.selected_module_id == resolved.module_id
+            and dropdowns.selected_module_path == resolved.path
+        ):
+            return
+        self._apply_voice_text(
+            controls.command_input_field.value or "",
+            argument_source=ArgumentSource.MANUAL,
+        )
+
+    def _show_submission_decision_error(self, reason: VoiceSubmissionReason) -> None:
+        messages = {
+            VoiceSubmissionReason.MODULE_NOT_FOUND: "Escolha um módulo válido na lista de sugestões.",
+            VoiceSubmissionReason.AMBIGUOUS_MODULE: (
+                "O comando corresponde a mais de um módulo. Escolha um item da lista."
+            ),
+            VoiceSubmissionReason.MODULE_NOT_EXECUTABLE: (
+                "O módulo selecionado não possui execução configurada."
+            ),
+            VoiceSubmissionReason.REQUIRED_ARGUMENT_EMPTY: (
+                "Informe o argumento antes de executar o módulo."
+            ),
+        }
+        if reason in messages:
+            self.show_module_error(messages[reason])
+
+    @staticmethod
+    def _voice_command_with_argument(module_path: str, argument: str) -> str:
+        command_path = " ".join(module_path.replace("/", " ").split())
+        return " ".join((command_path, argument.strip())).strip()
 
     def validate_module_request(self) -> tuple[int, str]:
         # Garante que existe um modulo digitado ou selecionado.
@@ -331,22 +628,6 @@ class HomeViewState:
         if self.is_loading:
             return
 
-        if self.is_voice_active:
-            resolved = ui.dropdowns.resolve_voice_module_option(
-                controls.command_input_field.value or "",
-                self.module_options,
-            )
-            if resolved is not None and resolved.ambiguous:
-                self.show_module_error("O comando corresponde a mais de um módulo. Escolha um item da lista.")
-                return
-            if resolved is not None and resolved.module_id is not None:
-                module_id = resolved.module_id
-                module_path = resolved.path
-                self._dropdowns().selected_module_id = module_id
-                self._dropdowns().selected_module_path = module_path
-                if argument is None and resolved.argument:
-                    argument = resolved.argument
-
         try:
             if module_id is None or module_path is None:
                 module_id, module_path = self.validate_module_request()
@@ -354,7 +635,7 @@ class HomeViewState:
             self.show_module_error(str(error))
             return
 
-        if argument is None and self.home_service.module_requires_argument(module_id):
+        if argument is None and self._module_argument_context(module_id).required:
             self._dropdowns().open_argument_dropdown(
                 module_id,
                 module_path,
@@ -411,6 +692,9 @@ class HomeViewState:
             self.show_module_success(result)
             controls.command_input_field.value = ""
             controls.argument_input_field.value = ""
+            self.argument_source = ArgumentSource.EMPTY
+            self.requires_explicit_confirmation = False
+            self.argument_match_count = None
             self._dropdowns().clear_selected_module()
             self._set_module_icon(None)
             self.sync_clear_button_visibility()
@@ -462,7 +746,19 @@ class HomeViewState:
         self._dropdowns().selected_module_id = module_id
         self._dropdowns().selected_module_path = module_path
         self._set_module_icon(module_id)
-        if self.home_service.module_requires_argument(module_id):
+        context = self._module_argument_context(module_id)
+        self.requires_explicit_confirmation = context.saved_default is not None
+        self.argument_source = ArgumentSource.EMPTY
+        self.argument_match_count = None
+        if context.saved_default is not None:
+            self._open_argument_dropdown(module_id, module_path)
+            controls.argument_input_field.value = context.saved_default
+            self.argument_source = ArgumentSource.SAVED_DEFAULT
+            self.update_if_ready(controls.argument_input_field)
+            if context.supports_search:
+                self._request_argument_suggestions(context.saved_default)
+            return
+        if context.required:
             self._dropdowns().open_argument_dropdown(
                 module_id,
                 module_path,
@@ -483,13 +779,15 @@ class HomeViewState:
         if not argument:
             return
 
+        self.argument_source = ArgumentSource.MANUAL
         self.hide_dropdowns()
-        self.send_request(argument=argument)
+        self.attempt_explicit_submit()
 
     def select_argument(self, argument: str) -> None:
         # Seleciona um argumento da lista e executa o modulo.
         controls = self._controls()
         controls.argument_input_field.value = argument
+        self.argument_source = ArgumentSource.MANUAL
         self.update_if_ready(controls.argument_input_field)
         self.execute_selected_argument(argument)
 
@@ -525,10 +823,8 @@ class HomeViewCallbacks:
     on_command_change: Callable
     on_command_focus: Callable
     on_command_click: Callable
-    on_command_tap_outside: Callable
     on_argument_submit: Callable
     on_argument_change: Callable
-    on_argument_tap_outside: Callable
     on_dropdown_click: Callable
     on_background_click: Callable
     on_input_shell_click: Callable
@@ -562,7 +858,6 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
     argument_input_field = ui.input.build_argument_field(
         on_submit=callbacks.on_argument_submit,
         on_change=callbacks.on_argument_change,
-        on_tap_outside=callbacks.on_argument_tap_outside,
     )
     argument_panel = ui.dropdowns.build_dropdown_panel(
         ui.argument_dropdown.build_argument_panel_content(argument_input_field, argument_suggestions_list),
@@ -575,7 +870,6 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
         on_change=callbacks.on_command_change,
         on_focus=callbacks.on_command_focus,
         on_click=callbacks.on_command_click,
-        on_tap_outside=callbacks.on_command_tap_outside,
     )
     module_icon = ui.input.build_module_icon()
     send_button = ui.input.build_send_button(callbacks.on_send)
@@ -593,7 +887,7 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
     input_shell.on_hover = callbacks.on_input_shell_hover
 
     root = build_home_content(
-        build_input_title(),
+        build_input_title(on_click=callbacks.on_background_click),
         input_shell,
         dropdown_stack,
         on_background_click=callbacks.on_background_click,
@@ -616,11 +910,12 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
     )
 
 
-def build_input_title() -> ft.Container:
+def build_input_title(on_click: Callable | None = None) -> ft.Container:
     # Cria o titulo exibido acima do input principal.
     return ft.Container(
         padding=ft.Padding(left=10, bottom=10),
         alignment=ft.Alignment.CENTER_LEFT,
+        on_click=on_click,
         content=ft.Text(
             "Escolha sua rota",
             size=18,
@@ -631,11 +926,13 @@ def build_input_title() -> ft.Container:
     )
 
 
-def build_background_logo() -> ft.Container:
+def build_background_logo(on_click: Callable | None = None) -> ft.Container:
     # Cria a logo translucida usada como imagem de fundo da home.
     return ft.Container(
+        expand=True,
         alignment=ft.Alignment.BOTTOM_CENTER,
         padding=ft.Padding(bottom=100),
+        on_click=on_click,
         content=ft.Image(src=LOGO_PATH, width=530, height=530, opacity=0.1, fit=ft.BoxFit.CONTAIN),
     )
 
@@ -652,10 +949,11 @@ def build_home_content(
             expand=True,
             fit=ft.StackFit.EXPAND,
             controls=[
-                build_background_logo(),
+                build_background_logo(on_click=on_background_click),
                 ft.Container(
                     alignment=ft.Alignment.TOP_CENTER,
                     padding=ft.Padding(left=24, top=18, right=24, bottom=24),
+                    on_click=on_background_click,
                     content=ft.Column(
                         width=800,
                         tight=True,

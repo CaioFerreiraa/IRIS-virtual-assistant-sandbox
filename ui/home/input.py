@@ -14,7 +14,6 @@ def build_command_field(
     on_change: Callable,
     on_focus: Callable,
     on_click: Callable,
-    on_tap_outside: Callable,
 ) -> ft.TextField:
     # Cria o campo principal onde o usuario digita ou escolhe a rota.
     return ft.TextField(
@@ -29,14 +28,13 @@ def build_command_field(
         on_change=on_change,
         on_focus=on_focus,
         on_click=on_click,
-        # on_tap_outside=on_tap_outside,
         bgcolor=ft.Colors.TRANSPARENT,
         hover_color=ft.Colors.TRANSPARENT,
         focused_bgcolor=ft.Colors.TRANSPARENT,
     )
 
 
-def build_argument_field(on_submit: Callable, on_change: Callable, on_tap_outside: Callable) -> ft.TextField:
+def build_argument_field(on_submit: Callable, on_change: Callable) -> ft.TextField:
     # Cria o campo usado para filtrar argumentos do modulo selecionado.
     return ft.TextField(
         height=42,
@@ -49,7 +47,6 @@ def build_argument_field(on_submit: Callable, on_change: Callable, on_tap_outsid
         content_padding=ft.Padding.only(left=12, right=12),
         on_submit=on_submit,
         on_change=on_change,
-        on_tap_outside=on_tap_outside,
         bgcolor=BLUE_GREY,
         border_radius=12,
     )
@@ -149,7 +146,6 @@ def build_command_input(
                 ft.Stack(
                     width=150,
                     height=56,
-                    clip_behavior=ft.ClipBehavior.NONE,
                     controls=[
                         ft.Container(right=0, top=10, content=send_button),
                         voice_hint
@@ -184,11 +180,11 @@ def build_input_shell(command_input: ft.Container) -> ft.Container:
 
 
 def build_voice_hint() -> ft.Container:
-    # Overlay absoluto acima do botão de envio, exibido somente durante voz.
+    # Mantém o estado de voz visível dentro do espaço reservado ao lado do botão.
     return ft.Container(
         visible=False,
-        right=0,
-        top=-20,
+        right=46,
+        top=14,
         padding=ft.Padding(left=10, top=5, right=10, bottom=5),
         bgcolor=PASTEL_DARK_PURPLE,
         border_radius=12,

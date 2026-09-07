@@ -1,6 +1,15 @@
+from dataclasses import dataclass
+
 from core.command_processor import CommandProcessor
 from database.db import SessionLocal
 from repositories.module_repository import ModuleRepository
+
+
+@dataclass(frozen=True)
+class ModuleArgumentContext:
+    required: bool
+    supports_search: bool
+    saved_default: str | None
 
 
 class HomeService:
@@ -26,6 +35,29 @@ class HomeService:
         except Exception as error:
             print(error)
             return processor.module_has_argument_search_by_id(module_id)
+        finally:
+            db.close()
+
+    def get_module_argument_context(self, module_id: int) -> ModuleArgumentContext:
+        processor, db = self._build_processor()
+        try:
+            supports_search = processor.module_has_argument_search_by_id(module_id)
+            return ModuleArgumentContext(
+                required=(
+                    processor.module_requires_argument_by_id(module_id)
+                    if supports_search
+                    else False
+                ),
+                supports_search=supports_search,
+                saved_default=(
+                    processor.module_saved_default_argument_by_id(module_id)
+                    if supports_search
+                    else None
+                ),
+            )
+        except Exception as error:
+            print(error)
+            return ModuleArgumentContext(False, False, None)
         finally:
             db.close()
 

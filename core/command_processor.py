@@ -93,6 +93,37 @@ class CommandProcessor:
             module.module_public_key,
         )
 
+    def module_saved_default_argument_by_id(self, module_id: int) -> str | None:
+        module = self.module_repository.get_by_id(module_id)
+        if module is None or not self._module_has_argument_search(module):
+            return None
+        variables = get_effective_module_variables(self.module_repository.db, module.id)
+        if self.module_runner.should_request_argument(
+            module.request_url,
+            variables,
+            module.module_public_key,
+        ):
+            return None
+
+        for definition in self.module_repository.list_variable_definitions(module.id):
+            if not definition.is_user_editable:
+                continue
+            persisted_value = self.module_repository.get_variable_value(definition.id)
+            if persisted_value is None:
+                continue
+            normalized_value = (persisted_value.value_text or "").strip()
+            if not normalized_value:
+                continue
+            candidate_variables = dict(variables)
+            candidate_variables[definition.key] = ""
+            if self.module_runner.should_request_argument(
+                module.request_url,
+                candidate_variables,
+                module.module_public_key,
+            ):
+                return normalized_value
+        return None
+
     def _module_has_argument_search(self, module) -> bool:
         if module is None:
             return False
