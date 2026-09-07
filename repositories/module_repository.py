@@ -45,6 +45,9 @@ class ModuleRepository:
                     "parent_module_id": module.parent_module_id,
                     "is_executable": bool(module.is_executable),
                     "is_available": bool(module.is_available),
+                    "validation_error": module.validation_error or "",
+                    "runtime_type": module.runtime_type,
+                    "supports_auto_start": bool(module.supports_auto_start),
                     "command_paths": command_paths,
                     "search_text": " ".join(
                         dict.fromkeys(

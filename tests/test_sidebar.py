@@ -15,6 +15,7 @@ from ui.shared.components.sidebar import (
     build_sidebar,
 )
 from services.module_registry_state import InvalidModuleInfo
+from services.module_service import apply_effective_runtime_statuses
 from ui.theme.colors import (
     BLUE_GREY,
     BORDER,
@@ -25,6 +26,7 @@ from ui.theme.colors import (
     GREY_400,
     GREY_500,
     GREY_900,
+    PASTEL_DARK_GREEN,
     PASTEL_DARK_PURPLE,
     PASTEL_PURPLE,
     SURFACE,
@@ -160,13 +162,171 @@ class SidebarTests(unittest.TestCase):
         self.assertEqual("Módulo offline", dot.tooltip)
         self.assertEqual("Verde", label_column.controls[0].value)
 
-    def test_organizational_module_does_not_have_status_dot(self) -> None:
+    def test_root_without_auto_start_has_green_status_dot(self) -> None:
         sidebar = build_sidebar(None, lambda *_: None, modules=self.modules)
         root_branch = _module_list(sidebar).controls[0]
         parent_item = root_branch.controls[0]
         labels = parent_item.content.controls[1]
+        dot = labels.controls[0]
+
+        self.assertEqual(PASTEL_DARK_GREEN, dot.bgcolor)
+        self.assertEqual("Módulo online", dot.tooltip)
+
+    def test_organizational_child_without_backend_has_no_status_dot(self) -> None:
+        sidebar = build_sidebar(None, lambda *_: None, modules=self.modules)
+        root_branch = _module_list(sidebar).controls[0]
+        child_branch = root_branch.controls[1].controls[0]
+        child_item = child_branch.controls[0]
+        labels = child_item.content.controls[1]
 
         self.assertEqual(1, len(labels.controls))
+
+    def test_executable_child_is_green_when_parent_backend_is_online(self) -> None:
+        modules = [
+            {
+                "module_id": 1,
+                "name": "Backend",
+                "parent_module_id": None,
+                "runtime_type": "python",
+                "supports_auto_start": True,
+                "is_available": True,
+            },
+            {
+                "module_id": 2,
+                "name": "Ação",
+                "parent_module_id": 1,
+                "is_executable": True,
+                "is_available": True,
+            },
+        ]
+        apply_effective_runtime_statuses(modules, {1: "online"})
+
+        sidebar = build_sidebar(None, lambda *_: None, modules=modules)
+        child_item = _module_list(sidebar).controls[0].controls[1].controls[0]
+        dot = child_item.content.controls[1].controls[0]
+
+        self.assertEqual(PASTEL_DARK_GREEN, dot.bgcolor)
+        self.assertEqual("Módulo online", dot.tooltip)
+
+    def test_executable_child_is_grey_when_parent_backend_is_offline(self) -> None:
+        modules = [
+            {
+                "module_id": 1,
+                "name": "Backend",
+                "parent_module_id": None,
+                "runtime_type": "python",
+                "supports_auto_start": True,
+                "is_available": True,
+            },
+            {
+                "module_id": 2,
+                "name": "Ação",
+                "parent_module_id": 1,
+                "is_executable": True,
+                "is_available": True,
+            },
+        ]
+        apply_effective_runtime_statuses(modules, {})
+
+        sidebar = build_sidebar(None, lambda *_: None, modules=modules)
+        child_item = _module_list(sidebar).controls[0].controls[1].controls[0]
+        dot = child_item.content.controls[1].controls[0]
+
+        self.assertEqual(GREY_900, dot.bgcolor)
+        self.assertEqual("Módulo offline", dot.tooltip)
+
+    def test_all_descendants_are_grey_when_parent_backend_is_offline(self) -> None:
+        modules = [
+            {
+                "module_id": 1,
+                "name": "Backend",
+                "parent_module_id": None,
+                "runtime_type": "python",
+                "supports_auto_start": True,
+                "is_available": True,
+            },
+            {
+                "module_id": 2,
+                "name": "Grupo",
+                "parent_module_id": 1,
+                "is_executable": False,
+                "is_available": True,
+            },
+            {
+                "module_id": 3,
+                "name": "Ação",
+                "parent_module_id": 2,
+                "is_executable": True,
+                "is_available": True,
+            },
+        ]
+        apply_effective_runtime_statuses(modules, {})
+
+        sidebar = build_sidebar(None, lambda *_: None, modules=modules)
+        root_branch = _module_list(sidebar).controls[0]
+        group_item = root_branch.controls[1].controls[0].controls[0]
+        group_dot = group_item.content.controls[1].controls[0]
+
+        self.assertEqual(GREY_900, group_dot.bgcolor)
+        self.assertEqual("Módulo offline", group_dot.tooltip)
+
+    def test_child_problem_stays_red_even_when_parent_is_online(self) -> None:
+        modules = [
+            {
+                "module_id": 1,
+                "name": "Backend",
+                "parent_module_id": None,
+                "runtime_type": "python",
+                "supports_auto_start": True,
+                "is_available": True,
+            },
+            {
+                "module_id": 2,
+                "name": "Ação quebrada",
+                "parent_module_id": 1,
+                "is_executable": True,
+                "is_available": False,
+                "validation_error": "Configuração inválida.",
+            },
+        ]
+        apply_effective_runtime_statuses(modules, {1: "online"})
+
+        sidebar = build_sidebar(None, lambda *_: None, modules=modules)
+        child_item = _module_list(sidebar).controls[0].controls[1].controls[0]
+        dot = child_item.content.controls[1].controls[0]
+
+        self.assertEqual(CANCEL, dot.bgcolor)
+        self.assertEqual("Módulo com problema", dot.tooltip)
+
+    def test_child_runtime_error_stays_red_when_parent_is_online(self) -> None:
+        modules = [
+            {
+                "module_id": 1,
+                "name": "Backend",
+                "parent_module_id": None,
+                "runtime_type": "python",
+                "supports_auto_start": True,
+                "is_available": True,
+            },
+            {
+                "module_id": 2,
+                "name": "Ação quebrada",
+                "parent_module_id": 1,
+                "is_executable": True,
+                "is_available": True,
+            },
+        ]
+        apply_effective_runtime_statuses(
+            modules,
+            {1: "online", 2: "com erro"},
+        )
+
+        sidebar = build_sidebar(None, lambda *_: None, modules=modules)
+        child_item = _module_list(sidebar).controls[0].controls[1].controls[0]
+        dot = child_item.content.controls[1].controls[0]
+
+        self.assertEqual(CANCEL, dot.bgcolor)
+        self.assertEqual("Módulo com problema", dot.tooltip)
 
     def test_problem_module_has_red_status_dot(self) -> None:
         modules = [

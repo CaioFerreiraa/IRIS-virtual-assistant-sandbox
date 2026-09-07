@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import flet as ft
 
 from database.db import SessionLocal
@@ -35,6 +37,7 @@ def build_module_view(
     module_id: int,
     toaster_handler: ToasterHandler | None = None,
     session_factory=SessionLocal,
+    on_module_status_change: Callable[[], None] | None = None,
 ) -> ft.Container:
     detail = get_module_detail(module_id, session_factory)
     if detail is None:
@@ -43,6 +46,7 @@ def build_module_view(
         detail,
         toaster_handler,
         session_factory,
+        on_module_status_change,
     ).build()
 
 
@@ -59,10 +63,12 @@ class ModuleViewState(
         detail: dict[str, object],
         toaster_handler: ToasterHandler | None,
         session_factory,
+        on_module_status_change: Callable[[], None] | None = None,
     ) -> None:
         self.detail = detail
         self.toaster_handler = toaster_handler
         self.session_factory = session_factory
+        self.on_module_status_change = on_module_status_change
         self.home_service = HomeService(session_factory)
         self.technical_errors = list(detail["technical_errors"])
         self.active_tab = "error" if self.technical_errors else "about"
@@ -79,6 +85,7 @@ class ModuleViewState(
         self.execution_state_saved: dict[str, object] = {}
         self.execution_state_edited: dict[str, object] | None = None
         self.is_executing = False
+        self.is_starting = False
         self.http_request = detail.get("http_request")
 
         self.custom_call_name_field = build_text_field(
@@ -127,15 +134,12 @@ class ModuleViewState(
         self.execute_button = build_primary_button(
             "Executar",
             self.on_execute,
-            disabled=not (
-                bool(detail["is_available"])
-                and bool(detail["is_executable"])
-            ),
-            visible=(
-                bool(detail["is_executable"])
-            ),
+            disabled=True,
+            visible=False,
         )
         self.execute_button.height = 40
+        self.status_chip = build_status_chip(str(self.detail["status"]))
+        self._sync_action_button()
         self.execution_result_card = self._build_execution_result_card()
         self.log_container = ft.Container(expand=True)
 
@@ -194,7 +198,7 @@ class ModuleViewState(
         controls: list[ft.Control] = []
         if self.http_request is None:
             controls.append(self.execute_button)
-        controls.append(build_status_chip(str(self.detail["status"])))
+        controls.append(self.status_chip)
         return ft.Row(
             tight=True,
             spacing=12,

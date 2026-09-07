@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 
 import flet as ft
 import ui.documentation as documentation_ui
@@ -43,6 +44,7 @@ def build_route_content(
     toaster_handler=None,
     speech_manager: SpeechServiceManager | None = None,
     module_session_factory=SessionLocal,
+    on_module_status_change: Callable[[], None] | None = None,
 ) -> ft.Control:
     if route in ("", "/", "/home"):
         return ui.view.build_home_view(
@@ -63,6 +65,7 @@ def build_route_content(
             int(raw_module_id),
             toaster_handler=toaster_handler,
             session_factory=module_session_factory,
+            on_module_status_change=on_module_status_change,
         )
 
     if route == "/documentation":

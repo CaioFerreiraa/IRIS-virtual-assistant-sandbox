@@ -134,6 +134,38 @@ class ModuleViewSettingsTests(unittest.TestCase):
 
         self.assertEqual("offline", state.detail["status"])
 
+    def test_offline_child_replaces_execute_with_start_module(self) -> None:
+        child_id, root_id = self._add_backend_tree()
+        with patch(
+            "services.module_service.get_module_registry_state",
+            return_value=SimpleNamespace(runtime_statuses={}, invalid_modules=()),
+        ):
+            detail = get_module_detail(child_id, self.session_factory)
+
+        state = ModuleViewState(detail, None, self.session_factory)
+
+        self.assertEqual(root_id, state.detail["runtime_module_id"])
+        self.assertTrue(state.execute_button.visible)
+        self.assertFalse(state.execute_button.disabled)
+        self.assertEqual("Iniciar módulo", state.execute_button.content.value)
+
+    def test_online_parent_keeps_execute_action_on_child(self) -> None:
+        child_id, root_id = self._add_backend_tree()
+        with patch(
+            "services.module_service.get_module_registry_state",
+            return_value=SimpleNamespace(
+                runtime_statuses={root_id: "online"},
+                invalid_modules=(),
+            ),
+        ):
+            detail = get_module_detail(child_id, self.session_factory)
+
+        state = ModuleViewState(detail, None, self.session_factory)
+
+        self.assertEqual("online", state.detail["status"])
+        self.assertTrue(state.execute_button.visible)
+        self.assertEqual("Executar", state.execute_button.content.value)
+
     def test_execution_tab_appears_only_for_executable_modules(self) -> None:
         executable_state = self._build_state()
         self.assertIn(
@@ -359,6 +391,38 @@ class ModuleViewSettingsTests(unittest.TestCase):
                 )
             )
             db.commit()
+        finally:
+            db.close()
+
+    def _add_backend_tree(self) -> tuple[int, int]:
+        db = self.session_factory()
+        try:
+            root = Module(
+                module_public_key="test.backend",
+                name="Backend",
+                call_name="backend",
+                is_executable=False,
+                is_available=True,
+                request_method="PYTHON",
+                request_url="backend.py",
+                runtime_type="python",
+                supports_auto_start=True,
+            )
+            db.add(root)
+            db.flush()
+            child = Module(
+                module_public_key="test.backend.action",
+                name="Ação",
+                call_name="ação",
+                parent_module_id=root.id,
+                is_executable=True,
+                is_available=True,
+                request_method="GET",
+                request_url="https://example.com",
+            )
+            db.add(child)
+            db.commit()
+            return child.id, root.id
         finally:
             db.close()
 

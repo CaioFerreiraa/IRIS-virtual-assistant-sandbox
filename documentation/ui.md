@@ -98,7 +98,15 @@ pixels abaixo do nome; sua borda externa não muda.
 O ícone aparece primeiro e mantém sempre as mesmas cores, sem variar conforme o
 estado do módulo. Entre ele e o nome fica uma bolinha de status pequena:
 `GREY_900` para módulos offline, verde para módulos online e vermelha para
-módulos com problema. Itens organizacionais sem problema não exibem a bolinha.
+módulos com problema. Um submódulo executável fica verde quando o backend
+ancestral responsável está online e cinza quando esse backend está offline;
+uma falha do próprio submódulo sempre mantém a prioridade vermelha. Módulos
+que controlam um backend também exibem a bolinha, mesmo quando não são
+executáveis. Quando o backend está offline, todos os descendentes exibem a
+bolinha cinza, inclusive agrupadores não executáveis. Itens puramente
+organizacionais que não dependem de backend não exibem a bolinha quando são
+filhos. Módulos raiz com `supports_auto_start=false` e sem erros exibem a
+bolinha verde, pois não dependem da inicialização de um backend persistente.
 Módulos inválidos sem item na árvore continuam com o indicador vermelho na área
 de diagnóstico.
 
@@ -165,7 +173,7 @@ A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção
 
 ### Tela do módulo
 
-A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo. Em execuções Python e legadas, o botão primário “Executar” aparece à esquerda do status; em módulos HTTP, o mesmo botão fica junto de método e URL na aba “Execução”. O conteúdo é dividido em abas:
+A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo. Em execuções Python e legadas, o botão primário “Executar” aparece à esquerda do status; em módulos HTTP, o mesmo botão fica junto de método e URL na aba “Execução”. Quando o módulo ou um filho executável depende de um backend ancestral offline, essa ação passa a ser “Iniciar módulo”. Depois da inicialização, o estado da sidebar é atualizado e a ação executável volta a ser “Executar”. O conteúdo é dividido em abas:
 
 - **Sobre**: descrição, README quando existe e `module.json` formatado com fonte Consolas quando existe;
 - **Execução**: aparece somente em módulos executáveis, concentra o argumento e permite personalizar a definição HTTP quando existe;

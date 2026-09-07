@@ -5,11 +5,14 @@ import json
 import flet as ft
 
 from services.module_service import (
+    get_module_detail,
     reset_http_request_definition,
     save_auto_start_preference,
     save_http_request_definition,
     save_module_settings,
 )
+from services.module_runtime_service import module_runtime_manager
+from ui.modules.components.status_chip import build_status_chip
 from ui.shared.components.result_card import build_result_card
 
 
@@ -97,6 +100,77 @@ class ModuleExecutionMixin:
             page,
             argument,
         )
+
+    def on_start_module(self, event: ft.ControlEvent) -> None:
+        del event
+        if self.is_starting:
+            return
+        runtime_module_id = self.detail.get("runtime_module_id")
+        if type(runtime_module_id) is not int:
+            self._show_error("Este módulo não possui um backend que possa ser iniciado.")
+            return
+
+        self.is_starting = True
+        self._sync_action_button()
+        try:
+            page = self.execute_button.page
+        except RuntimeError:
+            page = None
+        if page is None:
+            try:
+                started = module_runtime_manager.start_backend(runtime_module_id)
+                self._apply_start_result(started, None)
+            except Exception as error:
+                self._apply_start_result(False, error)
+            return
+        page.run_thread(
+            self._start_module_background,
+            page,
+            runtime_module_id,
+        )
+
+    def _start_module_background(
+        self,
+        page: ft.Page,
+        runtime_module_id: int,
+    ) -> None:
+        try:
+            started = module_runtime_manager.start_backend(runtime_module_id)
+            page.run_task(self._finish_start_module, started, None)
+        except Exception as error:
+            page.run_task(self._finish_start_module, False, error)
+
+    async def _finish_start_module(
+        self,
+        started: bool,
+        error: Exception | None,
+    ) -> None:
+        self._apply_start_result(started, error)
+
+    def _apply_start_result(
+        self,
+        started: bool,
+        error: Exception | None,
+    ) -> None:
+        self.is_starting = False
+        updated_detail = get_module_detail(
+            int(self.detail["id"]),
+            self.session_factory,
+        )
+        if updated_detail is not None:
+            self.detail.update(updated_detail)
+        self._sync_status_chip()
+        self._sync_action_button()
+
+        if error is not None:
+            self._show_error(str(error) or "Não foi possível iniciar o módulo.")
+        elif started:
+            self._show_success("Módulo iniciado com sucesso.")
+        else:
+            self._show_error("Não foi possível iniciar o módulo.")
+
+        if self.on_module_status_change is not None:
+            self.on_module_status_change()
 
     def on_save_execution(self, event: ft.ControlEvent | None) -> None:
         del event
@@ -262,25 +336,60 @@ class ModuleExecutionMixin:
 
     def _set_execute_loading(self, is_loading: bool) -> None:
         self.is_executing = is_loading
-        self.execute_button.disabled = is_loading
-        self.execute_button.content = (
-            ft.Row(
-                tight=True,
-                spacing=8,
-                controls=[
-                    ft.ProgressRing(
-                        width=16,
-                        height=16,
-                        stroke_width=2,
-                        color=ft.Colors.WHITE,
-                    ),
-                    ft.Text("Executando..."),
-                ],
-            )
-            if is_loading
-            else ft.Text("Executar")
-        )
+        self._sync_action_button()
         self._update_if_mounted(self.execute_button)
+
+    def _sync_action_button(self) -> None:
+        status = str(self.detail.get("status") or "").strip().casefold()
+        runtime_module_id = self.detail.get("runtime_module_id")
+        should_start = type(runtime_module_id) is int and status == "offline"
+
+        if self.is_starting:
+            self.execute_button.visible = True
+            self.execute_button.disabled = True
+            self.execute_button.on_click = self.on_start_module
+            self.execute_button.content = self._build_loading_label("Iniciando...")
+        elif should_start:
+            self.execute_button.visible = True
+            self.execute_button.disabled = not bool(
+                self.detail.get("can_start_runtime")
+            )
+            self.execute_button.on_click = self.on_start_module
+            self.execute_button.content = ft.Text("Iniciar módulo")
+        else:
+            self.execute_button.visible = bool(self.detail.get("is_executable"))
+            self.execute_button.disabled = (
+                self.is_executing
+                or not bool(self.detail.get("is_available"))
+            )
+            self.execute_button.on_click = self.on_execute
+            self.execute_button.content = (
+                self._build_loading_label("Executando...")
+                if self.is_executing
+                else ft.Text("Executar")
+            )
+
+    @staticmethod
+    def _build_loading_label(label: str) -> ft.Row:
+        return ft.Row(
+            tight=True,
+            spacing=8,
+            controls=[
+                ft.ProgressRing(
+                    width=16,
+                    height=16,
+                    stroke_width=2,
+                    color=ft.Colors.WHITE,
+                ),
+                ft.Text(label),
+            ],
+        )
+
+    def _sync_status_chip(self) -> None:
+        updated_chip = build_status_chip(str(self.detail.get("status") or "offline"))
+        self.status_chip.bgcolor = updated_chip.bgcolor
+        self.status_chip.content = updated_chip.content
+        self._update_if_mounted(self.status_chip)
 
     def _set_model_value(self, label: str, value: str) -> None:
         control = self.model_value_controls.get(label)

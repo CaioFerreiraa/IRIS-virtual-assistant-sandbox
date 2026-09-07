@@ -60,6 +60,25 @@ class ModuleRuntimeTests(unittest.TestCase):
             get_module_registry_state().runtime_statuses[module_id],
         )
 
+    def test_manual_start_returns_success_and_notifies_status_change(self) -> None:
+        module_id, _ = self.create_backend(
+            "manual-backend",
+            "def start():\n    return None\n",
+        )
+        notifications: list[bool] = []
+
+        started = self.manager.start_backend(
+            module_id,
+            lambda: notifications.append(True),
+        )
+
+        self.assertTrue(started)
+        self.assertEqual([True], notifications)
+        self.assertEqual(
+            "online",
+            get_module_registry_state().runtime_statuses[module_id],
+        )
+
     def test_backend_failure_does_not_prevent_another_start(self) -> None:
         broken_id, broken_folder = self.create_backend(
             "broken",

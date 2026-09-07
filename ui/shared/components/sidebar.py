@@ -174,15 +174,32 @@ def _markdown_to_plain_text(content: str) -> str:
 
 
 def _build_status_dot(module: Mapping[str, object]) -> ft.Container | None:
+    module_id = module.get("module_id")
+    runtime_module_id = module.get("runtime_module_id")
+    is_root_without_auto_start = (
+        module.get("parent_module_id") is None
+        and not bool(module.get("supports_auto_start"))
+    )
+    status = str(
+        module.get("runtime_status")
+        or module.get("status")
+        or "offline"
+    ).strip().casefold()
+    has_offline_parent = (
+        type(module_id) is int
+        and type(runtime_module_id) is int
+        and runtime_module_id != module_id
+        and status != "online"
+    )
     if module_has_problem(module):
         color = CANCEL
         tooltip = "Módulo com problema"
-    elif bool(module.get("is_executable")):
-        status = str(
-            module.get("runtime_status")
-            or module.get("status")
-            or "offline"
-        ).strip().casefold()
+    elif is_root_without_auto_start:
+        color = PASTEL_DARK_GREEN
+        tooltip = "Módulo online"
+    elif bool(module.get("is_executable")) or bool(
+        module.get("supports_auto_start")
+    ) or has_offline_parent:
         if status == "online":
             color = PASTEL_DARK_GREEN
             tooltip = "Módulo online"

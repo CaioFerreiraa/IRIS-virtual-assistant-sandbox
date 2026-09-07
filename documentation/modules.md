@@ -257,6 +257,13 @@ mantém os dados apenas em memória. Reiniciar o processo apaga todas as notas.
 
 Somente módulos raiz válidos, com runtime Python, suporte declarado e preferência habilitada são iniciados. Cada backend inicia isoladamente em uma thread. Uma falha marca somente aquele backend como inválido e não interrompe os demais.
 
+Um backend compatível também pode ser iniciado manualmente pela tela do próprio
+módulo ou de um submódulo dependente. Enquanto o backend ancestral está offline,
+o botão de execução é substituído por “Iniciar módulo”. Quando a inicialização
+termina, os submódulos executáveis passam a usar o estado online do ancestral;
+se ele estiver offline, permanecem offline. Falhas próprias do módulo continuam
+com prioridade sobre o estado herdado e são apresentadas como problema.
+
 O contrato mínimo exige `start()`. `stop()` é opcional para recursos no processo. Se `start()` devolver um handle compatível com `subprocess.Popen`, a IRIS mantém esse handle e encerra somente o processo criado por ela.
 
 ## Segurança atual

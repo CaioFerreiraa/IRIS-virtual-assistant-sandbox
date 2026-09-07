@@ -31,7 +31,14 @@ def get_module_detail(
             return None
 
         registry_state = get_module_registry_state()
-        runtime_status = registry_state.runtime_statuses.get(module.id)
+        all_modules = repository.list_modules(available_only=False)
+        modules_by_id = {item.id: item for item in all_modules}
+        runtime_module = _find_runtime_module(module, modules_by_id)
+        runtime_status = _effective_runtime_status(
+            module,
+            modules_by_id,
+            registry_state.runtime_statuses,
+        )
         variables = []
         for definition in repository.list_variable_definitions(module.id):
             persisted_value = repository.get_variable_value(definition.id)
@@ -107,6 +114,16 @@ def get_module_detail(
             "is_available": effective_is_available,
             "validation_error": effective_validation_error or "",
             "status": status,
+            "runtime_module_id": (
+                runtime_module.id if runtime_module is not None else None
+            ),
+            "can_start_runtime": bool(
+                runtime_module is not None
+                and runtime_module.is_available
+                and not runtime_module.validation_error
+                and registry_state.runtime_statuses.get(runtime_module.id)
+                not in {"online", "iniciando"}
+            ),
             "supports_auto_start": bool(module.supports_auto_start),
             "auto_start_enabled": bool(module.auto_start_enabled),
             "is_root_module": module.parent_module_id is None,
@@ -606,6 +623,90 @@ def _module_status(
     if not is_available:
         return "inválido" if validation_error else "indisponível"
     return runtime_status or "offline"
+
+
+def apply_effective_runtime_statuses(
+    modules: list[dict[str, object]],
+    runtime_statuses: Mapping[int, str],
+) -> None:
+    """Aplica aos itens da UI o estado do backend que controla sua hierarquia."""
+    modules_by_id = {
+        int(module["module_id"]): module
+        for module in modules
+        if type(module.get("module_id")) is int
+    }
+    for module in modules:
+        runtime_module = _find_runtime_module(module, modules_by_id)
+        runtime_module_id = (
+            _get_module_value(runtime_module, "module_id")
+            if runtime_module is not None
+            else None
+        )
+        if type(runtime_module_id) is not int and runtime_module is not None:
+            runtime_module_id = _get_module_value(runtime_module, "id")
+        module["runtime_module_id"] = runtime_module_id
+        module["runtime_status"] = _effective_runtime_status(
+            module,
+            modules_by_id,
+            runtime_statuses,
+        )
+
+
+def _effective_runtime_status(
+    module,
+    modules_by_id: Mapping[int, object],
+    runtime_statuses: Mapping[int, str],
+) -> str:
+    module_id = _get_module_value(module, "module_id")
+    if type(module_id) is not int:
+        module_id = _get_module_value(module, "id")
+    own_runtime_status = str(runtime_statuses.get(module_id, ""))
+    if own_runtime_status == "com erro":
+        return own_runtime_status
+
+    runtime_module = _find_runtime_module(module, modules_by_id)
+    if runtime_module is None:
+        return str(runtime_statuses.get(module_id, "offline"))
+
+    runtime_module_id = _get_module_value(runtime_module, "module_id")
+    if type(runtime_module_id) is not int:
+        runtime_module_id = _get_module_value(runtime_module, "id")
+    runtime_status = str(runtime_statuses.get(runtime_module_id, "offline"))
+
+    if runtime_module_id == module_id:
+        return runtime_status
+    if module_has_problem(runtime_module):
+        return "offline"
+    return "online" if runtime_status == "online" else "offline"
+
+
+def _find_runtime_module(
+    module,
+    modules_by_id: Mapping[int, object],
+):
+    current = module
+    visited_ids: set[int] = set()
+    while current is not None:
+        current_id = _get_module_value(current, "module_id")
+        if type(current_id) is not int:
+            current_id = _get_module_value(current, "id")
+        if type(current_id) is not int or current_id in visited_ids:
+            return None
+        visited_ids.add(current_id)
+
+        if (
+            _get_module_value(current, "runtime_type") == "python"
+            and bool(_get_module_value(current, "supports_auto_start", False))
+        ):
+            return current
+
+        parent_id = _get_module_value(current, "parent_module_id")
+        current = (
+            modules_by_id.get(parent_id)
+            if type(parent_id) is int
+            else None
+        )
+    return None
 
 
 def module_has_problem(module) -> bool:

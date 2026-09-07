@@ -15,6 +15,7 @@ from repositories.module_repository import ModuleRepository
 from services.speech_service_manager import SpeechServiceManager
 from services.module_registry_state import get_module_registry_state
 from services.module_runtime_service import module_runtime_manager
+from services.module_service import apply_effective_runtime_statuses
 from services.voice_settings_service import VoiceSettingsService
 from ui.shared.components.header import VOICE_ACTIVE_ROUTES, build_header
 from ui.shared.components.sidebar import (
@@ -87,10 +88,6 @@ def get_default_page(page: ft.Page):
         speech_manager.prepare,
         VoiceSettingsService(speech_manager).load_for_runtime(),
     )
-    fatal_error_handler.guard_call(
-        page.run_thread,
-        module_runtime_manager.start_enabled_backends,
-    )
     return page
 
 
@@ -162,14 +159,14 @@ def get_app_container(
         for option in sidebar_module_options:
             module_id = option.get("module_id")
             if type(module_id) is int:
-                option["runtime_status"] = registry_state.runtime_statuses.get(
-                    module_id,
-                    "offline",
-                )
                 option["readme_content"] = registry_state.readme_contents.get(
                     module_id,
                     "",
                 )
+        apply_effective_runtime_statuses(
+            sidebar_module_options,
+            registry_state.runtime_statuses,
+        )
         speech_manager.clear_subscribers()
         speech_manager.set_command_enabled(current_route in VOICE_ACTIVE_ROUTES)
         header_slot.content = build_header(
@@ -195,6 +192,7 @@ def get_app_container(
             module_options=module_options,
             toaster_handler=toaster_handler,
             speech_manager=speech_manager,
+            on_module_status_change=render_layout,
         )
 
         if page.controls:
@@ -202,6 +200,18 @@ def get_app_container(
 
     page.on_route_change = fatal_error_handler.guard_callback(render_layout)
     fatal_error_handler.guard_call(render_layout)
+
+    def on_runtime_status_change() -> None:
+        async def refresh_layout() -> None:
+            render_layout()
+
+        page.run_task(refresh_layout)
+
+    fatal_error_handler.guard_call(
+        page.run_thread,
+        module_runtime_manager.start_enabled_backends,
+        on_runtime_status_change,
+    )
 
     layout = ft.Column(
         expand=True,

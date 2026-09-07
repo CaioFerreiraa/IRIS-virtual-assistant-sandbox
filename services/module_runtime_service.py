@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from threading import RLock, Thread
 
@@ -23,10 +24,14 @@ class ModuleRuntimeManager:
         self.session_factory = session_factory
         self._lock = RLock()
         self._threads: dict[int, Thread] = {}
+        self._starting_ids: set[int] = set()
         self._loaded_modules: dict[int, object] = {}
         self._owned_processes: dict[int, object] = {}
 
-    def start_enabled_backends(self) -> None:
+    def start_enabled_backends(
+        self,
+        on_status_change: Callable[[], None] | None = None,
+    ) -> None:
         db: Session = self.session_factory()
         try:
             backend_ids = [
@@ -50,15 +55,51 @@ class ModuleRuntimeManager:
                 if current_thread is not None and current_thread.is_alive():
                     continue
                 thread = Thread(
-                    target=self._start_backend,
-                    args=(module_id,),
+                    target=self.start_backend,
+                    args=(module_id, on_status_change),
                     daemon=True,
                     name=f"iris-module-{module_id}",
                 )
                 self._threads[module_id] = thread
                 thread.start()
 
-    def _start_backend(self, module_id: int) -> None:
+    def start_backend(
+        self,
+        module_id: int,
+        on_status_change: Callable[[], None] | None = None,
+    ) -> bool:
+        db: Session = self.session_factory()
+        try:
+            module = db.query(Module).filter(Module.id == module_id).one_or_none()
+            if module is None:
+                raise ValueError("Módulo responsável pelo backend não encontrado.")
+            if not module.is_available:
+                raise ValueError("O módulo está indisponível e não pode ser iniciado.")
+            if not (
+                module.parent_module_id is None
+                and module.runtime_type == "python"
+                and module.supports_auto_start
+            ):
+                raise ValueError("Este módulo não oferece inicialização manual.")
+        finally:
+            db.close()
+
+        with self._lock:
+            if module_id in self._starting_ids:
+                raise ValueError("O módulo já está sendo iniciado.")
+            if module_id in self._loaded_modules:
+                return True
+            self._starting_ids.add(module_id)
+
+        try:
+            return self._start_backend(module_id)
+        finally:
+            with self._lock:
+                self._starting_ids.discard(module_id)
+            if on_status_change is not None:
+                on_status_change()
+
+    def _start_backend(self, module_id: int) -> bool:
         module_registry_state_store.set_runtime_status(module_id, "iniciando")
         module_folder: Path | None = None
         try:
@@ -66,7 +107,7 @@ class ModuleRuntimeManager:
             try:
                 module = db.query(Module).filter(Module.id == module_id).one_or_none()
                 if module is None or not module.is_available:
-                    return
+                    return False
                 entrypoint = module.request_url or ""
                 public_key = module.module_public_key
                 module_folder = (
@@ -88,6 +129,7 @@ class ModuleRuntimeManager:
                 if self._is_process_handle(handle):
                     self._owned_processes[module_id] = handle
             module_registry_state_store.set_runtime_status(module_id, "online")
+            return True
         except Exception as error:
             if module_folder is not None:
                 append_module_error_log(module_folder, "inicialização", error)
@@ -98,6 +140,7 @@ class ModuleRuntimeManager:
                 )
             self._mark_initialization_failure(module_id, error)
             module_registry_state_store.set_runtime_status(module_id, "com erro")
+            return False
 
     def _call_start(self, start_function, variables: dict[str, str]):
         signature = inspect.signature(start_function)
