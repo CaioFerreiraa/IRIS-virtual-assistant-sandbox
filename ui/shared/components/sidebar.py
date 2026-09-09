@@ -43,9 +43,6 @@ CHILD_BACKGROUNDS = (
     GREY_400,
     GREY_500,
 )
-PARENT_SHADOW_COLOR = ft.Colors.with_opacity(0.16, PASTEL_DARK_PURPLE)
-
-
 @dataclass
 class _ModuleNode:
     data: Mapping[str, object]
@@ -412,7 +409,7 @@ def _build_module_branch(
                 collapsed_module_ids,
                 branch_visited_ids,
                 depth + 1,
-                PARENT_SHADOW_COLOR if child_index == 0 else None,
+                _module_background(depth) if child_index == 0 else None,
             )
             for child_index, child in enumerate(node.children)
         ],

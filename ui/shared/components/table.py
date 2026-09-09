@@ -27,6 +27,8 @@ def build_responsive_table(
     columns: Sequence[TableColumn],
     rows: Sequence[TableRow],
     empty_message: str = "Nenhum registro encontrado.",
+    *,
+    row_height: int = 54,
 ) -> ft.Container:
     return ft.Container(
         expand=True,
@@ -39,7 +41,7 @@ def build_responsive_table(
             spacing=0,
             controls=[
                 _build_header(columns),
-                _build_body(columns, rows, empty_message),
+                _build_body(columns, rows, empty_message, row_height),
             ],
         ),
     )
@@ -76,6 +78,7 @@ def _build_body(
     columns: Sequence[TableColumn],
     rows: Sequence[TableRow],
     empty_message: str,
+    row_height: int,
 ) -> ft.Control:
     if not rows:
         return ft.Container(
@@ -94,7 +97,7 @@ def _build_body(
         padding=0,
         auto_scroll=False,
         controls=[
-            _build_row(columns, row, row_index)
+            _build_row(columns, row, row_index, row_height)
             for row_index, row in enumerate(rows)
         ],
     )
@@ -104,16 +107,21 @@ def _build_row(
     columns: Sequence[TableColumn],
     row: TableRow,
     row_index: int,
+    row_height: int,
 ) -> ft.Container:
     return ft.Container(
-        height=54,
+        height=row_height,
         bgcolor=BLUE_GREY if row_index % 2 else SURFACE,
         border=ft.Border.only(bottom=ft.BorderSide(1, BORDER)),
         content=ft.Row(
             spacing=0,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                _build_cell(column.weight, _normalize_cell_value(row.get(column.key)))
+                _build_cell(
+                    column.weight,
+                    _normalize_cell_value(row.get(column.key)),
+                    height=row_height,
+                )
                 for column in columns
             ],
         ),
@@ -124,10 +132,11 @@ def _build_cell(
     weight: int,
     content: ft.Control,
     is_header: bool = False,
+    height: int = 54,
 ) -> ft.Container:
     return ft.Container(
         expand=weight,
-        height=46 if is_header else 54,
+        height=46 if is_header else height,
         padding=ft.Padding(left=14, top=0, right=14, bottom=0),
         alignment=ft.Alignment.CENTER_LEFT,
         border=ft.Border.only(right=ft.BorderSide(1, BORDER)),

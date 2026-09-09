@@ -16,6 +16,7 @@ from services.speech_service_manager import SpeechServiceManager
 from services.module_registry_state import get_module_registry_state
 from services.module_runtime_service import module_runtime_manager
 from services.module_service import apply_effective_runtime_statuses
+from services.routine_scheduler_service import routine_scheduler_service
 from services.voice_settings_service import VoiceSettingsService
 from ui.shared.components.header import VOICE_ACTIVE_ROUTES, build_header
 from ui.shared.components.sidebar import (
@@ -25,7 +26,7 @@ from ui.shared.components.sidebar import (
 )
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.shared.components.window_resize import build_window_resize_handles
-from ui.theme.colors import APP_BACKGROUND
+from ui.theme.colors import APP_BACKGROUND, PASTEL_DARK_PURPLE, TEXT_SECONDARY
 from ui.theme.fonts import DEFAULT_FONT, FONT_ASSETS
 
 
@@ -38,6 +39,28 @@ def main(page: ft.Page):
         fatal_error_handler = FatalErrorHandler(page, toaster_handler)
         fatal_error_handler.install()
         fatal_error_handler.handle(error)
+
+
+def build_route_loading() -> ft.Container:
+    return ft.Container(
+        expand=True,
+        alignment=ft.Alignment.CENTER,
+        bgcolor=APP_BACKGROUND,
+        content=ft.Column(
+            tight=True,
+            spacing=12,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.ProgressRing(
+                    color=PASTEL_DARK_PURPLE,
+                    width=34,
+                    height=34,
+                    stroke_width=3,
+                ),
+                ft.Text("Carregando...", size=13, color=TEXT_SECONDARY),
+            ],
+        ),
+    )
 
 
 def get_default_page(page: ft.Page):
@@ -81,6 +104,7 @@ def get_default_page(page: ft.Page):
     def shutdown_services(event=None) -> None:
         speech_manager.shutdown()
         module_runtime_manager.shutdown()
+        routine_scheduler_service.shutdown()
 
     page.on_disconnect = shutdown_services
     page.on_close = shutdown_services
@@ -88,6 +112,7 @@ def get_default_page(page: ft.Page):
         speech_manager.prepare,
         VoiceSettingsService(speech_manager).load_for_runtime(),
     )
+    fatal_error_handler.guard_call(routine_scheduler_service.start)
     return page
 
 
@@ -104,6 +129,7 @@ def get_app_container(
     sidebar_view_state = SidebarViewState()
     expanded_module_ids: set[int] = set()
     collapsed_module_ids: set[int] = set()
+    rendered_route: str | None = None
 
     def load_module_options(
         *,
@@ -135,7 +161,12 @@ def get_app_container(
         return int(match.group(1))
 
     def render_layout(e=None):
+        nonlocal rendered_route
         current_route = page.route or "/"
+        if rendered_route is not None and current_route != rendered_route:
+            route_slot.content = build_route_loading()
+            if page.controls:
+                route_slot.update()
         sidebar_module_options = load_module_options(available_only=False)
         module_options = [
             option
@@ -194,6 +225,7 @@ def get_app_container(
             speech_manager=speech_manager,
             on_module_status_change=render_layout,
         )
+        rendered_route = current_route
 
         if page.controls:
             page.update()

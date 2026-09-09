@@ -45,6 +45,7 @@ O ambiente atual utiliza:
 - FastAPI 0.138.1;
 - Uvicorn 0.49.0;
 - HTTPX 0.28.1.
+- APScheduler 3.11.3.
 
 As dependências estão listadas em `requirements.txt`.
 
@@ -155,18 +156,18 @@ A voz vem desativada por padrão. O primeiro uso pode baixar modelos grandes. A 
 
 ## Rotinas
 
-O banco possui estrutura inicial para rotinas, mas o scheduler completo ainda não está disponível.
+Rotinas possuem editor visual, execução manual e scheduler semanal ou mensal.
+O agendamento usa somente o horário local da máquina. A aplicação não oferece
+fuso por rotina e não recupera em massa horários perdidos enquanto o computador
+estava desligado.
 
-Ainda precisam ser definidos:
+O dia 31 é aceito, mas não produz execução em meses que não possuem esse dia.
+A mesma rotina não executa simultaneamente; rotinas diferentes podem concorrer.
 
-- editor visual;
-- validação de cron;
-- comportamento após falha;
-- execução em segundo plano;
-- recuperação após reinício;
-- concorrência;
-- cancelamento;
-- limites de segurança.
+Argumentos são valores fixos por etapa. Não há passagem do resultado de uma
+etapa para outra, solicitação interativa durante jobs, repetição automática de
+falhas nem cancelamento de uma execução já iniciada. Credenciais permanecem
+proibidas nos argumentos enquanto o Vault não estiver implementado.
 
 ## Credenciais
 

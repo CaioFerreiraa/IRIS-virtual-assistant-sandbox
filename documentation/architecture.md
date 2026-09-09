@@ -30,7 +30,8 @@ O fluxo atual de inicialização é:
 8. a rota inicial carrega a tela principal;
 9. módulos disponíveis no banco são transformados em opções de pesquisa, enquanto módulos indisponíveis permanecem visíveis para diagnóstico na sidebar;
 10. configurações de voz são carregadas;
-11. gerenciadores de voz e runtimes habilitados iniciam seus backends em threads isoladas.
+11. gerenciadores de voz e runtimes habilitados iniciam seus backends em threads isoladas;
+12. o scheduler de rotinas inicia uma única instância e carrega rotinas ativas, válidas e não excluídas.
 
 ## Camadas e responsabilidades
 
@@ -70,6 +71,7 @@ Exemplos:
 - serviço da tela inicial;
 - captura e transcrição de voz;
 - integração futura com serviços do sistema operacional.
+- CRUD, validação de agendamento e sincronização do scheduler de rotinas.
 
 Serviços podem usar bibliotecas externas, mas não devem manipular controles da interface diretamente.
 
@@ -131,6 +133,22 @@ Responsabilidades:
 - futura tela de documentação e configurações.
 
 A interface não deve executar diretamente consultas complexas, processamento de voz ou chamadas demoradas.
+
+### Fluxo de rotina
+
+1. `RoutineService` valida nome, agendamento, módulos, argumentos e booleanos;
+2. criação ou edição persiste a rotina e todas as etapas em uma transação;
+3. `RoutineSchedulerService` adiciona, substitui ou remove o job correspondente;
+4. uma execução manual ou agendada chama `RoutineExecutor` fora da thread visual;
+5. o executor bloqueia outra execução da mesma rotina e carrega uma sessão própria;
+6. cada etapa é delegada a `CommandProcessor.execute_module_id()` com `routine_id`;
+7. o processador registra o resultado do módulo no histórico;
+8. o executor aplica a política de interrupção e atualiza `last_run_at`.
+
+O scheduler usa o horário local e não recupera em massa execuções perdidas com
+a aplicação desligada. Jobs usam IDs `routine-{id}`, `max_instances=1` e
+`coalesce=True`. O encerramento ocorre junto com voz e runtimes nos eventos de
+fechamento e desconexão da página.
 
 ### `modules/`
 

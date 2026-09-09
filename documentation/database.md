@@ -144,10 +144,14 @@ Campos:
 - `name`;
 - `cron_expression`;
 - `active`;
+- `stop_on_failure`;
 - `last_run_at`;
+- `deleted_at`;
 - `created_at`.
 
-A existência dos campos não significa que o scheduler esteja concluído.
+`stop_on_failure` define se a primeira etapa com falha interrompe a sequência.
+`deleted_at` implementa exclusão lógica para preservar os logs históricos. O
+scheduler operacional usa `cron_expression` e ignora registros excluídos.
 
 ### RoutineAction
 
@@ -160,6 +164,7 @@ Campos:
 - `module_id`;
 - `execution_order`;
 - `active`.
+- `argument`, texto opcional e fixo usado somente pela etapa.
 
 O vínculo permite que uma rotina mantenha uma sequência de módulos.
 
@@ -268,7 +273,7 @@ Uma migration deve considerar:
 - downgrade possível;
 - compatibilidade com SQLite.
 
-A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes.
+A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes. A migration `a1f6d8c3b9e2` adiciona `stop_on_failure` e `deleted_at` às rotinas e `argument` às etapas; registros existentes recebem `stop_on_failure=True`.
 
 ## Transações
 
@@ -281,6 +286,10 @@ Operações de escrita devem:
 5. encerrar a sessão.
 
 Não mantenha uma sessão global compartilhada indefinidamente entre eventos da interface.
+
+Criação e edição de uma rotina e de todas as suas etapas usam um único commit.
+Jobs do scheduler e execuções manuais abrem sessões próprias para não
+compartilhar uma sessão SQLAlchemy entre threads.
 
 ## Foreign keys
 

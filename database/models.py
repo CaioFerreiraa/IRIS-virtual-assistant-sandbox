@@ -196,10 +196,16 @@ class Routine(Base):
     cron_expression = Column(String(100), nullable=True)
 
     active = Column(Boolean, default=True)
+    stop_on_failure = Column(Boolean, nullable=False, default=True)
     last_run_at = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    routine_actions = relationship("RoutineAction", back_populates="routine")
+    routine_actions = relationship(
+        "RoutineAction",
+        back_populates="routine",
+        order_by="RoutineAction.execution_order",
+    )
     logs = relationship("Log", back_populates="routine")
 
 
@@ -213,6 +219,7 @@ class RoutineAction(Base):
 
     execution_order = Column(Integer, nullable=False, default=1)
     active = Column(Boolean, default=True)
+    argument = Column(Text, nullable=True)
 
     routine = relationship("Routine", back_populates="routine_actions")
     module = relationship("Module", back_populates="routine_actions")

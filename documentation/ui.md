@@ -139,6 +139,10 @@ ajusta ao espaço restante.
 
 A área principal muda conforme a rota.
 
+Quando a rota muda, o `route_slot` apresenta um estado intermediário com
+indicador de progresso e o texto “Carregando...”. O header e a sidebar
+permanecem montados durante essa transição.
+
 Rotas atuais ou planejadas:
 
 - início;
@@ -229,6 +233,36 @@ argumentos Python continuam temporários e são enviados somente na execução.
 
 IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos inválidos sem ID aparecem no diagnóstico da sidebar com pasta, mensagem curta e caminho do `module.log`, sem traceback.
 
+### Rotinas
+
+A rota `/routines` apresenta uma tabela com nome, agendamento amigável,
+quantidade de módulos, próxima e última execução, status e ações. O switch da
+linha ativa ou desativa a rotina e permanece sincronizado com o scheduler. As
+ações permitem executar em segundo plano, editar e excluir com confirmação.
+
+O formulário de criação e edição usa um diálogo amplo dividido nas abas
+“Geral”, “Agendamento” e “Módulos”. A escolha semanal usa um seletor compacto;
+cada seleção aparece como uma etiqueta removível e o checkbox “Todos os dias”
+preenche ou limpa a semana completa. Para a repetição mensal, o usuário digita
+um número inteiro entre 1 e 31 e confirma pelo botão roxo com ícone de adição.
+Valores acima de 28 exibem um aviso de que o dia pode não existir em todos os
+meses. O usuário informa somente o horário local; a expressão cron permanece
+interna.
+
+Novas rotinas começam ativas. O botão de criação ou salvamento permanece
+desabilitado enquanto nome, agendamento, dias, módulos disponíveis ou
+argumentos obrigatórios estiverem incompletos ou inválidos.
+
+As etapas exibem o caminho completo do módulo e podem ser repetidas,
+reordenadas ou removidas. O argumento aparece somente quando aplicável. Uma
+etapa salva que ficou indisponível continua visível com aviso e não impede a
+tela de carregar.
+
+A listagem apresenta carregamento, erro e o estado vazio “Nenhuma rotina
+cadastrada.”. Durante a execução manual, as ações incompatíveis da linha ficam
+desabilitadas e o resultado de sucesso, falha ou execução parcial é apresentado
+por toaster.
+
 ### Histórico
 
 Apresenta registros em tabela responsiva que ocupa toda a área disponível da
@@ -277,7 +311,9 @@ Apresenta:
 - aviso;
 - informação.
 
-O toaster deve usar mensagens curtas e úteis.
+O toaster deve usar mensagens curtas e úteis. Ao ser exibido, seu conteúdo é
+aberto em um diálogo não modal, com fundo transparente, para permanecer acima
+de outros diálogos sem acrescentar um novo escurecimento ao restante da tela.
 
 ### Card de resultado
 
@@ -305,7 +341,7 @@ Oferece estrutura reutilizável para listas com colunas.
 
 ### Controles de formulário
 
-Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários. Somente campos de entrada desabilitados usam fundo `GREY_100`, texto `TEXT_PRIMARY` e borda `TEXT_PRIMARY`. Campos habilitados preservam o fundo padrão, a borda `BORDER` e a borda de foco roxa. O valor, o rótulo e o placeholder dos campos usam tamanho 14; o texto auxiliar preserva o tamanho padrão do Flet.
+Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários. Somente campos de entrada desabilitados usam fundo `GREY_200`, texto `TEXT_PRIMARY` e borda `TEXT_PRIMARY`. Campos habilitados preservam o fundo padrão, a borda `BORDER` e a borda de foco roxa. Botões primários desabilitados usam fundo e texto em tons de cinza, distinguindo-se visualmente do estado ativo roxo. O valor, o rótulo e o placeholder dos campos usam tamanho 14; o texto auxiliar preserva o tamanho padrão do Flet.
 Campos de entrada devem preencher toda a largura disponível na célula da grid, independentemente do tamanho do texto exibido.
 Quando um campo possuir texto de ajuda, o mesmo conteúdo deve ficar disponível como tooltip.
 `build_floating_save_bar` mantém a barra de salvamento montada e anima sua

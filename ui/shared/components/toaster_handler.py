@@ -15,14 +15,11 @@ from ui.theme.colors import (
     WARNING,
 )
 
-
-LOGO_PATH = "assets/images/logo_transparent.png"
-
-
 class ToasterHandler:
     def __init__(self, page: ft.Page):
         self.page = page
         self._toast = self._build_toast_container()
+        self._toast_dialog = self._build_toast_dialog()
         self._toast_id = 0
         self._is_mounted = False
         self._is_hovered = False
@@ -34,7 +31,7 @@ class ToasterHandler:
         if self._is_mounted:
             return
 
-        self.page.overlay.append(self._toast)
+        self.page.overlay.append(self._toast_dialog)
         self._is_mounted = True
 
     def show_success(self, message: str, title: str = "Sucesso") -> None:
@@ -64,19 +61,16 @@ class ToasterHandler:
         self._current_kind = kind
 
         self._toast.content = _build_toast_content(title, message, kind)
-        self._toast.visible = True
         self._toast.opacity = 1
-        self._toast.bottom = 50
-        self._toast.right = 50
-        self._update()
+        self._toast_dialog.open = True
+        self._update(page_layout_changed=True)
 
         self.page.run_thread(self._schedule_hide, toast_id, duration_seconds)
 
     def hide(self) -> None:
         self._toast.opacity = 0
-        self._toast.bottom = 8
-        self._toast.visible = False
-        self._update()
+        self._toast_dialog.open = False
+        self._update(page_layout_changed=True)
 
     def _schedule_hide(self, toast_id: int, duration_seconds: float) -> None:
         elapsed_seconds = 0.0
@@ -109,33 +103,46 @@ class ToasterHandler:
             kind=self._current_kind,
         )
 
-    def _update(self) -> None:
+    def _update(self, *, page_layout_changed: bool = False) -> None:
         try:
-            if self.page.controls:
-                self._toast.update()
-            else:
+            if page_layout_changed or not self.page.controls:
                 self.page.update()
+            else:
+                self._toast.update()
         except RuntimeError:
             return
 
     def _build_toast_container(self) -> ft.Container:
         return ft.Container(
             width=437,
-            right=27,
             opacity=0,
-            visible=False,
+            content=_build_toast_content("IRIS", "-", "info"),
             on_hover=self._on_hover,
             on_click=self._open_modal,
             ink=True,
             ink_color=PASTEL_PURPLE,
             animate_opacity=180,
-            animate_position=180,
             shadow=ft.BoxShadow(
                 spread_radius=0,
                 blur_radius=31,
                 color="#22000000",
                 offset=ft.Offset(0, 13),
             ),
+        )
+
+    def _build_toast_dialog(self) -> ft.AlertDialog:
+        return ft.AlertDialog(
+            modal=False,
+            alignment=ft.Alignment.BOTTOM_RIGHT,
+            inset_padding=ft.Padding(left=24, top=24, right=27, bottom=50),
+            bgcolor=ft.Colors.TRANSPARENT,
+            barrier_color=ft.Colors.TRANSPARENT,
+            elevation=0,
+            content_padding=0,
+            title_padding=0,
+            actions_padding=0,
+            shape=ft.RoundedRectangleBorder(radius=7),
+            content=self._toast,
         )
 
 
@@ -149,76 +156,58 @@ def _build_toast_content(title: str, message: str, kind: str) -> ft.Container:
         border=ft.Border.all(1, PASTEL_PURPLE),
         border_radius=7,
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-        content=ft.Stack(
-            expand=True,
+        content=ft.Row(
+            spacing=0,
             controls=[
                 ft.Container(
-                    top=-49,
-                    left=-56,
-                    content=ft.Image(
-                        src=LOGO_PATH,
-                        width=280,
-                        height=280,
-                        opacity=0.10,
-                        fit=ft.BoxFit.CONTAIN,
-                    ),
-                ),
-                ft.Container(
-                    left=0,
-                    top=0,
-                    bottom=0,
                     width=7,
+                    height=116,
                     bgcolor=PASTEL_DARK_PURPLE,
                 ),
                 ft.Container(
+                    expand=True,
                     padding=ft.Padding(left=20, top=18, right=20, bottom=18),
-                    content=ft.Row(
-                        spacing=13,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    content=ft.Column(
+                        tight=True,
+                        spacing=4,
                         controls=[
-                            ft.Column(
-                                expand=True,
-                                tight=True,
-                                spacing=4,
+                            ft.Row(
+                                spacing=9,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 controls=[
-                                    ft.Row(
-                                        spacing=9,
-                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        controls=[
-                                            ft.Container(
-                                                width=24,
-                                                height=24,
-                                                border_radius=6,
-                                                alignment=ft.Alignment.CENTER,
-                                                bgcolor=accent_color,
-                                                border=ft.Border.all(1, BORDER),
-                                                content=ft.Icon(
-                                                    icon=icon,
-                                                    size=14,
-                                                    color=PASTEL_DARK_PURPLE,
-                                                ),
-                                            ),
-                                            ft.Text(
-                                                title,
-                                                size=16,
-                                                weight=ft.FontWeight.W_700,
-                                                color=TEXT_PRIMARY,
-                                                overflow=ft.TextOverflow.ELLIPSIS,
-                                                no_wrap=True,
-                                                tooltip=title,
-                                                expand=True,
-                                            ),
-                                        ],
+                                    ft.Container(
+                                        width=24,
+                                        height=24,
+                                        border_radius=6,
+                                        alignment=ft.Alignment.CENTER,
+                                        bgcolor=accent_color,
+                                        border=ft.Border.all(1, BORDER),
+                                        content=ft.Icon(
+                                            icon=icon,
+                                            size=14,
+                                            color=PASTEL_DARK_PURPLE,
+                                        ),
                                     ),
                                     ft.Text(
-                                        message or "-",
-                                        size=15,
-                                        color=TEXT_SECONDARY,
-                                        max_lines=2,
+                                        title,
+                                        size=16,
+                                        weight=ft.FontWeight.W_700,
+                                        color=TEXT_PRIMARY,
                                         overflow=ft.TextOverflow.ELLIPSIS,
-                                        tooltip=message or "-",
+                                        no_wrap=True,
+                                        tooltip=title,
+                                        expand=True,
                                     ),
                                 ],
+                            ),
+                            ft.Text(
+                                message or "-",
+                                size=15,
+                                color=TEXT_SECONDARY,
+                                max_lines=2,
+                                overflow=ft.TextOverflow.ELLIPSIS,
+                                tooltip=message or "-",
+                                expand=True,
                             ),
                         ],
                     ),

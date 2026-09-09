@@ -9,10 +9,11 @@ from ui.theme.colors import (
     BLUE_GREY,
     BORDER,
     GREY_200,
+    GREY_500,
     PASTEL_DARK_PURPLE,
     PASTEL_PURPLE,
     SURFACE,
-    TEXT_PRIMARY, GREY_100,
+    TEXT_PRIMARY,
 )
 from ui.shared.components.tooltip_container import build_tooltip_container
 
@@ -47,7 +48,7 @@ def build_dropdown(
         tooltip=build_tooltip_container(helper) if helper else None,
         disabled=disabled,
         expand=expand,
-        bgcolor=GREY_100 if disabled else None,
+        bgcolor=GREY_200 if disabled else None,
         color=TEXT_PRIMARY if disabled else None,
         text_style=ft.TextStyle(
             size=INPUT_TEXT_SIZE,
@@ -95,8 +96,8 @@ def build_text_field(
         helper=helper,
         disabled=disabled,
         expand=expand,
-        bgcolor=GREY_100 if disabled else None,
-        focused_bgcolor=GREY_100 if disabled else None,
+        bgcolor=GREY_200 if disabled else None,
+        focused_bgcolor=GREY_200 if disabled else None,
         text_style=ft.TextStyle(
             size=INPUT_TEXT_SIZE,
             color=TEXT_PRIMARY if disabled else None,
@@ -129,16 +130,26 @@ def build_primary_button(
     disabled: bool = False,
     expand: bool = False,
     visible: bool = True,
+    width: int | None = None,
+    height: int | None = None,
 ) -> ft.FilledButton:
     return ft.FilledButton(
-        content=ft.Text(label),
-        bgcolor=PASTEL_DARK_PURPLE,
-        color=ft.Colors.WHITE,
+        content=ft.Text(label, no_wrap=True),
         disabled=disabled,
         expand=expand,
         visible=visible,
+        width=width,
+        height=height,
         on_click=on_click,
         style=ft.ButtonStyle(
+            bgcolor={
+                ft.ControlState.DISABLED: GREY_200,
+                ft.ControlState.DEFAULT: PASTEL_DARK_PURPLE,
+            },
+            color={
+                ft.ControlState.DISABLED: GREY_500,
+                ft.ControlState.DEFAULT: ft.Colors.WHITE,
+            },
             shape=ft.RoundedRectangleBorder(radius=5),
         ),
     )
@@ -152,6 +163,8 @@ def build_secondary_button(
     expand: bool = False,
     visible: bool = True,
     tooltip: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
 ) -> ft.FilledButton:
     return ft.FilledButton(
         content=ft.Text(label),
@@ -161,6 +174,8 @@ def build_secondary_button(
         disabled=disabled,
         expand=expand,
         visible=visible,
+        width=width,
+        height=height,
         on_click=on_click,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=5),

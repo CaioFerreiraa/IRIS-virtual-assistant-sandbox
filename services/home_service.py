@@ -72,11 +72,16 @@ class HomeService:
         finally:
             db.close()
 
-    def execute_module(self, module_id: int, argument: str | None = None) -> dict:
+    def execute_module(
+        self,
+        module_id: int,
+        argument: str | None = None,
+        routine_id: int | None = None,
+    ) -> dict:
         # Executa um modulo com ou sem argumento.
         processor, db = self._build_processor()
         try:
-            return processor.execute_module_id(module_id, argument)
+            return processor.execute_module_id(module_id, argument, routine_id)
         finally:
             db.close()
 

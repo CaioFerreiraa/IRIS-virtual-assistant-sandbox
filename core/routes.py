@@ -6,6 +6,7 @@ import ui.documentation as documentation_ui
 import ui.history as history_ui
 import ui.home as ui
 import ui.modules as modules_ui
+import ui.routines as routines_ui
 import ui.settings as settings_ui
 
 from database.db import SessionLocal
@@ -55,6 +56,12 @@ def build_route_content(
 
     if route == "/history":
         return history_ui.view.build_history_view()
+
+    if route == "/routines":
+        return routines_ui.build_routines_view(
+            toaster_handler=toaster_handler,
+            session_factory=module_session_factory,
+        )
 
     module_route_match = MODULE_ROUTE_PATTERN.fullmatch(route)
     if module_route_match is not None:

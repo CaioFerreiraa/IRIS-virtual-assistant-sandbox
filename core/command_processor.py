@@ -175,7 +175,12 @@ class CommandProcessor:
 
         return self._execute_and_log(module, module_path, argument)
 
-    def execute_module_id(self, module_id: int, argument: str | None = None) -> dict:
+    def execute_module_id(
+        self,
+        module_id: int,
+        argument: str | None = None,
+        routine_id: int | None = None,
+    ) -> dict:
         module = self.module_repository.get_by_id(module_id)
         if module is None:
             raise ValueError(f"Módulo não encontrado: {module_id}")
@@ -183,13 +188,30 @@ class CommandProcessor:
             module,
             self.module_repository.get_module_path(module),
             argument,
+            routine_id,
         )
 
-    def _execute_and_log(self, module, module_path: str, argument: str | None) -> dict:
+    def _execute_and_log(
+        self,
+        module,
+        module_path: str,
+        argument: str | None,
+        routine_id: int | None = None,
+    ) -> dict:
         try:
-            result = self._execute_module(module, module_path, argument)
+            result = self._execute_module(
+                module,
+                module_path,
+                argument,
+                persist_argument=routine_id is None,
+            )
         except Exception as error:
-            self._create_execution_log(module.id, "error", str(error))
+            self._create_execution_log(
+                module.id,
+                "error",
+                str(error),
+                routine_id,
+            )
             raise
 
         status = "success" if result.get("success", True) else "error"
@@ -197,10 +219,18 @@ class CommandProcessor:
             module.id,
             status,
             self._build_log_message(result, module),
+            routine_id,
         )
         return result
 
-    def _execute_module(self, module, module_path: str, argument: str | None = None) -> dict:
+    def _execute_module(
+        self,
+        module,
+        module_path: str,
+        argument: str | None = None,
+        *,
+        persist_argument: bool = True,
+    ) -> dict:
         if not module.is_available:
             raise ValueError(
                 f"O módulo '{module_path}' está indisponível e não pode ser executado."
@@ -211,7 +241,11 @@ class CommandProcessor:
             )
 
         if module.http_request is not None:
-            return self.http_request_service.execute(module.id, argument)
+            return self.http_request_service.execute(
+                module.id,
+                argument,
+                persist_argument=persist_argument,
+            )
 
         request_method = (module.request_method or "").upper()
 
@@ -249,11 +283,18 @@ class CommandProcessor:
             f"Método de execução não suportado: {request_method}"
         )
 
-    def _create_execution_log(self, module_id: int, status: str, message: str = "") -> None:
+    def _create_execution_log(
+        self,
+        module_id: int,
+        status: str,
+        message: str = "",
+        routine_id: int | None = None,
+    ) -> None:
         self.logger_service.create_log(
             module_id=module_id,
             status=status,
             message=message,
+            routine_id=routine_id,
         )
 
     def _build_log_message(self, result: dict, module=None) -> str:

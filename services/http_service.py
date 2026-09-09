@@ -128,8 +128,14 @@ class ModuleHttpRequestService:
         self,
         module_id: int,
         argument: str | None = None,
+        *,
+        persist_argument: bool = True,
     ) -> dict[str, object]:
-        definition = self._load_and_persist_argument(module_id, argument)
+        definition = self._load_and_persist_argument(
+            module_id,
+            argument,
+            persist_argument=persist_argument,
+        )
         effective_argument = (
             str(argument or "")
             if bool(definition["argument_enabled"])
@@ -168,10 +174,7 @@ class ModuleHttpRequestService:
             if not request.argument_enabled:
                 raise ValueError("Este módulo não utiliza argumento de execução.")
             normalized_argument = str(argument)
-            if _looks_like_credential(normalized_argument):
-                raise ValueError(
-                    "O argumento parece conter uma credencial e não pode ser salvo."
-                )
+            validate_non_sensitive_argument(normalized_argument)
             request.argument = normalized_argument
             db.commit()
         except Exception:
@@ -208,10 +211,7 @@ class ModuleHttpRequestService:
         )
         if not all(isinstance(value, str) for value in text_values):
             raise ValueError("Os campos da requisição HTTP devem conter texto.")
-        if argument and _looks_like_credential(argument):
-            raise ValueError(
-                "O argumento parece conter uma credencial e não pode ser salvo."
-            )
+        validate_non_sensitive_argument(argument)
 
         db = self.session_factory()
         try:
@@ -295,6 +295,8 @@ class ModuleHttpRequestService:
         self,
         module_id: int,
         argument: str | None,
+        *,
+        persist_argument: bool,
     ) -> dict[str, object]:
         db = self.session_factory()
         try:
@@ -305,12 +307,11 @@ class ModuleHttpRequestService:
             definition = build_http_request_detail(request)
             if bool(request.argument_enabled):
                 normalized_argument = str(argument or "")
-                if _looks_like_credential(normalized_argument):
-                    raise ValueError(
-                        "O argumento parece conter uma credencial e não pode ser salvo."
-                    )
-                request.argument = normalized_argument
-            db.commit()
+                validate_non_sensitive_argument(normalized_argument)
+                if persist_argument:
+                    request.argument = normalized_argument
+            if persist_argument:
+                db.commit()
             return definition
         except Exception:
             db.rollback()
@@ -606,6 +607,15 @@ def _looks_like_credential(value: str) -> bool:
             re.IGNORECASE,
         )
     )
+
+
+def validate_non_sensitive_argument(value: str | None) -> None:
+    """Impede persistência aparente de credenciais em argumentos de texto."""
+    normalized_value = str(value or "")
+    if normalized_value and _looks_like_credential(normalized_value):
+        raise ValueError(
+            "O argumento parece conter uma credencial e não pode ser salvo."
+        )
 
 
 def _decode_response_body(response: httpx.Response) -> object:
