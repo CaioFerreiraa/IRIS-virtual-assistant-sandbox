@@ -20,7 +20,7 @@ from ui.theme.fonts import TITLE_FONT
 
 
 LOGO_PATH = "assets/images/logo_transparent.png"
-DROPDOWN_HEIGHT = 360
+MAX_DROPDOWN_HEIGHT = 360
 VOICE_SUBMIT_DELAY_SECONDS = 2.0
 HOME_ROUTES = {"", "/", "/home"}
 
@@ -84,7 +84,7 @@ class HomeViewState:
             on_select_module=self.select_module,
             on_select_argument=self.select_argument,
             update_control=self.update_if_ready,
-            dropdown_height=DROPDOWN_HEIGHT,
+            dropdown_height=MAX_DROPDOWN_HEIGHT,
         )
         if self.speech_manager is not None:
             self.speech_manager.subscribe(self.on_speech_event)
@@ -851,8 +851,18 @@ class HomeViewControls:
 
 def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
     # Monta a tela home e devolve referencias dos controles atualizaveis.
-    module_suggestions_list = ft.ListView(spacing=4, padding=0, expand=True, auto_scroll=False)
-    argument_suggestions_list = ft.ListView(spacing=4, padding=0, expand=True, auto_scroll=False)
+    module_suggestions_list = ft.ListView(
+        spacing=ui.dropdowns.DROPDOWN_LIST_SPACING,
+        padding=0,
+        expand=True,
+        auto_scroll=False,
+    )
+    argument_suggestions_list = ft.ListView(
+        spacing=ui.dropdowns.DROPDOWN_LIST_SPACING,
+        padding=0,
+        expand=True,
+        auto_scroll=False,
+    )
 
     module_panel = ui.dropdowns.build_dropdown_panel(module_suggestions_list, on_click=callbacks.on_dropdown_click)
     argument_input_field = ui.input.build_argument_field(
@@ -863,7 +873,11 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
         ui.argument_dropdown.build_argument_panel_content(argument_input_field, argument_suggestions_list),
         on_click=callbacks.on_dropdown_click,
     )
-    dropdown_stack = ui.dropdowns.build_dropdown_stack(module_panel, argument_panel, DROPDOWN_HEIGHT)
+    dropdown_stack = ui.dropdowns.build_dropdown_stack(
+        module_panel,
+        argument_panel,
+        MAX_DROPDOWN_HEIGHT,
+    )
 
     command_input_field = ui.input.build_command_field(
         on_submit=callbacks.on_send,

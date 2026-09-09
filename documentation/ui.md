@@ -171,7 +171,8 @@ usam o ícone persistido; quando não há seleção, o input mostra `explore`.
 Os dropdowns de módulos e argumentos fecham ao clicar no fundo, na logo ou no
 título da Home. Cliques no input e dentro dos próprios dropdowns preservam a
 interação até a seleção, e fechar uma lista não apaga o texto nem o módulo já
-selecionado.
+selecionado. A altura acompanha a quantidade de sugestões até o limite de 360
+pixels; acima disso, a lista mantém o painel nesse limite e permite rolagem.
 
 A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. O campo secundário usa uma instrução genérica porque pode receber arquivos, cidades ou outros tipos de argumento. Módulos com busca pedem esse valor por padrão, mas podem usar `should_request_argument(variables)` para dispensá-lo quando uma configuração já fornece o valor necessário. A execução acontece em background para manter a interface responsiva.
 
@@ -364,7 +365,9 @@ A área externa da aplicação possui regiões transparentes nas quatro bordas e
 quatro cantos. Essas regiões iniciam o redimensionamento nativo da janela e
 preservam o tamanho mínimo de 1000 × 650 pixels configurado pelo Flet. O header
 continua responsável por mover, maximizar e restaurar a janela, enquanto a
-borda interna da sidebar redimensiona somente o menu lateral.
+borda interna da sidebar redimensiona somente o menu lateral. Os controles da
+janela mantêm uma margem à direita maior que a região de resize, evitando
+sobreposição entre as áreas de clique.
 
 ## Estados visuais
 

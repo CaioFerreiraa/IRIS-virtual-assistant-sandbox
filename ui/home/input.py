@@ -38,7 +38,6 @@ def build_argument_field(on_submit: Callable, on_change: Callable) -> ft.TextFie
     # Cria o campo usado para filtrar argumentos do modulo selecionado.
     return ft.TextField(
         height=42,
-        expand=True,
         hint_text="Informe ou busque um argumento...",
         hint_style=ft.TextStyle(color=TEXT_SECONDARY, size=11),
         text_style=ft.TextStyle(color=TEXT_PRIMARY, size=11),

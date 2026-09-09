@@ -5,6 +5,7 @@ import flet as ft
 from services.speech_service import SpeechEvent, SpeechEventKind
 from services.speech_service_manager import SpeechServiceManager
 from ui.shared.components.custom_dialog import custom_dialog
+from ui.shared.components.window_resize import WINDOW_RESIZE_CORNER_SIZE
 from ui.theme.colors import (
     BLUE_GREY,
     CANCEL,
@@ -23,6 +24,7 @@ from ui.theme.fonts import TITLE_FONT
 
 HEADER_HEIGHT = 74
 WINDOW_BUTTON_WIDTH = 46
+WINDOW_CONTROLS_RIGHT_MARGIN = WINDOW_RESIZE_CORNER_SIZE + 4
 VOICE_ACTIVE_ROUTES = {"", "/", "/home", "/settings/voice_checking"}
 VOICE_STATUS_DIALOG_WIDTH = 520
 
@@ -129,7 +131,7 @@ def build_header(
             _build_user_button(current_route=current_route,on_navigate=on_navigate),
             ft.Container(
                 height=42,
-                margin=ft.Margin(right=8),
+                margin=ft.Margin(right=WINDOW_CONTROLS_RIGHT_MARGIN),
                 border_radius=10,
                 bgcolor=ft.Colors.with_opacity(0.035,TEXT_PRIMARY),
                 content=ft.Row(
