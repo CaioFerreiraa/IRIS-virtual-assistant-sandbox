@@ -175,6 +175,7 @@ selecionado. A altura acompanha a quantidade de sugestões até o limite de 360
 pixels; acima disso, a lista mantém o painel nesse limite e permite rolagem.
 
 A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. O campo secundário usa uma instrução genérica porque pode receber arquivos, cidades ou outros tipos de argumento. Módulos com busca pedem esse valor por padrão, mas podem usar `should_request_argument(variables)` para dispensá-lo quando uma configuração já fornece o valor necessário. A execução acontece em background para manter a interface responsiva.
+O campo de argumento ocupa a largura do painel, usa contorno azul suave e destaca o foco em roxo pastel.
 
 ### Tela do módulo
 
