@@ -150,7 +150,7 @@ def get_default_page(page: ft.Page):
         return True
 
     def notify_background(title: str, message: str) -> bool:
-        if page.window.visible:
+        if page.window.visible and not page.window.minimized:
             return False
         return tray_service.notify(message, title=title)
 
