@@ -62,7 +62,10 @@ A palavra de ativação é “IRIS”. A implementação reconhece também a gra
 
 Ela é detectada na transcrição, sem exigir Porcupine, OpenWakeWord ou um modelo adicional. Portanto, a detecção depende da qualidade do Whisper e pode apresentar falsos positivos ou não reconhecer a palavra em ambientes ruidosos.
 
-A aceitação da palavra de ativação fica habilitada na rota Início e na rota de teste do microfone. Nas demais rotas, o backend pode continuar carregado e pronto, mas as transcrições não ativam comandos e qualquer interação de voz em andamento é encerrada.
+A aceitação da palavra de ativação fica habilitada durante a aplicação,
+independentemente da rota visual e mesmo com a janela oculta. A rota de teste do
+microfone permanece um modo de diagnóstico próprio: nela as transcrições são
+exibidas sem ativar nem executar comandos.
 
 Antes da ativação, transcrições comuns são ignoradas. Depois da ativação:
 
@@ -201,11 +204,6 @@ Quando o serviço está pronto, a configuração de voz apresenta o botão “Te
 
 O nível do áudio também aparece abaixo do cartão de estado na configuração de voz. Somente o nível normalizado é encaminhado à interface; o áudio bruto permanece no serviço.
 
-No Windows, o monitor de nível inicializa o apartamento COM dentro da própria
-thread de captura antes de abrir o stream do PortAudio. Essa inicialização
-preserva a responsividade da interface e evita que endpoints WASAPI sejam
-apresentados como “Sem sinal” quando o dispositivo está entregando áudio.
-
 ## Ciclo de vida
 
 Ao iniciar a aplicação:
@@ -217,6 +215,13 @@ Ao iniciar a aplicação:
 5. o microfone entra em espera.
 
 Ao salvar alterações, o backend anterior é encerrado e a nova configuração é preparada. Ao fechar ou desconectar a página Flet, o microfone e o worker são encerrados.
+
+Ocultar a janela na bandeja não representa o encerramento da aplicação. Nesse
+estado, o backend continua aceitando a
+palavra de ativação e executando o fluxo atual de comandos, independentemente da
+rota visual. Somente a ação explícita **Sair da IRIS** encerrará o serviço. A
+pausa feita pelo menu da bandeja será temporária e não modificará a configuração
+persistida. Consulte [Execução em segundo plano](background_execution.md).
 
 ## Threads e interface
 

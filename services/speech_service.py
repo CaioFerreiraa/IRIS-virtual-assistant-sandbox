@@ -122,7 +122,7 @@ class SpeechService(ABC):
             self._emit(SpeechEventKind.DEACTIVATED)
 
     def set_command_enabled(self, enabled: bool) -> None:
-        """Permite a palavra de ativação somente no contexto visual autorizado."""
+        """Permite a palavra de ativação no contexto atual da aplicação."""
         with self._command_lock:
             self._command_enabled = enabled
             if not enabled:

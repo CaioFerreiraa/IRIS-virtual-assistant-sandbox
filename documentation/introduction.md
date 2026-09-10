@@ -107,6 +107,7 @@ Ainda estão em desenvolvimento ou planejamento:
 - [Módulos](modules.md)
 - [Rotinas](routines.md)
 - [Voz](voice.md)
+- [Execução em segundo plano](background_execution.md)
 - [Banco de dados](database.md)
 - [Interface](ui.md)
 - [Cofre e BYOK](vault.md)

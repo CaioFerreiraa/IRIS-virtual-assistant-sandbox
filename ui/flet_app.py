@@ -12,13 +12,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from database.db import SessionLocal
 from repositories.module_repository import ModuleRepository
+from services.general_settings_service import GeneralSettingsService
 from services.speech_service_manager import SpeechServiceManager
+from services.application_lifecycle import ApplicationLifecycle
 from services.module_registry_state import get_module_registry_state
 from services.module_runtime_service import module_runtime_manager
 from services.module_service import apply_effective_runtime_statuses
 from services.routine_scheduler_service import routine_scheduler_service
 from services.voice_settings_service import VoiceSettingsService
-from ui.shared.components.header import VOICE_ACTIVE_ROUTES, build_header
+from services.system_tray_service import WindowsSystemTrayService
+from ui.home.view import HOME_ROUTES, HomeViewState
+from ui.shared.components.header import build_header
 from ui.shared.components.sidebar import (
     DEFAULT_SIDEBAR_WIDTH,
     SidebarViewState,
@@ -91,6 +95,57 @@ def get_default_page(page: ft.Page):
     fatal_error_handler = FatalErrorHandler(page, toaster_handler)
     fatal_error_handler.install()
     speech_manager = SpeechServiceManager()
+    general_settings_service = GeneralSettingsService()
+    general_settings = general_settings_service.load()
+
+    lifecycle_holder: dict[str, ApplicationLifecycle] = {}
+
+    async def set_window_visible(visible: bool) -> None:
+        page.window.visible = visible
+        if visible:
+            page.window.minimized = False
+            await page.window.to_front()
+        page.update()
+
+    async def close_native_window() -> None:
+        await page.window.close()
+
+    def schedule_window_visibility(visible: bool) -> None:
+        page.run_task(set_window_visible, visible)
+
+    def schedule_native_close() -> None:
+        page.run_task(close_native_window)
+
+    def restore_from_tray() -> None:
+        lifecycle = lifecycle_holder.get("lifecycle")
+        if lifecycle is not None:
+            lifecycle.restore()
+
+    def exit_from_tray() -> None:
+        lifecycle = lifecycle_holder.get("lifecycle")
+        if lifecycle is not None:
+            lifecycle.exit_application()
+
+    tray_service = WindowsSystemTrayService(
+        speech_manager,
+        on_open=restore_from_tray,
+        on_exit=exit_from_tray,
+    )
+    lifecycle = ApplicationLifecycle(
+        speech_manager=speech_manager,
+        runtime_manager=module_runtime_manager,
+        tray_service=tray_service,
+        hide_window=lambda: schedule_window_visibility(False),
+        restore_window=lambda: schedule_window_visibility(True),
+        close_window=schedule_native_close,
+    )
+    lifecycle_holder["lifecycle"] = lifecycle
+
+    def apply_background_execution(enabled: bool) -> bool:
+        if enabled:
+            return tray_service.start()
+        tray_service.stop()
+        return True
 
     app_container = fatal_error_handler.guard_call(
         get_app_container,
@@ -98,13 +153,16 @@ def get_default_page(page: ft.Page):
         fatal_error_handler,
         toaster_handler,
         speech_manager,
+        lifecycle,
+        general_settings_service,
+        apply_background_execution,
         fallback=ft.Container(expand=True, bgcolor=APP_BACKGROUND),
     )
     fatal_error_handler.guard_call(page.add, app_container)
+
     def shutdown_services(event=None) -> None:
-        speech_manager.shutdown()
-        module_runtime_manager.shutdown()
         routine_scheduler_service.shutdown()
+        lifecycle.exit_application()
 
     page.on_disconnect = shutdown_services
     page.on_close = shutdown_services
@@ -113,6 +171,8 @@ def get_default_page(page: ft.Page):
         VoiceSettingsService(speech_manager).load_for_runtime(),
     )
     fatal_error_handler.guard_call(routine_scheduler_service.start)
+    if general_settings.background_execution_enabled:
+        fatal_error_handler.guard_call(tray_service.start)
     return page
 
 
@@ -121,10 +181,14 @@ def get_app_container(
     fatal_error_handler: FatalErrorHandler,
     toaster_handler: ToasterHandler,
     speech_manager: SpeechServiceManager,
+    lifecycle: ApplicationLifecycle,
+    general_settings_service: GeneralSettingsService,
+    on_background_execution_change,
 ):
     header_slot = ft.Container()
     sidebar_slot = ft.Container()
-    route_slot = ft.Container(expand=True)
+    route_slot = ft.Stack(expand=True)
+    alternate_route_slot = ft.Container(expand=True, visible=False)
     sidebar_width = DEFAULT_SIDEBAR_WIDTH
     sidebar_view_state = SidebarViewState()
     expanded_module_ids: set[int] = set()
@@ -142,6 +206,15 @@ def get_app_container(
             )
         finally:
             db.close()
+
+    home_view_state = HomeViewState(
+        load_module_options(available_only=True),
+        toaster_handler,
+        speech_manager,
+    )
+    home_content = home_view_state.build()
+    home_slot = ft.Container(expand=True, content=home_content)
+    route_slot.controls = [home_slot, alternate_route_slot]
 
     def remember_sidebar_width(width: float) -> None:
         nonlocal sidebar_width
@@ -163,10 +236,14 @@ def get_app_container(
     def render_layout(e=None):
         nonlocal rendered_route
         current_route = page.route or "/"
-        if rendered_route is not None and current_route != rendered_route:
-            route_slot.content = build_route_loading()
+        if (
+            rendered_route is not None
+            and current_route != rendered_route
+            and current_route not in HOME_ROUTES
+        ):
+            alternate_route_slot.content = build_route_loading()
             if page.controls:
-                route_slot.update()
+                alternate_route_slot.update()
         sidebar_module_options = load_module_options(available_only=False)
         module_options = [
             option
@@ -199,11 +276,12 @@ def get_app_container(
             registry_state.runtime_statuses,
         )
         speech_manager.clear_subscribers()
-        speech_manager.set_command_enabled(current_route in VOICE_ACTIVE_ROUTES)
+        speech_manager.set_command_enabled(current_route != "/settings/voice_checking")
         header_slot.content = build_header(
             current_route=current_route,
             on_navigate=fatal_error_handler.guard_callback(navigate),
             speech_manager=speech_manager,
+            on_close=lifecycle.request_close,
         )
         sidebar = build_sidebar(
             active_module_id=active_module_id(current_route),
@@ -218,13 +296,19 @@ def get_app_container(
         )
         if sidebar_slot.content is not sidebar:
             sidebar_slot.content = sidebar
-        route_slot.content = build_route_content(
-            current_route,
-            module_options=module_options,
-            toaster_handler=toaster_handler,
-            speech_manager=speech_manager,
-            on_module_status_change=render_layout,
-        )
+        is_home = current_route in HOME_ROUTES
+        home_slot.visible = is_home
+        alternate_route_slot.visible = not is_home
+        if not is_home:
+            alternate_route_slot.content = build_route_content(
+                current_route,
+                module_options=module_options,
+                toaster_handler=toaster_handler,
+                speech_manager=speech_manager,
+                general_settings_service=general_settings_service,
+                on_background_execution_change=on_background_execution_change,
+                on_module_status_change=render_layout,
+            )
         rendered_route = current_route
 
         if page.controls:

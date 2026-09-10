@@ -10,3 +10,4 @@ sounddevice==0.5.5
 PyAudio==0.2.14
 faster-whisper==1.2.1
 RealtimeSTT[faster-whisper,silero-onnx-cpu]==1.0.2
+pystray==0.19.5

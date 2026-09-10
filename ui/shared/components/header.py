@@ -25,7 +25,6 @@ from ui.theme.fonts import TITLE_FONT
 HEADER_HEIGHT = 74
 WINDOW_BUTTON_WIDTH = 46
 WINDOW_CONTROLS_RIGHT_MARGIN = WINDOW_RESIZE_CORNER_SIZE + 4
-VOICE_ACTIVE_ROUTES = {"", "/", "/home", "/settings/voice_checking"}
 VOICE_STATUS_DIALOG_WIDTH = 520
 
 NAV_ITEMS = (
@@ -45,7 +44,7 @@ VOICE_STATUS_STYLES = {
     "paused_route": (
         ft.Icons.MIC_OFF_ROUNDED,
         BLUE_GREY,
-        "Comando de voz pausado. Use a rota Início ou o teste de microfone.",
+        "Comandos pausados durante o teste do microfone.",
     ),
     "disabled": (
         ft.Icons.MIC_OFF_ROUNDED,
@@ -95,6 +94,7 @@ def build_header(
     current_route: str,
     on_navigate: Callable[[str], None],
     speech_manager: SpeechServiceManager | None = None,
+    on_close: Callable[[], None] | None = None,
 ) -> ft.Container:
 
     logo_section = ft.Container(
@@ -140,7 +140,16 @@ def build_header(
                     controls=[
                         build_window_button( icon_name=ft.Icons.REMOVE_ROUNDED, tooltip="Minimizar", on_click_action=minimize_window),
                         build_window_button( icon_name=ft.Icons.CROP_SQUARE_ROUNDED, tooltip="Maximizar", on_click_action=toggle_maximize),
-                        build_window_button( icon_name=ft.Icons.CLOSE_ROUNDED, tooltip="Fechar", is_close_btn=True, on_click_action=close_window),
+                        build_window_button(
+                            icon_name=ft.Icons.CLOSE_ROUNDED,
+                            tooltip="Fechar",
+                            is_close_btn=True,
+                            on_click_action=(
+                                (lambda _event: on_close())
+                                if on_close is not None
+                                else close_window
+                            ),
+                        ),
                     ],
                 ),
             ),
@@ -303,10 +312,12 @@ def _voice_status_key(
 ) -> str:
     if not microphone_available:
         return "no_microphone"
-    if current_route not in VOICE_ACTIVE_ROUTES:
+    if current_route == "/settings/voice_checking":
         return "paused_route"
 
     settings = speech_manager.current_settings
+    if speech_manager.session_paused:
+        return "disabled"
     if not settings.enabled:
         return "disabled"
     if speech_manager.backend_error:

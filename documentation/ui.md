@@ -370,6 +370,14 @@ borda interna da sidebar redimensiona somente o menu lateral. Os controles da
 janela mantêm uma margem à direita maior que a região de resize, evitando
 sobreposição entre as áreas de clique.
 
+No Windows, o botão `X` oculta a janela quando a bandeja do
+sistema estiver disponível e a opção **Manter a IRIS em segundo plano** estiver
+ligada nas Configurações gerais. Minimizar continuará com o comportamento
+normal. A mesma janela deverá ser restaurada sem perder rota ou estado, e uma
+ação explícita **Sair da IRIS** fará o encerramento definitivo. Quando a opção
+estiver desligada, fechar a janela encerrará a aplicação. Os detalhes visuais e
+de fallback estão em [Execução em segundo plano](background_execution.md).
+
 ## Estados visuais
 
 Toda funcionalidade deve considerar:

@@ -87,7 +87,7 @@ class HomeViewState:
             dropdown_height=MAX_DROPDOWN_HEIGHT,
         )
         if self.speech_manager is not None:
-            self.speech_manager.subscribe(self.on_speech_event)
+            self.speech_manager.subscribe(self.on_speech_event, persistent=True)
         return self.controls.root
 
     def _controls(self) -> "HomeViewControls":

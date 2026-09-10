@@ -271,3 +271,10 @@ class VoiceSetting(Base):
     hotwords = Column(Text, nullable=False, default="")
     condition_on_previous_text = Column(Boolean, nullable=False, default=True)
     temperature = Column(Float, nullable=False, default=0.0)
+
+
+class GeneralSetting(Base):
+    __tablename__ = "general_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    background_execution_enabled = Column(Boolean, nullable=False, default=True)

@@ -199,6 +199,14 @@ Grupos de campos:
 
 O prompt interno da palavra “IRIS” não é persistido. Ele permanece fixo no código e é combinado em memória com o contexto configurável.
 
+### GeneralSetting
+
+Armazena as preferências gerais da aplicação em um registro singleton de ID
+`1`. O campo `background_execution_enabled` determina se a IRIS deve iniciar a
+bandeja e permanecer ativa quando a janela for fechada. O valor padrão é
+ligado para preservar o comportamento das instalações que já utilizam a
+execução em segundo plano.
+
 ## Relacionamentos
 
 ```text
