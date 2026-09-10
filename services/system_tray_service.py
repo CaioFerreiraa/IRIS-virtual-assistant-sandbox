@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
@@ -47,6 +48,7 @@ class WindowsSystemTrayService:
     """Adapter isolado para a bandeja nativa do Windows via pystray."""
 
     ICON_PATH = Path(__file__).resolve().parent.parent / "assets/images/logo_transparent.png"
+    NOTIFICATION_DELAY_SECONDS = 0.3
     COLORS = {
         TrayVoiceState.UNAVAILABLE: "#7B8190",
         TrayVoiceState.READY: "#8B6FC0",
@@ -72,6 +74,8 @@ class WindowsSystemTrayService:
         self.platform = platform or sys.platform
         self._icon = None
         self._unsubscribe: Callable[[], None] | None = None
+        self._notification_timers: set[threading.Timer] = set()
+        self._notification_lock = threading.Lock()
 
     @property
     def available(self) -> bool:
@@ -108,6 +112,11 @@ class WindowsSystemTrayService:
             return False
 
     def stop(self) -> None:
+        with self._notification_lock:
+            notification_timers = tuple(self._notification_timers)
+            self._notification_timers.clear()
+        for timer in notification_timers:
+            timer.cancel()
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
@@ -131,12 +140,25 @@ class WindowsSystemTrayService:
         icon = self._icon
         if icon is None or not getattr(icon, "HAS_NOTIFICATION", False):
             return False
-        try:
-            icon.notify(message[:255], title[:63])
-            return True
-        except Exception:
-            LOGGER.exception("Não foi possível exibir uma notificação da IRIS.")
-            return False
+
+        timer: threading.Timer
+
+        def send() -> None:
+            try:
+                if self._icon is icon:
+                    icon.notify(message[:255], title[:63])
+            except Exception:
+                LOGGER.exception("Não foi possível exibir uma notificação da IRIS.")
+            finally:
+                with self._notification_lock:
+                    self._notification_timers.discard(timer)
+
+        timer = threading.Timer(self.NOTIFICATION_DELAY_SECONDS, send)
+        timer.daemon = True
+        with self._notification_lock:
+            self._notification_timers.add(timer)
+        timer.start()
+        return True
 
     def _voice_label(self, _item) -> str:
         return "Ativar voz" if self.speech_manager.session_paused else "Pausar voz"

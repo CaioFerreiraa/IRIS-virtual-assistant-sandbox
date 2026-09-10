@@ -52,6 +52,10 @@ notificações estejam desativadas ou silenciadas pelo sistema. As Configuraçõ
 gerais oferecem um atalho para a página de notificações do Windows; a permissão
 continua sob controle do sistema operacional.
 
+O envio aguarda brevemente a atualização do estado visual do ícone. Isso evita
+que o evento de desativação da voz substitua uma solicitação de notificação
+feita imediatamente antes no mesmo ícone da bandeja.
+
 Ao reconhecer a palavra de ativação, a IRIS pode apresentar um indicador
 flutuante na parte inferior da tela. Esse HUD (painel compacto sobre outras
 janelas) mostra o estado de escuta e a transcrição parcial sem obter foco nem
