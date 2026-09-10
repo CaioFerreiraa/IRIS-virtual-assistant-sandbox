@@ -21,6 +21,7 @@ def build_general_settings_tab(
     settings_service: GeneralSettingsService,
     toaster_handler: ToasterHandler,
     on_background_execution_change: Callable[[bool], bool],
+    on_open_notification_settings: Callable[[], bool],
 ) -> ft.Container:
     settings = settings_service.load()
     background_switch = ft.Switch(
@@ -61,6 +62,14 @@ def build_general_settings_tab(
         toaster_handler.show_success(message, title="Configurações gerais")
 
     background_switch.on_change = on_change
+
+    def open_notification_settings(_event: ft.ControlEvent) -> None:
+        if on_open_notification_settings():
+            return
+        toaster_handler.show_warning(
+            "As configurações de notificações estão disponíveis somente no Windows.",
+            title="Notificações do Windows",
+        )
 
     return ft.Container(
         padding=24,
@@ -119,6 +128,42 @@ def build_general_settings_tab(
                         ],
                     ),
                     data=background_switch,
+                ),
+                ft.Container(
+                    height=72,
+                    padding=ft.Padding(left=12, top=0, right=12, bottom=0),
+                    border=ft.Border.all(1, BORDER),
+                    border_radius=8,
+                    alignment=ft.Alignment.CENTER_LEFT,
+                    content=ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            ft.Column(
+                                expand=True,
+                                tight=True,
+                                spacing=3,
+                                controls=[
+                                    ft.Text(
+                                        "Permitir notificações do Windows",
+                                        size=13,
+                                        color=TEXT_PRIMARY,
+                                    ),
+                                    ft.Text(
+                                        "Abra as configurações do sistema para revisar a permissão da IRIS.",
+                                        size=12,
+                                        color=TEXT_SECONDARY,
+                                    ),
+                                ],
+                            ),
+                            ft.TextButton(
+                                content="Abrir configurações",
+                                icon=ft.Icons.OPEN_IN_NEW_ROUNDED,
+                                on_click=open_notification_settings,
+                                style=ft.ButtonStyle(color=PASTEL_DARK_PURPLE),
+                            ),
+                        ],
+                    ),
                 ),
             ],
         ),

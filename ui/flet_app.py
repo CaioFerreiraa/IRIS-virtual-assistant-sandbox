@@ -21,6 +21,7 @@ from services.module_service import apply_effective_runtime_statuses
 from services.routine_scheduler_service import routine_scheduler_service
 from services.voice_settings_service import VoiceSettingsService
 from services.system_tray_service import WindowsSystemTrayService
+from services.windows_settings_service import WindowsSettingsService
 from ui.home.view import HOME_ROUTES, HomeViewState
 from ui.shared.components.header import build_header
 from ui.shared.components.sidebar import (
@@ -97,6 +98,7 @@ def get_default_page(page: ft.Page):
     speech_manager = SpeechServiceManager()
     general_settings_service = GeneralSettingsService()
     general_settings = general_settings_service.load()
+    windows_settings_service = WindowsSettingsService()
 
     lifecycle_holder: dict[str, ApplicationLifecycle] = {}
 
@@ -147,6 +149,11 @@ def get_default_page(page: ft.Page):
         tray_service.stop()
         return True
 
+    def notify_background(title: str, message: str) -> bool:
+        if page.window.visible:
+            return False
+        return tray_service.notify(message, title=title)
+
     app_container = fatal_error_handler.guard_call(
         get_app_container,
         page,
@@ -156,6 +163,8 @@ def get_default_page(page: ft.Page):
         lifecycle,
         general_settings_service,
         apply_background_execution,
+        windows_settings_service.open_notifications,
+        notify_background,
         fallback=ft.Container(expand=True, bgcolor=APP_BACKGROUND),
     )
     fatal_error_handler.guard_call(page.add, app_container)
@@ -184,6 +193,8 @@ def get_app_container(
     lifecycle: ApplicationLifecycle,
     general_settings_service: GeneralSettingsService,
     on_background_execution_change,
+    on_open_notification_settings,
+    on_background_feedback,
 ):
     header_slot = ft.Container()
     sidebar_slot = ft.Container()
@@ -211,6 +222,7 @@ def get_app_container(
         load_module_options(available_only=True),
         toaster_handler,
         speech_manager,
+        on_background_feedback,
     )
     home_content = home_view_state.build()
     home_slot = ft.Container(expand=True, content=home_content)
@@ -308,6 +320,7 @@ def get_app_container(
                 general_settings_service=general_settings_service,
                 on_background_execution_change=on_background_execution_change,
                 on_module_status_change=render_layout,
+                on_open_notification_settings=on_open_notification_settings,
             )
         rendered_route = current_route
 

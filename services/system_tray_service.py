@@ -127,6 +127,17 @@ class WindowsSystemTrayService:
         icon.title = self.TOOLTIPS[state]
         icon.update_menu()
 
+    def notify(self, message: str, *, title: str = "IRIS") -> bool:
+        icon = self._icon
+        if icon is None or not getattr(icon, "HAS_NOTIFICATION", False):
+            return False
+        try:
+            icon.notify(message[:255], title[:63])
+            return True
+        except Exception:
+            LOGGER.exception("Não foi possível exibir uma notificação da IRIS.")
+            return False
+
     def _voice_label(self, _item) -> str:
         return "Ativar voz" if self.speech_manager.session_paused else "Pausar voz"
 

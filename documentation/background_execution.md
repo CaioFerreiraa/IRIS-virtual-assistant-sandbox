@@ -44,6 +44,13 @@ A pausa feita pela bandeja vale somente para a execução atual. Ela não altera
 configuração de voz persistida. Um duplo clique no ícone também restaura
 a janela.
 
+Quando a janela está oculta, resultados e erros de módulos são apresentados em
+uma notificação nativa do Windows. O feedback interno e os logs continuam sendo
+registrados como fallback caso as notificações estejam desativadas ou
+silenciadas pelo sistema. As Configurações gerais oferecem um atalho para a
+página de notificações do Windows; a permissão continua sob controle do sistema
+operacional.
+
 Ao desligar a opção nas Configurações gerais, a bandeja é encerrada e o botão
 `X` volta a fechar a aplicação. A preferência é persistida para as próximas
 execuções e vem ligada por padrão para preservar o comportamento existente.

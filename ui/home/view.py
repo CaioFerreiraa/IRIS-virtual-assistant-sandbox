@@ -29,9 +29,15 @@ def build_home_view(
     module_options: Sequence[ui.dropdowns.ModuleOption] | None = None,
     toaster_handler: ToasterHandler | None = None,
     speech_manager: SpeechServiceManager | None = None,
+    on_background_feedback: Callable[[str, str], bool] | None = None,
 ) -> ft.Container:
     # Cria a tela home conectando view, dropdowns e servico.
-    return HomeViewState(module_options, toaster_handler, speech_manager).build()
+    return HomeViewState(
+        module_options,
+        toaster_handler,
+        speech_manager,
+        on_background_feedback,
+    ).build()
 
 
 class HomeViewState:
@@ -40,6 +46,7 @@ class HomeViewState:
         module_options: Sequence[ui.dropdowns.ModuleOption] | None = None,
         toaster_handler: ToasterHandler | None = None,
         speech_manager: SpeechServiceManager | None = None,
+        on_background_feedback: Callable[[str, str], bool] | None = None,
     ):
         # Guarda dependencias gerais da home.
         self.module_options = tuple(ui.dropdowns.sort_modules(module_options or ()))
@@ -47,6 +54,7 @@ class HomeViewState:
         self.home_service = HomeService()
         self.toaster_handler = toaster_handler
         self.speech_manager = speech_manager
+        self.on_background_feedback = on_background_feedback
         self.is_loading = False
         self.is_voice_active = False
         self.is_basic_capture_active = False
@@ -201,6 +209,7 @@ class HomeViewState:
             self.update_if_ready(controls.input_shell)
             if event.kind == SpeechEventKind.ERROR and self.toaster_handler:
                 self.toaster_handler.show_error(event.message, title="Voz indisponível")
+                self._notify_background("Voz indisponível", event.message)
 
     def _apply_voice_text(
         self,
@@ -687,9 +696,15 @@ class HomeViewState:
     ) -> None:
         controls = self._controls()
         if error is not None:
-            self.show_module_error(str(error))
+            message = str(error)
+            self.show_module_error(message)
+            self._notify_background("Erro no módulo", message)
         elif result is not None and result.get("success", True):
             self.show_module_success(result)
+            self._notify_background(
+                "Módulo executado",
+                self.result_message(result) or "Módulo executado com sucesso.",
+            )
             controls.command_input_field.value = ""
             controls.argument_input_field.value = ""
             self.argument_source = ArgumentSource.EMPTY
@@ -701,7 +716,9 @@ class HomeViewState:
             self.update_if_ready(controls.command_input_field)
             self.update_if_ready(controls.argument_input_field)
         elif result is not None:
-            self.show_module_error(self.result_message(result) or "O módulo retornou erro.")
+            message = self.result_message(result) or "O módulo retornou erro."
+            self.show_module_error(message)
+            self._notify_background("Erro no módulo", message)
 
         self.is_loading = False
         ui.input.set_send_button_loading(controls.send_button, self.is_loading)
@@ -726,6 +743,11 @@ class HomeViewState:
             message=message or "Não foi possível executar o módulo.",
             title="Erro no módulo",
         )
+
+    def _notify_background(self, title: str, message: str) -> bool:
+        if self.on_background_feedback is None:
+            return False
+        return self.on_background_feedback(title, message)
 
     def result_message(self, result: dict) -> str:
         if "message" in result:

@@ -378,6 +378,12 @@ ação explícita **Sair da IRIS** fará o encerramento definitivo. Quando a op�
 estiver desligada, fechar a janela encerrará a aplicação. Os detalhes visuais e
 de fallback estão em [Execução em segundo plano](background_execution.md).
 
+As Configurações gerais também possuem a ação **Abrir configurações**, que usa
+o endereço `ms-settings:notifications` para abrir a página de notificações do
+Windows. A IRIS não altera essa permissão diretamente. Enquanto a janela estiver
+oculta e a bandeja disponível, sucessos e erros de módulos produzem notificações
+nativas sem substituir os toasters internos ou os registros de execução.
+
 ## Estados visuais
 
 Toda funcionalidade deve considerar:

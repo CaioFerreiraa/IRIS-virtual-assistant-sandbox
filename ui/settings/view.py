@@ -31,12 +31,14 @@ def build_settings_view(
     toaster_handler: ToasterHandler,
     general_settings_service: GeneralSettingsService,
     on_background_execution_change: Callable[[bool], bool],
+    on_open_notification_settings: Callable[[], bool],
 ) -> ft.Container:
     return SettingsViewState(
         speech_manager,
         toaster_handler,
         general_settings_service,
         on_background_execution_change,
+        on_open_notification_settings,
     ).build()
 
 
@@ -47,12 +49,14 @@ class SettingsViewState:
         toaster_handler: ToasterHandler,
         general_settings_service: GeneralSettingsService,
         on_background_execution_change: Callable[[bool], bool],
+        on_open_notification_settings: Callable[[], bool],
     ):
         self.speech_manager = speech_manager
         self.voice_tab = VoiceSettingsTab(speech_manager, toaster_handler)
         self.toaster_handler = toaster_handler
         self.general_settings_service = general_settings_service
         self.on_background_execution_change = on_background_execution_change
+        self.on_open_notification_settings = on_open_notification_settings
         self.active_tab = "voice"
         self.tab_content = ft.Container(expand=True)
         self.tab_buttons: dict[str, ft.Container] = {}
@@ -151,6 +155,7 @@ class SettingsViewState:
                 self.general_settings_service,
                 self.toaster_handler,
                 self.on_background_execution_change,
+                self.on_open_notification_settings,
             )
         else:
             # Origem: ui.settings.passwords_tab.build_passwords_tab

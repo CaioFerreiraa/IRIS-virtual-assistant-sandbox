@@ -47,6 +47,7 @@ def build_route_content(
     speech_manager: SpeechServiceManager | None = None,
     general_settings_service: GeneralSettingsService | None = None,
     on_background_execution_change: Callable[[bool], bool] | None = None,
+    on_open_notification_settings: Callable[[], bool] | None = None,
     module_session_factory=SessionLocal,
     on_module_status_change: Callable[[], None] | None = None,
 ) -> ft.Control:
@@ -94,12 +95,14 @@ def build_route_content(
         and isinstance(toaster_handler, ToasterHandler)
         and general_settings_service is not None
         and on_background_execution_change is not None
+        and on_open_notification_settings is not None
     ):
         return settings_ui.build_settings_view(
             speech_manager,
             toaster_handler,
             general_settings_service,
             on_background_execution_change,
+            on_open_notification_settings,
         )
 
     title, subtitle, icon = DEFAULT_ROUTES.get(
