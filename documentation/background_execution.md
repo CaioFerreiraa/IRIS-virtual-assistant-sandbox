@@ -55,8 +55,10 @@ Ao reconhecer a palavra de ativação, a IRIS pode apresentar um indicador
 flutuante na parte inferior da tela. Esse HUD (painel compacto sobre outras
 janelas) mostra o estado de escuta e a transcrição parcial sem obter foco nem
 interceptar cliques. Ele desaparece após a desativação ou, em caso de erro de
-voz, depois de exibir brevemente a mensagem. A preferência **Mostrar indicador
-flutuante de voz** fica nas Configurações gerais e vem ligada por padrão.
+voz ou de módulo, depois de exibir brevemente a mensagem. O feedback de erro
+permanece visível mesmo quando a desativação da sessão ocorre logo depois da
+execução. A preferência **Mostrar indicador flutuante de voz** fica nas
+Configurações gerais e vem ligada por padrão.
 
 Ao desligar a opção nas Configurações gerais, a bandeja é encerrada e o botão
 `X` volta a fechar a aplicação. A preferência é persistida para as próximas

@@ -6,6 +6,7 @@ import logging
 import queue
 import sys
 import threading
+import time
 
 from services.speech_service import SpeechEvent, SpeechEventKind
 
@@ -75,6 +76,20 @@ class WindowsListeningOverlayService:
         elif event.kind in {SpeechEventKind.DEACTIVATED, SpeechEventKind.STOPPED}:
             self._commands.put(("hide", "", ""))
 
+    def show_feedback(self, title: str, message: str, *, error: bool) -> bool:
+        if not self.available:
+            return False
+        normalized_message = " ".join(message.strip().split())
+        normalized_title = " ".join(title.strip().split())
+        self._commands.put(
+            (
+                "error" if error else "result",
+                normalized_message or normalized_title or "IRIS",
+                normalized_title,
+            )
+        )
+        return True
+
     def _run(self) -> None:
         try:
             import tkinter as tk
@@ -99,6 +114,7 @@ class WindowsListeningOverlayService:
             self._apply_windows_styles(root.winfo_id())
 
             hide_job: str | None = None
+            feedback_visible_until = 0.0
 
             def cancel_hide() -> None:
                 nonlocal hide_job
@@ -129,6 +145,7 @@ class WindowsListeningOverlayService:
                 self._show_without_activation(root.winfo_id(), x, y)
 
             def poll() -> None:
+                nonlocal feedback_visible_until
                 try:
                     while True:
                         action, text, subtitle = self._commands.get_nowait()
@@ -139,10 +156,20 @@ class WindowsListeningOverlayService:
                         if action == "show":
                             show(text, subtitle)
                         elif action == "error":
+                            feedback_visible_until = time.monotonic() + 3.5
                             show(text, subtitle, error=True)
                             schedule_hide(3500)
+                        elif action == "result":
+                            feedback_visible_until = time.monotonic() + 2.5
+                            show(text, subtitle)
+                            schedule_hide(2500)
                         elif action == "hide":
-                            schedule_hide(900)
+                            remaining = feedback_visible_until - time.monotonic()
+                            schedule_hide(
+                                max(900, int(remaining * 1000))
+                                if remaining > 0
+                                else 900
+                            )
                 except queue.Empty:
                     pass
                 root.after(40, poll)

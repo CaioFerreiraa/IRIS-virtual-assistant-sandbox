@@ -157,9 +157,16 @@ def get_default_page(page: ft.Page):
         return True
 
     def notify_background(title: str, message: str) -> bool:
+        is_error = title in {"Erro no módulo", "Voz indisponível"}
+        overlay_shown = listening_overlay_service.show_feedback(
+            title,
+            message,
+            error=is_error,
+        )
         if page.window.visible and not page.window.minimized:
-            return False
-        return tray_service.notify(message, title=title)
+            return overlay_shown
+        native_shown = tray_service.notify(message, title=title)
+        return overlay_shown or native_shown
 
     def apply_listening_overlay(enabled: bool) -> bool:
         if enabled:
