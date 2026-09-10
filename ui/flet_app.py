@@ -20,9 +20,9 @@ from services.module_runtime_service import module_runtime_manager
 from services.module_service import apply_effective_runtime_statuses
 from services.routine_scheduler_service import routine_scheduler_service
 from services.listening_overlay_service import WindowsListeningOverlayService
+from services.notification_overlay_service import WindowsNotificationOverlayService
 from services.voice_settings_service import VoiceSettingsService
 from services.system_tray_service import WindowsSystemTrayService
-from services.windows_settings_service import WindowsSettingsService
 from ui.home.view import HOME_ROUTES, HomeViewState
 from ui.shared.components.header import build_header
 from ui.shared.components.sidebar import (
@@ -99,8 +99,8 @@ def get_default_page(page: ft.Page):
     speech_manager = SpeechServiceManager()
     general_settings_service = GeneralSettingsService()
     general_settings = general_settings_service.load()
-    windows_settings_service = WindowsSettingsService()
     listening_overlay_service = WindowsListeningOverlayService()
+    notification_overlay_service = WindowsNotificationOverlayService()
     speech_manager.subscribe(
         listening_overlay_service.on_speech_event,
         persistent=True,
@@ -143,7 +143,10 @@ def get_default_page(page: ft.Page):
         speech_manager=speech_manager,
         runtime_manager=module_runtime_manager,
         tray_service=tray_service,
-        background_resources=(listening_overlay_service,),
+        background_resources=(
+            listening_overlay_service,
+            notification_overlay_service,
+        ),
         hide_window=lambda: schedule_window_visibility(False),
         restore_window=lambda: schedule_window_visibility(True),
         close_window=schedule_native_close,
@@ -164,12 +167,11 @@ def get_default_page(page: ft.Page):
             error=is_error,
         )
         if is_error:
-            native_shown = tray_service.notify(message, title=title)
-            return overlay_shown or native_shown
-        if page.window.visible and not page.window.minimized:
-            return overlay_shown
-        native_shown = tray_service.notify(message, title=title)
-        return overlay_shown or native_shown
+            return notification_overlay_service.show_error(
+                title,
+                message,
+            )
+        return overlay_shown
 
     def apply_listening_overlay(enabled: bool) -> bool:
         if enabled:
@@ -186,7 +188,6 @@ def get_default_page(page: ft.Page):
         lifecycle,
         general_settings_service,
         apply_background_execution,
-        windows_settings_service.open_notifications,
         notify_background,
         apply_listening_overlay,
         fallback=ft.Container(expand=True, bgcolor=APP_BACKGROUND),
@@ -208,6 +209,7 @@ def get_default_page(page: ft.Page):
         fatal_error_handler.guard_call(tray_service.start)
     if general_settings.listening_overlay_enabled:
         fatal_error_handler.guard_call(listening_overlay_service.start)
+    fatal_error_handler.guard_call(notification_overlay_service.start)
     return page
 
 
@@ -219,7 +221,6 @@ def get_app_container(
     lifecycle: ApplicationLifecycle,
     general_settings_service: GeneralSettingsService,
     on_background_execution_change,
-    on_open_notification_settings,
     on_background_feedback,
     on_listening_overlay_change,
 ):
@@ -347,7 +348,6 @@ def get_app_container(
                 general_settings_service=general_settings_service,
                 on_background_execution_change=on_background_execution_change,
                 on_module_status_change=render_layout,
-                on_open_notification_settings=on_open_notification_settings,
                 on_listening_overlay_change=on_listening_overlay_change,
             )
         rendered_route = current_route

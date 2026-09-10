@@ -31,7 +31,6 @@ def build_settings_view(
     toaster_handler: ToasterHandler,
     general_settings_service: GeneralSettingsService,
     on_background_execution_change: Callable[[bool], bool],
-    on_open_notification_settings: Callable[[], bool],
     on_listening_overlay_change: Callable[[bool], bool],
 ) -> ft.Container:
     return SettingsViewState(
@@ -39,7 +38,6 @@ def build_settings_view(
         toaster_handler,
         general_settings_service,
         on_background_execution_change,
-        on_open_notification_settings,
         on_listening_overlay_change,
     ).build()
 
@@ -51,7 +49,6 @@ class SettingsViewState:
         toaster_handler: ToasterHandler,
         general_settings_service: GeneralSettingsService,
         on_background_execution_change: Callable[[bool], bool],
-        on_open_notification_settings: Callable[[], bool],
         on_listening_overlay_change: Callable[[bool], bool],
     ):
         self.speech_manager = speech_manager
@@ -59,7 +56,6 @@ class SettingsViewState:
         self.toaster_handler = toaster_handler
         self.general_settings_service = general_settings_service
         self.on_background_execution_change = on_background_execution_change
-        self.on_open_notification_settings = on_open_notification_settings
         self.on_listening_overlay_change = on_listening_overlay_change
         self.active_tab = "voice"
         self.tab_content = ft.Container(expand=True)
@@ -159,7 +155,6 @@ class SettingsViewState:
                 self.general_settings_service,
                 self.toaster_handler,
                 self.on_background_execution_change,
-                self.on_open_notification_settings,
                 self.on_listening_overlay_change,
             )
         else:

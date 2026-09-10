@@ -20,6 +20,7 @@ class WindowsListeningOverlayService:
 
     WIDTH = 480
     HEIGHT = 76
+    MAX_RESULT_HEIGHT = 220
     BOTTOM_MARGIN = 64
     BACKGROUND = "#24212A"
     ACTIVE = "#67B98A"
@@ -91,9 +92,13 @@ class WindowsListeningOverlayService:
                 (
                     "Não consegui executar o comando"
                     if error
-                    else normalized_message or normalized_title or "IRIS"
+                    else normalized_title or "IRIS"
                 ),
-                "Tente novamente" if error else normalized_title,
+                (
+                    "Tente novamente"
+                    if error
+                    else normalized_message or "Módulo executado com sucesso."
+                ),
             )
         )
         return True
@@ -142,21 +147,28 @@ class WindowsListeningOverlayService:
                 cancel_hide()
                 hide_job = root.after(delay_ms, hide)
 
-            def show(text: str, subtitle: str, *, error: bool = False) -> None:
+            def show(
+                text: str,
+                subtitle: str,
+                *,
+                error: bool = False,
+                result: bool = False,
+            ) -> None:
                 cancel_hide()
-                self._render(
+                height = self._render(
                     canvas,
                     text,
                     subtitle,
                     error=error,
+                    result=result,
                     logo_image=images["logo"],
                 )
                 x = max(0, (root.winfo_screenwidth() - self.WIDTH) // 2)
                 y = max(
                     0,
-                    root.winfo_screenheight() - self.HEIGHT - self.BOTTOM_MARGIN,
+                    root.winfo_screenheight() - height - self.BOTTOM_MARGIN,
                 )
-                root.geometry(f"{self.WIDTH}x{self.HEIGHT}+{x}+{y}")
+                root.geometry(f"{self.WIDTH}x{height}+{x}+{y}")
                 root.deiconify()
                 self._show_without_activation(root.winfo_id(), x, y)
 
@@ -176,7 +188,7 @@ class WindowsListeningOverlayService:
                             schedule_hide(3500)
                         elif action == "result":
                             feedback_visible_until = time.monotonic() + 2.5
-                            show(text, subtitle)
+                            show(text, subtitle, result=True)
                             schedule_hide(2500)
                         elif action == "hide":
                             remaining = feedback_visible_until - time.monotonic()
@@ -214,19 +226,10 @@ class WindowsListeningOverlayService:
         subtitle: str,
         *,
         error: bool,
+        result: bool,
         logo_image,
-    ) -> None:
+    ) -> int:
         canvas.delete("all")
-        self._rounded_rectangle(
-            canvas,
-            3,
-            3,
-            self.WIDTH - 3,
-            self.HEIGHT - 3,
-            20,
-            outline=self.ERROR if error else "",
-            width=2 if error else 0,
-        )
         accent = self.ERROR if error else self.ACTIVE
         if logo_image is not None:
             canvas.create_image(38, 38, image=logo_image)
@@ -239,22 +242,44 @@ class WindowsListeningOverlayService:
                 fill=self.TEXT,
                 font=("Segoe UI", 16, "bold"),
             )
-        canvas.create_text(
+        title_item = canvas.create_text(
             74,
-            28,
-            text=self._truncate(text, 52),
+            20 if result else 28,
+            text=text if result else self._truncate(text, 52),
             fill=self.TEXT,
-            anchor="w",
+            anchor="nw" if result else "w",
+            width=self.WIDTH - 104 if result else 0,
             font=("Segoe UI Variable Display", 12, "bold"),
         )
-        canvas.create_text(
+        title_box = canvas.bbox(title_item) or (74, 20, 74, 40)
+        subtitle_y = title_box[3] + 8 if result else 50
+        subtitle_item = canvas.create_text(
             74,
-            50,
+            subtitle_y,
             text=subtitle,
             fill=self.TEXT_MUTED,
-            anchor="w",
+            anchor="nw" if result else "w",
+            width=self.WIDTH - 104 if result else 0,
             font=("Segoe UI Variable Text", 9),
         )
+        subtitle_box = canvas.bbox(subtitle_item) or (74, subtitle_y, 74, subtitle_y)
+        height = (
+            min(self.MAX_RESULT_HEIGHT, max(self.HEIGHT, subtitle_box[3] + 20))
+            if result
+            else self.HEIGHT
+        )
+        canvas.configure(height=height)
+        background = self._rounded_rectangle(
+            canvas,
+            3,
+            3,
+            self.WIDTH - 3,
+            height - 3,
+            20,
+            outline=self.ERROR if error else "",
+            width=2 if error else 0,
+        )
+        canvas.tag_lower(background)
         if not error:
             canvas.create_oval(
                 self.WIDTH - 28,
@@ -264,6 +289,7 @@ class WindowsListeningOverlayService:
                 fill=accent,
                 outline="",
             )
+        return height
 
     def _rounded_rectangle(
         self, canvas, x1, y1, x2, y2, radius, *, outline: str, width: int
@@ -273,7 +299,7 @@ class WindowsListeningOverlayService:
             x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
             x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1,
         )
-        canvas.create_polygon(
+        return canvas.create_polygon(
             points,
             smooth=True,
             splinesteps=24,

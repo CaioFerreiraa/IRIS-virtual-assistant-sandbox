@@ -48,7 +48,6 @@ class WindowsSystemTrayService:
     """Adapter isolado para a bandeja nativa do Windows via pystray."""
 
     ICON_PATH = Path(__file__).resolve().parent.parent / "assets/images/logo_transparent.png"
-    NOTIFICATION_DELAY_SECONDS = 0.3
     COLORS = {
         TrayVoiceState.UNAVAILABLE: "#7B8190",
         TrayVoiceState.READY: "#8B6FC0",
@@ -74,8 +73,7 @@ class WindowsSystemTrayService:
         self.platform = platform or sys.platform
         self._icon = None
         self._unsubscribe: Callable[[], None] | None = None
-        self._notification_timers: set[threading.Timer] = set()
-        self._notification_lock = threading.Lock()
+        self._icon_lock = threading.RLock()
 
     @property
     def available(self) -> bool:
@@ -112,15 +110,11 @@ class WindowsSystemTrayService:
             return False
 
     def stop(self) -> None:
-        with self._notification_lock:
-            notification_timers = tuple(self._notification_timers)
-            self._notification_timers.clear()
-        for timer in notification_timers:
-            timer.cancel()
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
-        icon, self._icon = self._icon, None
+        with self._icon_lock:
+            icon, self._icon = self._icon, None
         if icon is not None:
             try:
                 icon.stop()
@@ -128,37 +122,14 @@ class WindowsSystemTrayService:
                 LOGGER.exception("Não foi possível encerrar a bandeja da IRIS.")
 
     def refresh(self) -> None:
-        icon = self._icon
-        if icon is None:
-            return
-        state = voice_state_from_manager(self.speech_manager)
-        icon.icon = self._build_icon(state)
-        icon.title = self.TOOLTIPS[state]
-        icon.update_menu()
-
-    def notify(self, message: str, *, title: str = "IRIS") -> bool:
-        icon = self._icon
-        if icon is None or not getattr(icon, "HAS_NOTIFICATION", False):
-            return False
-
-        timer: threading.Timer
-
-        def send() -> None:
-            try:
-                if self._icon is icon:
-                    icon.notify(message[:255], title[:63])
-            except Exception:
-                LOGGER.exception("Não foi possível exibir uma notificação da IRIS.")
-            finally:
-                with self._notification_lock:
-                    self._notification_timers.discard(timer)
-
-        timer = threading.Timer(self.NOTIFICATION_DELAY_SECONDS, send)
-        timer.daemon = True
-        with self._notification_lock:
-            self._notification_timers.add(timer)
-        timer.start()
-        return True
+        with self._icon_lock:
+            icon = self._icon
+            if icon is None:
+                return
+            state = voice_state_from_manager(self.speech_manager)
+            icon.icon = self._build_icon(state)
+            icon.title = self.TOOLTIPS[state]
+            icon.update_menu()
 
     def _voice_label(self, _item) -> str:
         return "Ativar voz" if self.speech_manager.session_paused else "Pausar voz"
@@ -176,7 +147,12 @@ class WindowsSystemTrayService:
         self.on_exit()
 
     def _on_speech_event(self, _event: SpeechEvent) -> None:
-        self.refresh()
+        try:
+            self.refresh()
+        except Exception:
+            LOGGER.exception(
+                "Não foi possível atualizar o estado visual da bandeja da IRIS."
+            )
 
     def _build_icon(self, state: TrayVoiceState):
         from PIL import Image, ImageDraw

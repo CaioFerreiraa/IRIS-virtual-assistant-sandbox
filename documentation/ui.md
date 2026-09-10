@@ -378,20 +378,17 @@ ação explícita **Sair da IRIS** fará o encerramento definitivo. Quando a op�
 estiver desligada, fechar a janela encerrará a aplicação. Os detalhes visuais e
 de fallback estão em [Execução em segundo plano](background_execution.md).
 
-As Configurações gerais também possuem a ação **Abrir configurações**, que usa
-o endereço `ms-settings:notifications` para abrir a página de notificações do
-Windows. A IRIS não altera essa permissão diretamente. Enquanto a janela estiver
-oculta ou minimizada e a bandeja disponível, sucessos de módulos produzem
-notificações nativas. Erros tentam notificar em qualquer estado da janela para
-manter a explicação completa, sem substituir os toasters internos ou os
-registros de execução.
+Resultados usam o HUD de voz com altura adaptável. Erros em qualquer estado da
+janela também usam um popup próprio da IRIS. Esse fluxo não depende das
+notificações nativas nem das permissões do Windows e não substitui os toasters
+internos ou os registros de execução.
 
 A opção **Mostrar indicador flutuante de voz** controla um HUD compacto na parte
 inferior da tela. No Windows, ele aparece sem moldura e sempre no topo quando a
 palavra “IRIS” é reconhecida, acompanha o texto parcial, não recebe foco nem
 intercepta o mouse e desaparece após o fim da interação. Em caso de erro de
 módulo, o HUD mostra somente uma borda vermelha e uma orientação curta; a
-mensagem completa é encaminhada para a notificação do Windows.
+mensagem completa é encaminhada para o popup de erro da IRIS.
 
 ## Estados visuais
 
