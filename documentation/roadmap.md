@@ -236,6 +236,25 @@ A palavra “IRIS” ativa a interação e é retirada do comando enviado para p
 - [ ] Medir precisão da ativação e falsos positivos com usuários.
 - [x] Listar microfones disponíveis no formulário.
 
+## Próximo marco: execução em segundo plano
+
+- [x] Definir o primeiro escopo da bandeja no Windows.
+- [x] Isolar a integração com a bandeja em um serviço.
+- [x] Ocultar pelo botão `X` e restaurar a mesma janela.
+- [x] Manter voz e runtimes ativos com a janela oculta.
+- [x] Remover a dependência da rota visual para comandos em segundo plano.
+- [x] Adicionar ações para abrir, pausar ou ativar voz e sair.
+- [x] Refletir no ícone os estados desativado, pronto e ativado.
+- [x] Encerrar recursos somente pela saída explícita.
+- [x] Preservar o fechamento normal quando a bandeja não estiver disponível.
+- [x] Exibir um indicador flutuante com a transcrição durante comandos de voz.
+- [ ] Validar o ciclo completo no Windows.
+
+O contrato desse marco está em
+[Execução em segundo plano](background_execution.md). Inicialização automática,
+atalhos globais, notificações e políticas por módulo permanecem fora do primeiro
+escopo.
+
 ## Próximo marco: módulos HTTP
 
 - [ ] Separar `OPEN_URL` de `GET`.

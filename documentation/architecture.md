@@ -29,7 +29,7 @@ O fluxo atual de inicialização é:
 7. `ui/flet_app.py` monta janela, tema, header, sidebar e área de conteúdo;
 8. a rota inicial carrega a tela principal;
 9. módulos disponíveis no banco são transformados em opções de pesquisa, enquanto módulos indisponíveis permanecem visíveis para diagnóstico na sidebar;
-10. configurações de voz são carregadas;
+10. configurações gerais e de voz são carregadas;
 11. gerenciadores de voz e runtimes habilitados iniciam seus backends em threads isoladas;
 12. o scheduler de rotinas inicia uma única instância e carrega rotinas ativas, válidas e não excluídas.
 
@@ -220,6 +220,23 @@ O fluxo implementado é:
 O modo básico entrega somente texto final. O modo em tempo real também entrega texto parcial. A palavra de ativação é identificada pela transcrição e ainda não usa um detector dedicado.
 
 A voz não deve criar um segundo processador de comandos. Entrada manual e entrada por voz devem convergir para o mesmo fluxo.
+
+## Execução em segundo plano
+
+O primeiro escopo de execução em segundo plano mantém a aplicação desktop em
+um único processo no Windows. Fechar a janela pelo botão `X` ocultará sua
+apresentação, enquanto voz e runtimes continuarão ativos. Uma ação explícita na
+bandeja encerrará definitivamente esses recursos e o processo.
+
+A integração com a bandeja fica em `services/`, sem incorporar processamento
+de voz ou regras de execução de comandos. O ciclo de vida distinguirá ocultar a
+janela de encerrar a aplicação, e os eventos do gerenciador de voz alimentarão
+o estado visual do ícone.
+
+O escopo e as decisões aceitas estão em
+[Execução em segundo plano](background_execution.md). Esta seção descreve uma
+comportamento atual, cuja integração nativa ainda precisa de validação manual
+no Windows.
 
 ## Comunicação com módulos
 

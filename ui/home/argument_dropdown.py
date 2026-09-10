@@ -35,6 +35,7 @@ def build_argument_panel_content(argument_input_field: ft.TextField, arguments_l
     return ft.Column(
         spacing=8,
         tight=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[
             argument_input_field,
             ft.Container(expand=True, content=arguments_list),

@@ -51,8 +51,6 @@ class VoiceSubmissionService:
         invalid = VoiceSubmissionService._evaluate_common(state)
         if invalid is not None:
             return invalid
-        if not state.is_home_active:
-            return VoiceSubmissionDecision(False, VoiceSubmissionReason.HOME_INACTIVE)
         if state.requires_explicit_confirmation:
             return VoiceSubmissionDecision(
                 False,

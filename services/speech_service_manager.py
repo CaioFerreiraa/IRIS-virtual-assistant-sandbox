@@ -20,10 +20,13 @@ class SpeechServiceManager:
     def __init__(self):
         self._service: SpeechService | None = None
         self._subscribers: list[SpeechEventCallback] = []
+        self._persistent_subscribers: list[SpeechEventCallback] = []
         self._lock = threading.RLock()
         self._reconfigure_lock = threading.Lock()
         self._configuration_version = 0
         self._command_enabled = False
+        self._session_paused = False
+        self._activity_state = "unavailable"
         self._current_settings = VoiceSettings()
         self._backend_ready = False
         self._backend_error = False
@@ -39,6 +42,16 @@ class SpeechServiceManager:
     def command_enabled(self) -> bool:
         with self._lock:
             return self._command_enabled
+
+    @property
+    def session_paused(self) -> bool:
+        with self._lock:
+            return self._session_paused
+
+    @property
+    def activity_state(self) -> str:
+        with self._lock:
+            return self._activity_state
 
     @property
     def backend_ready(self) -> bool:
@@ -66,6 +79,7 @@ class SpeechServiceManager:
             self._current_settings = settings
             self._backend_ready = False
             self._backend_error = False
+            self._activity_state = "unavailable"
             self._microphone_available = None
             self.last_event = None
 
@@ -76,14 +90,22 @@ class SpeechServiceManager:
             daemon=True,
         ).start()
 
-    def subscribe(self, callback: SpeechEventCallback) -> Callable[[], None]:
+    def subscribe(
+        self,
+        callback: SpeechEventCallback,
+        *,
+        persistent: bool = False,
+    ) -> Callable[[], None]:
         with self._lock:
-            self._subscribers.append(callback)
+            subscribers = (
+                self._persistent_subscribers if persistent else self._subscribers
+            )
+            subscribers.append(callback)
 
         def unsubscribe() -> None:
             with self._lock:
-                if callback in self._subscribers:
-                    self._subscribers.remove(callback)
+                if callback in subscribers:
+                    subscribers.remove(callback)
 
         return unsubscribe
 
@@ -105,12 +127,23 @@ class SpeechServiceManager:
             service.replace_active_command(text)
 
     def set_command_enabled(self, enabled: bool) -> None:
-        """Habilita comandos falados apenas enquanto a rota Início está ativa."""
+        """Controla comandos sem alterar a configuração persistida."""
         with self._lock:
             self._command_enabled = enabled
             service = self._service
         if service is not None:
+            service.set_command_enabled(enabled and not self.session_paused)
+
+    def set_session_paused(self, paused: bool) -> None:
+        """Pausa comandos de voz somente durante o processo atual."""
+        with self._lock:
+            self._session_paused = paused
+            service = self._service
+            enabled = self._command_enabled and not paused
+        if service is not None:
             service.set_command_enabled(enabled)
+            if paused:
+                service.deactivate_command()
 
     def shutdown(self) -> None:
         with self._lock:
@@ -142,7 +175,9 @@ class SpeechServiceManager:
                     else FasterWhisperSpeechService
                 )
                 service = service_class(settings, self._publish)
-                service.set_command_enabled(self._command_enabled)
+                service.set_command_enabled(
+                    self._command_enabled and not self._session_paused
+                )
                 self._service = service
                 service.start()
 
@@ -152,17 +187,25 @@ class SpeechServiceManager:
                 self._backend_ready = True
                 self._backend_error = False
                 self._microphone_available = True
+                self._activity_state = "ready"
             elif event.kind == SpeechEventKind.ERROR:
                 self._backend_ready = False
                 self._backend_error = True
+                self._activity_state = "unavailable"
                 message = event.message.casefold()
                 if any(term in message for term in ("microfone", "microphone", "portaudio")):
                     self._microphone_available = False
             elif event.kind == SpeechEventKind.STARTING:
                 self._backend_ready = False
                 self._backend_error = False
+                self._activity_state = "unavailable"
             elif event.kind == SpeechEventKind.STOPPED:
                 self._backend_ready = False
+                self._activity_state = "unavailable"
+            elif event.kind == SpeechEventKind.ACTIVATED:
+                self._activity_state = "active"
+            elif event.kind == SpeechEventKind.DEACTIVATED:
+                self._activity_state = "ready" if self._backend_ready else "unavailable"
 
         if event.kind not in {SpeechEventKind.AUDIO_LEVEL, SpeechEventKind.TRANSCRIPTION} and not (
             event.kind == SpeechEventKind.STOPPED
@@ -171,6 +214,8 @@ class SpeechServiceManager:
         ):
             self.last_event = event
         with self._lock:
-            subscribers = tuple(self._subscribers)
+            subscribers = tuple(
+                self._persistent_subscribers + self._subscribers
+            )
         for callback in subscribers:
             callback(event)
