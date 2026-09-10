@@ -223,6 +223,11 @@ rota visual. Somente a ação explícita **Sair da IRIS** encerrará o serviço.
 pausa feita pelo menu da bandeja será temporária e não modificará a configuração
 persistida. Consulte [Execução em segundo plano](background_execution.md).
 
+Depois que uma execução termina, com sucesso ou erro retornado pelo módulo, os
+campos de comando e argumento são limpos para deixar a IRIS pronta para uma nova
+interação. Bloqueios anteriores à execução, como ambiguidade ou argumento
+obrigatório ausente, preservam o texto para permitir correção manual.
+
 ## Threads e interface
 
 Captura, carregamento de modelo e transcrição ficam em serviços, fora da camada visual. Eventos vindos dos workers são encaminhados pelo agendador da página Flet antes de modificar controles.

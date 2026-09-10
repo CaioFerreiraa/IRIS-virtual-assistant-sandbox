@@ -699,26 +699,19 @@ class HomeViewState:
             message = str(error)
             self.show_module_error(message)
             self._notify_background("Erro no módulo", message)
+            self._clear_request_inputs()
         elif result is not None and result.get("success", True):
             self.show_module_success(result)
             self._notify_background(
                 "Módulo executado",
                 self.result_message(result) or "Módulo executado com sucesso.",
             )
-            controls.command_input_field.value = ""
-            controls.argument_input_field.value = ""
-            self.argument_source = ArgumentSource.EMPTY
-            self.requires_explicit_confirmation = False
-            self.argument_match_count = None
-            self._dropdowns().clear_selected_module()
-            self._set_module_icon(None)
-            self.sync_clear_button_visibility()
-            self.update_if_ready(controls.command_input_field)
-            self.update_if_ready(controls.argument_input_field)
+            self._clear_request_inputs()
         elif result is not None:
             message = self.result_message(result) or "O módulo retornou erro."
             self.show_module_error(message)
             self._notify_background("Erro no módulo", message)
+            self._clear_request_inputs()
 
         self.is_loading = False
         ui.input.set_send_button_loading(controls.send_button, self.is_loading)
@@ -748,6 +741,19 @@ class HomeViewState:
         if self.on_background_feedback is None:
             return False
         return self.on_background_feedback(title, message)
+
+    def _clear_request_inputs(self) -> None:
+        controls = self._controls()
+        controls.command_input_field.value = ""
+        controls.argument_input_field.value = ""
+        self.argument_source = ArgumentSource.EMPTY
+        self.requires_explicit_confirmation = False
+        self.argument_match_count = None
+        self._dropdowns().clear_selected_module()
+        self._set_module_icon(None)
+        self.sync_clear_button_visibility()
+        self.update_if_ready(controls.command_input_field)
+        self.update_if_ready(controls.argument_input_field)
 
     def result_message(self, result: dict) -> str:
         if "message" in result:
