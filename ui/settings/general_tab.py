@@ -22,6 +22,7 @@ def build_general_settings_tab(
     toaster_handler: ToasterHandler,
     on_background_execution_change: Callable[[bool], bool],
     on_open_notification_settings: Callable[[], bool],
+    on_listening_overlay_change: Callable[[bool], bool],
 ) -> ft.Container:
     settings = settings_service.load()
     background_switch = ft.Switch(
@@ -30,7 +31,7 @@ def build_general_settings_tab(
         active_track_color=PASTEL_PURPLE,
     )
 
-    def on_change(event: ft.ControlEvent) -> None:
+    def on_background_change(event: ft.ControlEvent) -> None:
         nonlocal settings
         enabled = bool(event.control.value)
         try:
@@ -61,7 +62,46 @@ def build_general_settings_tab(
         )
         toaster_handler.show_success(message, title="Configurações gerais")
 
-    background_switch.on_change = on_change
+    background_switch.on_change = on_background_change
+
+    overlay_switch = ft.Switch(
+        value=settings.listening_overlay_enabled,
+        active_color=PASTEL_DARK_PURPLE,
+        active_track_color=PASTEL_PURPLE,
+    )
+
+    def on_overlay_change(event: ft.ControlEvent) -> None:
+        nonlocal settings
+        enabled = bool(event.control.value)
+        try:
+            settings = settings_service.save(
+                replace(settings, listening_overlay_enabled=enabled)
+            )
+            available = on_listening_overlay_change(enabled)
+        except Exception as error:
+            event.control.value = settings.listening_overlay_enabled
+            event.control.update()
+            toaster_handler.show_error(
+                str(error),
+                title="Erro ao salvar configurações",
+            )
+            return
+
+        if enabled and not available:
+            toaster_handler.show_warning(
+                "O indicador flutuante está disponível somente no Windows.",
+                title="Indicador de voz",
+            )
+            return
+
+        message = (
+            "O indicador aparecerá quando a IRIS começar a ouvir."
+            if enabled
+            else "O indicador flutuante foi desativado."
+        )
+        toaster_handler.show_success(message, title="Configurações gerais")
+
+    overlay_switch.on_change = on_overlay_change
 
     def open_notification_settings(_event: ft.ControlEvent) -> None:
         if on_open_notification_settings():
@@ -128,6 +168,38 @@ def build_general_settings_tab(
                         ],
                     ),
                     data=background_switch,
+                ),
+                ft.Container(
+                    height=72,
+                    padding=ft.Padding(left=12, top=0, right=12, bottom=0),
+                    border=ft.Border.all(1, BORDER),
+                    border_radius=8,
+                    alignment=ft.Alignment.CENTER_LEFT,
+                    content=ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            ft.Column(
+                                expand=True,
+                                tight=True,
+                                spacing=3,
+                                controls=[
+                                    ft.Text(
+                                        "Mostrar indicador flutuante de voz",
+                                        size=13,
+                                        color=TEXT_PRIMARY,
+                                    ),
+                                    ft.Text(
+                                        "Exibe o texto reconhecido sem interromper o aplicativo em uso.",
+                                        size=12,
+                                        color=TEXT_SECONDARY,
+                                    ),
+                                ],
+                            ),
+                            overlay_switch,
+                        ],
+                    ),
+                    data=overlay_switch,
                 ),
                 ft.Container(
                     height=72,

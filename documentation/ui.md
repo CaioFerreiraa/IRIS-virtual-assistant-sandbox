@@ -385,6 +385,11 @@ oculta ou minimizada e a bandeja disponível, sucessos e erros de módulos
 produzem notificações nativas sem substituir os toasters internos ou os
 registros de execução.
 
+A opção **Mostrar indicador flutuante de voz** controla um HUD compacto na parte
+inferior da tela. No Windows, ele aparece sem moldura e sempre no topo quando a
+palavra “IRIS” é reconhecida, acompanha o texto parcial, não recebe foco nem
+intercepta o mouse e desaparece após o fim da interação.
+
 ## Estados visuais
 
 Toda funcionalidade deve considerar:

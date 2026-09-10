@@ -697,8 +697,9 @@ class HomeViewState:
         controls = self._controls()
         if error is not None:
             message = str(error)
-            self.show_module_error(message)
-            self._notify_background("Erro no módulo", message)
+            feedback_message = self._cleared_input_feedback(message)
+            self.show_module_error(feedback_message)
+            self._notify_background("Erro no módulo", feedback_message)
             self._clear_request_inputs()
         elif result is not None and result.get("success", True):
             self.show_module_success(result)
@@ -709,8 +710,9 @@ class HomeViewState:
             self._clear_request_inputs()
         elif result is not None:
             message = self.result_message(result) or "O módulo retornou erro."
-            self.show_module_error(message)
-            self._notify_background("Erro no módulo", message)
+            feedback_message = self._cleared_input_feedback(message)
+            self.show_module_error(feedback_message)
+            self._notify_background("Erro no módulo", feedback_message)
             self._clear_request_inputs()
 
         self.is_loading = False
@@ -754,6 +756,13 @@ class HomeViewState:
         self.sync_clear_button_visibility()
         self.update_if_ready(controls.command_input_field)
         self.update_if_ready(controls.argument_input_field)
+
+    @staticmethod
+    def _cleared_input_feedback(message: str) -> str:
+        normalized_message = message.strip().rstrip(".")
+        if normalized_message:
+            normalized_message = f"{normalized_message}. "
+        return f"{normalized_message}O comando foi limpo para uma nova tentativa."
 
     def result_message(self, result: dict) -> str:
         if "message" in result:

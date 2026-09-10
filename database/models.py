@@ -278,3 +278,4 @@ class GeneralSetting(Base):
 
     id = Column(Integer, primary_key=True, default=1)
     background_execution_enabled = Column(Boolean, nullable=False, default=True)
+    listening_overlay_enabled = Column(Boolean, nullable=False, default=True)

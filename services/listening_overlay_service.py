@@ -1,0 +1,240 @@
+from __future__ import annotations
+
+import ctypes
+import gc
+import logging
+import queue
+import sys
+import threading
+
+from services.speech_service import SpeechEvent, SpeechEventKind
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+class WindowsListeningOverlayService:
+    """HUD nativo e não focável para acompanhar comandos de voz no Windows."""
+
+    WIDTH = 520
+    HEIGHT = 88
+    BOTTOM_MARGIN = 64
+    BACKGROUND = "#24212A"
+    ACCENT = "#C3A0DE"
+    ACTIVE = "#67B98A"
+    ERROR = "#E58B91"
+    TEXT = "#FFFFFF"
+    TEXT_MUTED = "#C9C5CF"
+    TRANSPARENT = "#010203"
+
+    def __init__(self, platform: str | None = None) -> None:
+        self.platform = platform or sys.platform
+        self._commands: queue.SimpleQueue[tuple[str, str, str]] = queue.SimpleQueue()
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def available(self) -> bool:
+        thread = self._thread
+        return thread is not None and thread.is_alive()
+
+    def start(self) -> bool:
+        if self.platform != "win32":
+            return False
+        with self._lock:
+            if self.available:
+                return True
+            self._thread = threading.Thread(
+                target=self._run,
+                name="iris-listening-overlay",
+                daemon=True,
+            )
+            self._thread.start()
+        return True
+
+    def stop(self) -> None:
+        with self._lock:
+            thread, self._thread = self._thread, None
+        if thread is None:
+            return
+        self._commands.put(("stop", "", ""))
+        if thread is not threading.current_thread():
+            thread.join(timeout=1)
+
+    def on_speech_event(self, event: SpeechEvent) -> None:
+        if not self.available:
+            return
+        if event.kind == SpeechEventKind.ACTIVATED:
+            self._commands.put(("show", "Ouvindo…", "Fale seu comando"))
+        elif event.kind in {SpeechEventKind.PARTIAL, SpeechEventKind.FINAL}:
+            text = " ".join(event.text.strip().split()) or "Ouvindo…"
+            self._commands.put(("show", text, "IRIS está ouvindo"))
+        elif event.kind == SpeechEventKind.ERROR:
+            message = " ".join(event.message.strip().split()) or "Voz indisponível"
+            self._commands.put(("error", message, "Não foi possível continuar"))
+        elif event.kind in {SpeechEventKind.DEACTIVATED, SpeechEventKind.STOPPED}:
+            self._commands.put(("hide", "", ""))
+
+    def _run(self) -> None:
+        try:
+            import tkinter as tk
+
+            root = tk.Tk()
+            root.withdraw()
+            root.overrideredirect(True)
+            root.configure(bg=self.TRANSPARENT)
+            root.attributes("-topmost", True)
+            root.attributes("-transparentcolor", self.TRANSPARENT)
+            root.attributes("-alpha", 0.97)
+
+            canvas = tk.Canvas(
+                root,
+                width=self.WIDTH,
+                height=self.HEIGHT,
+                bg=self.TRANSPARENT,
+                highlightthickness=0,
+            )
+            canvas.pack()
+            root.update_idletasks()
+            self._apply_windows_styles(root.winfo_id())
+
+            hide_job: str | None = None
+
+            def cancel_hide() -> None:
+                nonlocal hide_job
+                if hide_job is not None:
+                    root.after_cancel(hide_job)
+                    hide_job = None
+
+            def hide() -> None:
+                nonlocal hide_job
+                hide_job = None
+                root.withdraw()
+
+            def schedule_hide(delay_ms: int) -> None:
+                nonlocal hide_job
+                cancel_hide()
+                hide_job = root.after(delay_ms, hide)
+
+            def show(text: str, subtitle: str, *, error: bool = False) -> None:
+                cancel_hide()
+                self._render(canvas, text, subtitle, error=error)
+                x = max(0, (root.winfo_screenwidth() - self.WIDTH) // 2)
+                y = max(
+                    0,
+                    root.winfo_screenheight() - self.HEIGHT - self.BOTTOM_MARGIN,
+                )
+                root.geometry(f"{self.WIDTH}x{self.HEIGHT}+{x}+{y}")
+                root.deiconify()
+                self._show_without_activation(root.winfo_id(), x, y)
+
+            def poll() -> None:
+                try:
+                    while True:
+                        action, text, subtitle = self._commands.get_nowait()
+                        if action == "stop":
+                            root.quit()
+                            root.destroy()
+                            return
+                        if action == "show":
+                            show(text, subtitle)
+                        elif action == "error":
+                            show(text, subtitle, error=True)
+                            schedule_hide(3500)
+                        elif action == "hide":
+                            schedule_hide(900)
+                except queue.Empty:
+                    pass
+                root.after(40, poll)
+
+            root.after(40, poll)
+            root.mainloop()
+            tk._default_root = None
+            del canvas
+            del root
+            gc.collect()
+        except Exception:
+            LOGGER.exception("Não foi possível iniciar o indicador flutuante da IRIS.")
+        finally:
+            with self._lock:
+                if self._thread is threading.current_thread():
+                    self._thread = None
+
+    def _render(self, canvas, text: str, subtitle: str, *, error: bool) -> None:
+        canvas.delete("all")
+        self._rounded_rectangle(canvas, 2, 2, self.WIDTH - 2, self.HEIGHT - 2, 24)
+        accent = self.ERROR if error else self.ACTIVE
+        canvas.create_oval(20, 22, 64, 66, fill=accent, outline="")
+        if error:
+            canvas.create_line(35, 37, 49, 51, fill=self.TEXT, width=3)
+            canvas.create_line(49, 37, 35, 51, fill=self.TEXT, width=3)
+        else:
+            canvas.create_oval(35, 29, 49, 49, outline=self.TEXT, width=2)
+            canvas.create_arc(
+                30,
+                35,
+                54,
+                57,
+                start=180,
+                extent=180,
+                style="arc",
+                outline=self.TEXT,
+                width=2,
+            )
+            canvas.create_line(42, 56, 42, 61, fill=self.TEXT, width=2)
+            canvas.create_line(36, 61, 48, 61, fill=self.TEXT, width=2)
+        canvas.create_text(
+            82,
+            31,
+            text=self._truncate(text, 58),
+            fill=self.TEXT,
+            anchor="w",
+            font=("Segoe UI", 13, "bold"),
+        )
+        canvas.create_text(
+            82,
+            56,
+            text=subtitle,
+            fill=self.TEXT_MUTED,
+            anchor="w",
+            font=("Segoe UI", 9),
+        )
+        canvas.create_oval(486, 35, 496, 45, fill=accent, outline="")
+
+    def _rounded_rectangle(self, canvas, x1, y1, x2, y2, radius) -> None:
+        points = (
+            x1 + radius, y1, x2 - radius, y1, x2, y1, x2, y1 + radius,
+            x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
+            x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1,
+        )
+        canvas.create_polygon(
+            points,
+            smooth=True,
+            splinesteps=24,
+            fill=self.BACKGROUND,
+            outline=self.ACCENT,
+            width=1,
+        )
+
+    @staticmethod
+    def _truncate(text: str, limit: int) -> str:
+        return text if len(text) <= limit else f"{text[: limit - 1].rstrip()}…"
+
+    @staticmethod
+    def _apply_windows_styles(window_handle: int) -> None:
+        user32 = ctypes.windll.user32
+        extended_style = user32.GetWindowLongW(window_handle, -20)
+        extended_style |= 0x00000080 | 0x00000020 | 0x08000000
+        user32.SetWindowLongW(window_handle, -20, extended_style)
+
+    @staticmethod
+    def _show_without_activation(window_handle: int, left: int, top: int) -> None:
+        ctypes.windll.user32.SetWindowPos(
+            window_handle,
+            -1,
+            left,
+            top,
+            0,
+            0,
+            0x0001 | 0x0010 | 0x0040,
+        )

@@ -225,8 +225,17 @@ persistida. Consulte [Execução em segundo plano](background_execution.md).
 
 Depois que uma execução termina, com sucesso ou erro retornado pelo módulo, os
 campos de comando e argumento são limpos para deixar a IRIS pronta para uma nova
-interação. Bloqueios anteriores à execução, como ambiguidade ou argumento
-obrigatório ausente, preservam o texto para permitir correção manual.
+interação. O feedback de erro informa explicitamente que o comando foi limpo,
+inclusive na notificação nativa exibida com a janela oculta ou minimizada.
+Bloqueios anteriores à execução, como ambiguidade ou argumento obrigatório
+ausente, preservam o texto para permitir correção manual.
+
+Quando habilitado nas Configurações gerais, o indicador flutuante observa os
+mesmos eventos persistentes do gerenciador de voz. `ACTIVATED` abre o HUD,
+`PARTIAL` e `FINAL` atualizam a transcrição, `DEACTIVATED` e `STOPPED` o ocultam,
+e `ERROR` apresenta uma mensagem temporária antes de fechá-lo. A janela nativa
+do indicador usa uma thread própria e recebe eventos por fila, sem executar
+processamento de áudio.
 
 ## Threads e interface
 

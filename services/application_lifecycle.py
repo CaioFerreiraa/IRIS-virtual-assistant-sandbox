@@ -16,6 +16,10 @@ class TrayResource(Protocol):
     def stop(self) -> None: ...
 
 
+class BackgroundResource(Protocol):
+    def stop(self) -> None: ...
+
+
 class ApplicationLifecycle:
     """Coordena ocultação e encerramento sem conhecer controles visuais."""
 
@@ -25,6 +29,7 @@ class ApplicationLifecycle:
         speech_manager: ShutdownResource,
         runtime_manager: ShutdownResource,
         tray_service: TrayResource,
+        background_resources: tuple[BackgroundResource, ...] = (),
         hide_window: Callable[[], None],
         restore_window: Callable[[], None],
         close_window: Callable[[], None],
@@ -32,6 +37,7 @@ class ApplicationLifecycle:
         self.speech_manager = speech_manager
         self.runtime_manager = runtime_manager
         self.tray_service = tray_service
+        self.background_resources = background_resources
         self.hide_window = hide_window
         self.restore_window = restore_window
         self.close_window = close_window
@@ -54,5 +60,7 @@ class ApplicationLifecycle:
             self._exiting = True
         self.speech_manager.shutdown()
         self.runtime_manager.shutdown()
+        for resource in self.background_resources:
+            resource.stop()
         self.tray_service.stop()
         self.close_window()

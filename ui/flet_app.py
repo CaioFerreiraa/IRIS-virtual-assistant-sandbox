@@ -19,6 +19,7 @@ from services.module_registry_state import get_module_registry_state
 from services.module_runtime_service import module_runtime_manager
 from services.module_service import apply_effective_runtime_statuses
 from services.routine_scheduler_service import routine_scheduler_service
+from services.listening_overlay_service import WindowsListeningOverlayService
 from services.voice_settings_service import VoiceSettingsService
 from services.system_tray_service import WindowsSystemTrayService
 from services.windows_settings_service import WindowsSettingsService
@@ -99,6 +100,11 @@ def get_default_page(page: ft.Page):
     general_settings_service = GeneralSettingsService()
     general_settings = general_settings_service.load()
     windows_settings_service = WindowsSettingsService()
+    listening_overlay_service = WindowsListeningOverlayService()
+    speech_manager.subscribe(
+        listening_overlay_service.on_speech_event,
+        persistent=True,
+    )
 
     lifecycle_holder: dict[str, ApplicationLifecycle] = {}
 
@@ -137,6 +143,7 @@ def get_default_page(page: ft.Page):
         speech_manager=speech_manager,
         runtime_manager=module_runtime_manager,
         tray_service=tray_service,
+        background_resources=(listening_overlay_service,),
         hide_window=lambda: schedule_window_visibility(False),
         restore_window=lambda: schedule_window_visibility(True),
         close_window=schedule_native_close,
@@ -154,6 +161,12 @@ def get_default_page(page: ft.Page):
             return False
         return tray_service.notify(message, title=title)
 
+    def apply_listening_overlay(enabled: bool) -> bool:
+        if enabled:
+            return listening_overlay_service.start()
+        listening_overlay_service.stop()
+        return True
+
     app_container = fatal_error_handler.guard_call(
         get_app_container,
         page,
@@ -165,6 +178,7 @@ def get_default_page(page: ft.Page):
         apply_background_execution,
         windows_settings_service.open_notifications,
         notify_background,
+        apply_listening_overlay,
         fallback=ft.Container(expand=True, bgcolor=APP_BACKGROUND),
     )
     fatal_error_handler.guard_call(page.add, app_container)
@@ -182,6 +196,8 @@ def get_default_page(page: ft.Page):
     fatal_error_handler.guard_call(routine_scheduler_service.start)
     if general_settings.background_execution_enabled:
         fatal_error_handler.guard_call(tray_service.start)
+    if general_settings.listening_overlay_enabled:
+        fatal_error_handler.guard_call(listening_overlay_service.start)
     return page
 
 
@@ -195,6 +211,7 @@ def get_app_container(
     on_background_execution_change,
     on_open_notification_settings,
     on_background_feedback,
+    on_listening_overlay_change,
 ):
     header_slot = ft.Container()
     sidebar_slot = ft.Container()
@@ -321,6 +338,7 @@ def get_app_container(
                 on_background_execution_change=on_background_execution_change,
                 on_module_status_change=render_layout,
                 on_open_notification_settings=on_open_notification_settings,
+                on_listening_overlay_change=on_listening_overlay_change,
             )
         rendered_route = current_route
 

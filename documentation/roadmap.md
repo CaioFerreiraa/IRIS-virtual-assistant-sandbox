@@ -247,6 +247,7 @@ A palavra “IRIS” ativa a interação e é retirada do comando enviado para p
 - [x] Refletir no ícone os estados desativado, pronto e ativado.
 - [x] Encerrar recursos somente pela saída explícita.
 - [x] Preservar o fechamento normal quando a bandeja não estiver disponível.
+- [x] Exibir um indicador flutuante com a transcrição durante comandos de voz.
 - [ ] Validar o ciclo completo no Windows.
 
 O contrato desse marco está em

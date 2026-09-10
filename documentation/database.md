@@ -205,7 +205,9 @@ Armazena as preferências gerais da aplicação em um registro singleton de ID
 `1`. O campo `background_execution_enabled` determina se a IRIS deve iniciar a
 bandeja e permanecer ativa quando a janela for fechada. O valor padrão é
 ligado para preservar o comportamento das instalações que já utilizam a
-execução em segundo plano.
+execução em segundo plano. O campo `listening_overlay_enabled` controla o
+indicador flutuante exibido durante o reconhecimento de voz e também vem ligado
+por padrão.
 
 ## Relacionamentos
 

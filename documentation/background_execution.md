@@ -51,6 +51,13 @@ desativadas ou silenciadas pelo sistema. As Configurações gerais oferecem um
 atalho para a página de notificações do Windows; a permissão continua sob
 controle do sistema operacional.
 
+Ao reconhecer a palavra de ativação, a IRIS pode apresentar um indicador
+flutuante na parte inferior da tela. Esse HUD (painel compacto sobre outras
+janelas) mostra o estado de escuta e a transcrição parcial sem obter foco nem
+interceptar cliques. Ele desaparece após a desativação ou, em caso de erro de
+voz, depois de exibir brevemente a mensagem. A preferência **Mostrar indicador
+flutuante de voz** fica nas Configurações gerais e vem ligada por padrão.
+
 Ao desligar a opção nas Configurações gerais, a bandeja é encerrada e o botão
 `X` volta a fechar a aplicação. A preferência é persistida para as próximas
 execuções e vem ligada por padrão para preservar o comportamento existente.
