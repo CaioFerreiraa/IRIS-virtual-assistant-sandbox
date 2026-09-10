@@ -143,6 +143,7 @@ def get_default_page(page: ft.Page):
         speech_manager=speech_manager,
         runtime_manager=module_runtime_manager,
         tray_service=tray_service,
+        shutdown_resources=(routine_scheduler_service,),
         background_resources=(
             listening_overlay_service,
             notification_overlay_service,
@@ -195,7 +196,6 @@ def get_default_page(page: ft.Page):
     fatal_error_handler.guard_call(page.add, app_container)
 
     def shutdown_services(event=None) -> None:
-        routine_scheduler_service.shutdown()
         lifecycle.exit_application()
 
     page.on_disconnect = shutdown_services

@@ -15,8 +15,9 @@ separado do Windows.
 
 No Windows, fechar a janela pelo botão `X` oculta-a e mantém o processo
 da IRIS ativo na bandeja do sistema quando a opção **Manter a IRIS em segundo
-plano** estiver ligada nas Configurações gerais. O reconhecimento de voz e os
-runtimes já iniciados continuam funcionando no mesmo processo.
+plano** estiver ligada nas Configurações gerais. O reconhecimento de voz, os
+runtimes já iniciados e o scheduler de rotinas continuam funcionando no mesmo
+processo.
 
 ```text
 IRIS aberta
@@ -38,7 +39,7 @@ O menu da bandeja possui somente estas ações:
 - **Pausar voz** ou **Ativar voz**: alterna temporariamente a recepção de
   comandos falados;
 - **Sair da IRIS**: encerra o reconhecimento de voz, os runtimes pertencentes à
-  aplicação e o processo.
+  aplicação, o scheduler de rotinas e o processo.
 
 A pausa feita pela bandeja vale somente para a execução atual. Ela não altera a
 configuração de voz persistida. Um duplo clique no ícone também restaura

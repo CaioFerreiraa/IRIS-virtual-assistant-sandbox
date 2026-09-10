@@ -283,7 +283,7 @@ Uma migration deve considerar:
 - downgrade possível;
 - compatibilidade com SQLite.
 
-A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes. A migration `a1f6d8c3b9e2` adiciona `stop_on_failure` e `deleted_at` às rotinas e `argument` às etapas; registros existentes recebem `stop_on_failure=True`.
+A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes. A migration `a1f6d8c3b9e2` adiciona `stop_on_failure` e `deleted_at` às rotinas e `argument` às etapas; registros existentes recebem `stop_on_failure=True`. As migrations `a6c8e2f4b1d3` e `c7d9e1a3f5b2` criam as configurações gerais e o controle do indicador de escuta. A migration de merge `f2d4b6a8c0e1` reúne os ramos de rotinas e configurações em um único `head`, sem executar alterações adicionais de esquema.
 
 ## Transações
 
@@ -339,7 +339,9 @@ A tela de voz já persiste:
 - opções de desempenho;
 - opções de desempenho e reconhecimento.
 
-Preferências visuais e outras configurações gerais ainda não possuem modelo definido.
+As preferências de execução em segundo plano e do indicador flutuante de
+escuta são persistidas em `GeneralSetting`. Outras configurações gerais ainda
+não possuem modelo definido.
 
 ## Credenciais
 

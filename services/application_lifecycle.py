@@ -29,6 +29,7 @@ class ApplicationLifecycle:
         speech_manager: ShutdownResource,
         runtime_manager: ShutdownResource,
         tray_service: TrayResource,
+        shutdown_resources: tuple[ShutdownResource, ...] = (),
         background_resources: tuple[BackgroundResource, ...] = (),
         hide_window: Callable[[], None],
         restore_window: Callable[[], None],
@@ -37,6 +38,7 @@ class ApplicationLifecycle:
         self.speech_manager = speech_manager
         self.runtime_manager = runtime_manager
         self.tray_service = tray_service
+        self.shutdown_resources = shutdown_resources
         self.background_resources = background_resources
         self.hide_window = hide_window
         self.restore_window = restore_window
@@ -60,6 +62,8 @@ class ApplicationLifecycle:
             self._exiting = True
         self.speech_manager.shutdown()
         self.runtime_manager.shutdown()
+        for resource in self.shutdown_resources:
+            resource.shutdown()
         for resource in self.background_resources:
             resource.stop()
         self.tray_service.stop()
