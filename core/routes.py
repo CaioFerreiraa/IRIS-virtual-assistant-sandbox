@@ -10,6 +10,7 @@ import ui.routines as routines_ui
 import ui.settings as settings_ui
 
 from database.db import SessionLocal
+from services.general_settings_service import GeneralSettingsService
 from services.speech_service_manager import SpeechServiceManager
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
@@ -44,6 +45,9 @@ def build_route_content(
     ) = None,
     toaster_handler=None,
     speech_manager: SpeechServiceManager | None = None,
+    general_settings_service: GeneralSettingsService | None = None,
+    on_background_execution_change: Callable[[bool], bool] | None = None,
+    on_listening_overlay_change: Callable[[bool], bool] | None = None,
     module_session_factory=SessionLocal,
     on_module_status_change: Callable[[], None] | None = None,
 ) -> ft.Control:
@@ -89,8 +93,17 @@ def build_route_content(
         route == "/settings"
         and speech_manager is not None
         and isinstance(toaster_handler, ToasterHandler)
+        and general_settings_service is not None
+        and on_background_execution_change is not None
+        and on_listening_overlay_change is not None
     ):
-        return settings_ui.build_settings_view(speech_manager, toaster_handler)
+        return settings_ui.build_settings_view(
+            speech_manager,
+            toaster_handler,
+            general_settings_service,
+            on_background_execution_change,
+            on_listening_overlay_change,
+        )
 
     title, subtitle, icon = DEFAULT_ROUTES.get(
         route,

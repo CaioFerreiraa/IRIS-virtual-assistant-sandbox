@@ -20,7 +20,7 @@ from ui.theme.fonts import TITLE_FONT
 
 
 LOGO_PATH = "assets/images/logo_transparent.png"
-DROPDOWN_HEIGHT = 360
+MAX_DROPDOWN_HEIGHT = 360
 VOICE_SUBMIT_DELAY_SECONDS = 2.0
 HOME_ROUTES = {"", "/", "/home"}
 
@@ -29,9 +29,15 @@ def build_home_view(
     module_options: Sequence[ui.dropdowns.ModuleOption] | None = None,
     toaster_handler: ToasterHandler | None = None,
     speech_manager: SpeechServiceManager | None = None,
+    on_background_feedback: Callable[[str, str], bool] | None = None,
 ) -> ft.Container:
     # Cria a tela home conectando view, dropdowns e servico.
-    return HomeViewState(module_options, toaster_handler, speech_manager).build()
+    return HomeViewState(
+        module_options,
+        toaster_handler,
+        speech_manager,
+        on_background_feedback,
+    ).build()
 
 
 class HomeViewState:
@@ -40,6 +46,7 @@ class HomeViewState:
         module_options: Sequence[ui.dropdowns.ModuleOption] | None = None,
         toaster_handler: ToasterHandler | None = None,
         speech_manager: SpeechServiceManager | None = None,
+        on_background_feedback: Callable[[str, str], bool] | None = None,
     ):
         # Guarda dependencias gerais da home.
         self.module_options = tuple(ui.dropdowns.sort_modules(module_options or ()))
@@ -47,6 +54,7 @@ class HomeViewState:
         self.home_service = HomeService()
         self.toaster_handler = toaster_handler
         self.speech_manager = speech_manager
+        self.on_background_feedback = on_background_feedback
         self.is_loading = False
         self.is_voice_active = False
         self.is_basic_capture_active = False
@@ -84,10 +92,10 @@ class HomeViewState:
             on_select_module=self.select_module,
             on_select_argument=self.select_argument,
             update_control=self.update_if_ready,
-            dropdown_height=DROPDOWN_HEIGHT,
+            dropdown_height=MAX_DROPDOWN_HEIGHT,
         )
         if self.speech_manager is not None:
-            self.speech_manager.subscribe(self.on_speech_event)
+            self.speech_manager.subscribe(self.on_speech_event, persistent=True)
         return self.controls.root
 
     def _controls(self) -> "HomeViewControls":
@@ -201,6 +209,7 @@ class HomeViewState:
             self.update_if_ready(controls.input_shell)
             if event.kind == SpeechEventKind.ERROR and self.toaster_handler:
                 self.toaster_handler.show_error(event.message, title="Voz indisponível")
+                self._notify_background("Voz indisponível", event.message)
 
     def _apply_voice_text(
         self,
@@ -687,21 +696,24 @@ class HomeViewState:
     ) -> None:
         controls = self._controls()
         if error is not None:
-            self.show_module_error(str(error))
+            message = str(error)
+            feedback_message = self._cleared_input_feedback(message)
+            self.show_module_error(feedback_message)
+            self._notify_background("Erro no módulo", feedback_message)
+            self._clear_request_inputs()
         elif result is not None and result.get("success", True):
             self.show_module_success(result)
-            controls.command_input_field.value = ""
-            controls.argument_input_field.value = ""
-            self.argument_source = ArgumentSource.EMPTY
-            self.requires_explicit_confirmation = False
-            self.argument_match_count = None
-            self._dropdowns().clear_selected_module()
-            self._set_module_icon(None)
-            self.sync_clear_button_visibility()
-            self.update_if_ready(controls.command_input_field)
-            self.update_if_ready(controls.argument_input_field)
+            self._notify_background(
+                "Módulo executado",
+                self.result_message(result) or "Módulo executado com sucesso.",
+            )
+            self._clear_request_inputs()
         elif result is not None:
-            self.show_module_error(self.result_message(result) or "O módulo retornou erro.")
+            message = self.result_message(result) or "O módulo retornou erro."
+            feedback_message = self._cleared_input_feedback(message)
+            self.show_module_error(feedback_message)
+            self._notify_background("Erro no módulo", feedback_message)
+            self._clear_request_inputs()
 
         self.is_loading = False
         ui.input.set_send_button_loading(controls.send_button, self.is_loading)
@@ -726,6 +738,31 @@ class HomeViewState:
             message=message or "Não foi possível executar o módulo.",
             title="Erro no módulo",
         )
+
+    def _notify_background(self, title: str, message: str) -> bool:
+        if self.on_background_feedback is None:
+            return False
+        return self.on_background_feedback(title, message)
+
+    def _clear_request_inputs(self) -> None:
+        controls = self._controls()
+        controls.command_input_field.value = ""
+        controls.argument_input_field.value = ""
+        self.argument_source = ArgumentSource.EMPTY
+        self.requires_explicit_confirmation = False
+        self.argument_match_count = None
+        self._dropdowns().clear_selected_module()
+        self._set_module_icon(None)
+        self.sync_clear_button_visibility()
+        self.update_if_ready(controls.command_input_field)
+        self.update_if_ready(controls.argument_input_field)
+
+    @staticmethod
+    def _cleared_input_feedback(message: str) -> str:
+        normalized_message = message.strip().rstrip(".")
+        if normalized_message:
+            normalized_message = f"{normalized_message}. "
+        return f"{normalized_message}O comando foi limpo para uma nova tentativa."
 
     def result_message(self, result: dict) -> str:
         if "message" in result:
@@ -851,8 +888,18 @@ class HomeViewControls:
 
 def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
     # Monta a tela home e devolve referencias dos controles atualizaveis.
-    module_suggestions_list = ft.ListView(spacing=4, padding=0, expand=True, auto_scroll=False)
-    argument_suggestions_list = ft.ListView(spacing=4, padding=0, expand=True, auto_scroll=False)
+    module_suggestions_list = ft.ListView(
+        spacing=ui.dropdowns.DROPDOWN_LIST_SPACING,
+        padding=0,
+        expand=True,
+        auto_scroll=False,
+    )
+    argument_suggestions_list = ft.ListView(
+        spacing=ui.dropdowns.DROPDOWN_LIST_SPACING,
+        padding=0,
+        expand=True,
+        auto_scroll=False,
+    )
 
     module_panel = ui.dropdowns.build_dropdown_panel(module_suggestions_list, on_click=callbacks.on_dropdown_click)
     argument_input_field = ui.input.build_argument_field(
@@ -863,7 +910,11 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
         ui.argument_dropdown.build_argument_panel_content(argument_input_field, argument_suggestions_list),
         on_click=callbacks.on_dropdown_click,
     )
-    dropdown_stack = ui.dropdowns.build_dropdown_stack(module_panel, argument_panel, DROPDOWN_HEIGHT)
+    dropdown_stack = ui.dropdowns.build_dropdown_stack(
+        module_panel,
+        argument_panel,
+        MAX_DROPDOWN_HEIGHT,
+    )
 
     command_input_field = ui.input.build_command_field(
         on_submit=callbacks.on_send,

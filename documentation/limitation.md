@@ -217,6 +217,18 @@ Não há garantia de:
 - suporte comercial;
 - compatibilidade com toda máquina Windows.
 
+## Execução em segundo plano
+
+A execução em segundo plano pela bandeja está implementada para Windows e mantém
+a IRIS no mesmo processo desktop; não haverá daemon, serviço do Windows,
+inicialização automática, atalho global ou suporte equivalente para Linux e
+macOS.
+
+O primeiro escopo também reutiliza as regras atuais dos comandos, sem criar
+políticas específicas por módulo ou novos fluxos para ambiguidades e argumentos
+ausentes. A integração nativa ainda precisa de validação manual em uma máquina
+Windows. Consulte [Execução em segundo plano](background_execution.md).
+
 ## Limites de responsabilidade
 
 A IRIS executa ações configuradas pelo usuário e pelos módulos instalados.

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import flet as ft
 
+from services.general_settings_service import GeneralSettingsService
 from services.speech_service_manager import SpeechServiceManager
 from ui.settings.general_tab import build_general_settings_tab
 from ui.settings.passwords_tab import build_passwords_tab
@@ -26,14 +29,34 @@ SETTINGS_TABS = (
 def build_settings_view(
     speech_manager: SpeechServiceManager,
     toaster_handler: ToasterHandler,
+    general_settings_service: GeneralSettingsService,
+    on_background_execution_change: Callable[[bool], bool],
+    on_listening_overlay_change: Callable[[bool], bool],
 ) -> ft.Container:
-    return SettingsViewState(speech_manager, toaster_handler).build()
+    return SettingsViewState(
+        speech_manager,
+        toaster_handler,
+        general_settings_service,
+        on_background_execution_change,
+        on_listening_overlay_change,
+    ).build()
 
 
 class SettingsViewState:
-    def __init__(self, speech_manager: SpeechServiceManager, toaster_handler: ToasterHandler):
+    def __init__(
+        self,
+        speech_manager: SpeechServiceManager,
+        toaster_handler: ToasterHandler,
+        general_settings_service: GeneralSettingsService,
+        on_background_execution_change: Callable[[bool], bool],
+        on_listening_overlay_change: Callable[[bool], bool],
+    ):
         self.speech_manager = speech_manager
         self.voice_tab = VoiceSettingsTab(speech_manager, toaster_handler)
+        self.toaster_handler = toaster_handler
+        self.general_settings_service = general_settings_service
+        self.on_background_execution_change = on_background_execution_change
+        self.on_listening_overlay_change = on_listening_overlay_change
         self.active_tab = "voice"
         self.tab_content = ft.Container(expand=True)
         self.tab_buttons: dict[str, ft.Container] = {}
@@ -128,7 +151,12 @@ class SettingsViewState:
             self.tab_content.content = self.voice_tab.build()
         elif self.active_tab == "general":
             # Origem: ui.settings.general_tab.build_general_settings_tab
-            self.tab_content.content = build_general_settings_tab()
+            self.tab_content.content = build_general_settings_tab(
+                self.general_settings_service,
+                self.toaster_handler,
+                self.on_background_execution_change,
+                self.on_listening_overlay_change,
+            )
         else:
             # Origem: ui.settings.passwords_tab.build_passwords_tab
             self.tab_content.content = build_passwords_tab()

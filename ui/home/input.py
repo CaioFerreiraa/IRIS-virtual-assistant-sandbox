@@ -3,7 +3,16 @@ from collections.abc import Callable
 import flet as ft
 
 from ui.shared.components.material_icons import material_icon
-from ui.theme.colors import BORDER, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE, BLUE_GREY, TEXT_PRIMARY, TEXT_SECONDARY
+from ui.theme.colors import (
+    BORDER,
+    BLUE_GREY,
+    PASTEL_BLUE,
+    PASTEL_DARK_PURPLE,
+    PASTEL_PURPLE,
+    SURFACE,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+)
 
 
 INPUT_SHELL_HOVER_BG = "#F5F5F5"
@@ -38,17 +47,20 @@ def build_argument_field(on_submit: Callable, on_change: Callable) -> ft.TextFie
     # Cria o campo usado para filtrar argumentos do modulo selecionado.
     return ft.TextField(
         height=42,
-        expand=True,
         hint_text="Informe ou busque um argumento...",
         hint_style=ft.TextStyle(color=TEXT_SECONDARY, size=11),
         text_style=ft.TextStyle(color=TEXT_PRIMARY, size=11),
         cursor_color=TEXT_PRIMARY,
-        border=ft.InputBorder.NONE,
-        content_padding=ft.Padding.only(left=12, right=12),
+        border=ft.InputBorder.OUTLINE,
+        border_color=PASTEL_BLUE,
+        focused_border_color=PASTEL_PURPLE,
+        border_width=1,
+        focused_border_width=1.5,
+        content_padding=ft.Padding.only(left=14, right=14),
         on_submit=on_submit,
         on_change=on_change,
         bgcolor=BLUE_GREY,
-        border_radius=12,
+        border_radius=10,
     )
 
 

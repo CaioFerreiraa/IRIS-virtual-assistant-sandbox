@@ -171,9 +171,11 @@ usam o ícone persistido; quando não há seleção, o input mostra `explore`.
 Os dropdowns de módulos e argumentos fecham ao clicar no fundo, na logo ou no
 título da Home. Cliques no input e dentro dos próprios dropdowns preservam a
 interação até a seleção, e fechar uma lista não apaga o texto nem o módulo já
-selecionado.
+selecionado. A altura acompanha a quantidade de sugestões até o limite de 360
+pixels; acima disso, a lista mantém o painel nesse limite e permite rolagem.
 
 A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. O campo secundário usa uma instrução genérica porque pode receber arquivos, cidades ou outros tipos de argumento. Módulos com busca pedem esse valor por padrão, mas podem usar `should_request_argument(variables)` para dispensá-lo quando uma configuração já fornece o valor necessário. A execução acontece em background para manter a interface responsiva.
+O campo de argumento ocupa a largura do painel, usa contorno azul suave e destaca o foco em roxo pastel.
 
 ### Tela do módulo
 
@@ -364,7 +366,29 @@ A área externa da aplicação possui regiões transparentes nas quatro bordas e
 quatro cantos. Essas regiões iniciam o redimensionamento nativo da janela e
 preservam o tamanho mínimo de 1000 × 650 pixels configurado pelo Flet. O header
 continua responsável por mover, maximizar e restaurar a janela, enquanto a
-borda interna da sidebar redimensiona somente o menu lateral.
+borda interna da sidebar redimensiona somente o menu lateral. Os controles da
+janela mantêm uma margem à direita maior que a região de resize, evitando
+sobreposição entre as áreas de clique.
+
+No Windows, o botão `X` oculta a janela quando a bandeja do
+sistema estiver disponível e a opção **Manter a IRIS em segundo plano** estiver
+ligada nas Configurações gerais. Minimizar continuará com o comportamento
+normal. A mesma janela deverá ser restaurada sem perder rota ou estado, e uma
+ação explícita **Sair da IRIS** fará o encerramento definitivo. Quando a opção
+estiver desligada, fechar a janela encerrará a aplicação. Os detalhes visuais e
+de fallback estão em [Execução em segundo plano](background_execution.md).
+
+Resultados usam o HUD de voz com altura adaptável. Erros em qualquer estado da
+janela também usam um popup próprio da IRIS. Esse fluxo não depende das
+notificações nativas nem das permissões do Windows e não substitui os toasters
+internos ou os registros de execução.
+
+A opção **Mostrar indicador flutuante de voz** controla um HUD compacto na parte
+inferior da tela. No Windows, ele aparece sem moldura e sempre no topo quando a
+palavra “IRIS” é reconhecida, acompanha o texto parcial, não recebe foco nem
+intercepta o mouse e desaparece após o fim da interação. Em caso de erro de
+módulo, o HUD mostra somente uma borda vermelha e uma orientação curta; a
+mensagem completa é encaminhada para o popup de erro da IRIS.
 
 ## Estados visuais
 

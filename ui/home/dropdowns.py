@@ -10,6 +10,11 @@ from ui.theme.colors import BORDER, PASTEL_BLUE, PASTEL_DARK_PURPLE, PASTEL_PURP
 
 
 EXECUTABLE_SUFFIX_ICON = ft.Icons.ARROW_FORWARD_ROUNDED
+DROPDOWN_TOP_OFFSET = 10
+DROPDOWN_PANEL_PADDING = 8
+DROPDOWN_LIST_SPACING = 4
+ARGUMENT_INPUT_HEIGHT = 42
+ARGUMENT_CONTENT_SPACING = 8
 
 ModuleOption = str | Mapping[str, object]
 
@@ -50,10 +55,27 @@ class HomeDropdowns:
         self.last_query: str | None = None
 
     def sync_stack(self) -> None:
-        # Ajusta a altura da area dos dropdowns conforme a visibilidade.
+        # Ajusta a altura ao conteudo e preserva o limite que habilita o scroll.
+        max_panel_height = self.dropdown_height - DROPDOWN_TOP_OFFSET
+        self.controls.module_panel.height = _dropdown_panel_height(
+            self.controls.module_suggestions_list.controls,
+            max_panel_height,
+        )
+        self.controls.argument_panel.height = _dropdown_panel_height(
+            self.controls.argument_suggestions_list.controls,
+            max_panel_height,
+            leading_height=ARGUMENT_INPUT_HEIGHT,
+            leading_spacing=ARGUMENT_CONTENT_SPACING,
+        )
+
+        visible_panels = [
+            panel
+            for panel in (self.controls.module_panel, self.controls.argument_panel)
+            if panel.visible
+        ]
         self.controls.dropdown_stack.height = (
-            self.dropdown_height
-            if self.controls.module_panel.visible or self.controls.argument_panel.visible
+            max(DROPDOWN_TOP_OFFSET + int(panel.height or 0) for panel in visible_panels)
+            if visible_panels
             else 0
         )
         self.update_control(self.controls.dropdown_stack)
@@ -403,7 +425,7 @@ def build_dropdown_panel(content: ft.Control, on_click: Callable | None = None) 
     # Cria o painel visual reutilizado pelos dropdowns da home.
     return ft.Container(
         visible=False,
-        padding=ft.Padding(left=8, top=8, right=8, bottom=8),
+        padding=ft.Padding.all(DROPDOWN_PANEL_PADDING),
         bgcolor=SURFACE,
         border=ft.Border.all(1, BORDER),
         border_radius=18,
@@ -415,19 +437,37 @@ def build_dropdown_panel(content: ft.Control, on_click: Callable | None = None) 
 
 def build_dropdown_stack(module_panel: ft.Container, argument_panel: ft.Container, dropdown_height: int) -> ft.Stack:
     # Posiciona os dropdowns na mesma area, com argumentos renderizando por cima.
-    top_offset = 10
-    panel_height = dropdown_height - top_offset
+    panel_height = dropdown_height - DROPDOWN_TOP_OFFSET
 
-    module_panel.top = top_offset
+    module_panel.top = DROPDOWN_TOP_OFFSET
     module_panel.left = 0
     module_panel.right = 0
     module_panel.height = panel_height
-    argument_panel.top = top_offset
+    argument_panel.top = DROPDOWN_TOP_OFFSET
     argument_panel.left = 0
     argument_panel.right = 0
     argument_panel.height = panel_height
 
     return ft.Stack(width=800, height=0, controls=[module_panel, argument_panel])
+
+
+def _dropdown_panel_height(
+    item_controls: Sequence[ft.Control],
+    max_height: int,
+    *,
+    leading_height: int = 0,
+    leading_spacing: int = 0,
+) -> int:
+    items_height = sum(int(control.height or 0) for control in item_controls)
+    items_spacing = max(len(item_controls) - 1, 0) * DROPDOWN_LIST_SPACING
+    content_height = (
+        DROPDOWN_PANEL_PADDING * 2
+        + leading_height
+        + leading_spacing
+        + items_height
+        + items_spacing
+    )
+    return min(max_height, content_height)
 
 
 def build_module_suggestion_controls(
