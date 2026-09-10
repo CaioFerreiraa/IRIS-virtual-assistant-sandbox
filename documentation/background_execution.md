@@ -44,20 +44,21 @@ A pausa feita pela bandeja vale somente para a execução atual. Ela não altera
 configuração de voz persistida. Um duplo clique no ícone também restaura
 a janela.
 
-Quando a janela está oculta ou minimizada, resultados e erros de módulos são
-apresentados em uma notificação nativa do Windows. O feedback interno e os logs
-continuam sendo registrados como fallback caso as notificações estejam
-desativadas ou silenciadas pelo sistema. As Configurações gerais oferecem um
-atalho para a página de notificações do Windows; a permissão continua sob
-controle do sistema operacional.
+Quando a janela está oculta ou minimizada, resultados de módulos são
+apresentados em uma notificação nativa do Windows. Erros sempre tentam disparar
+a notificação, mesmo com a janela visível, para preservar a mensagem completa.
+O feedback interno e os logs continuam sendo registrados como fallback caso as
+notificações estejam desativadas ou silenciadas pelo sistema. As Configurações
+gerais oferecem um atalho para a página de notificações do Windows; a permissão
+continua sob controle do sistema operacional.
 
 Ao reconhecer a palavra de ativação, a IRIS pode apresentar um indicador
 flutuante na parte inferior da tela. Esse HUD (painel compacto sobre outras
 janelas) mostra o estado de escuta e a transcrição parcial sem obter foco nem
-interceptar cliques. Ele desaparece após a desativação ou, em caso de erro de
-voz ou de módulo, depois de exibir brevemente a mensagem. O feedback de erro
-permanece visível mesmo quando a desativação da sessão ocorre logo depois da
-execução. A preferência **Mostrar indicador flutuante de voz** fica nas
+interceptar cliques. Em erros de módulo, usa uma borda vermelha e uma mensagem
+curta; os detalhes permanecem na notificação nativa e no histórico. O feedback
+de erro permanece visível mesmo quando a desativação da sessão ocorre logo
+depois da execução. A preferência **Mostrar indicador flutuante de voz** fica nas
 Configurações gerais e vem ligada por padrão.
 
 Ao desligar a opção nas Configurações gerais, a bandeja é encerrada e o botão

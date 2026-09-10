@@ -225,8 +225,9 @@ persistida. Consulte [Execução em segundo plano](background_execution.md).
 
 Depois que uma execução termina, com sucesso ou erro retornado pelo módulo, os
 campos de comando e argumento são limpos para deixar a IRIS pronta para uma nova
-interação. O feedback de erro informa explicitamente que o comando foi limpo,
-inclusive na notificação nativa exibida com a janela oculta ou minimizada.
+interação. O feedback de erro informa explicitamente que o comando foi limpo. O
+HUD usa uma orientação curta, enquanto a notificação nativa preserva a mensagem
+completa e é tentada mesmo quando a janela está visível.
 Bloqueios anteriores à execução, como ambiguidade ou argumento obrigatório
 ausente, preservam o texto para permitir correção manual.
 
@@ -234,8 +235,10 @@ Quando habilitado nas Configurações gerais, o indicador flutuante observa os
 mesmos eventos persistentes do gerenciador de voz. `ACTIVATED` abre o HUD,
 `PARTIAL` e `FINAL` atualizam a transcrição, `DEACTIVATED` e `STOPPED` o ocultam,
 e `ERROR` apresenta uma mensagem temporária antes de fechá-lo. A janela nativa
-do indicador também apresenta resultados e erros de módulos; esses feedbacks
-têm um tempo mínimo de exibição e não são ocultados imediatamente pelo evento
+do indicador também apresenta resultados e erros de módulos. Nos erros de
+módulo, o HUD aplica uma borda vermelha e mostra apenas uma orientação curta;
+os detalhes ficam na notificação do Windows e no histórico. Esses feedbacks têm
+um tempo mínimo de exibição e não são ocultados imediatamente pelo evento
 `DEACTIVATED`. A janela usa uma thread própria e recebe eventos por fila, sem
 executar processamento de áudio.
 

@@ -7,6 +7,7 @@ import queue
 import sys
 import threading
 import time
+from pathlib import Path
 
 from services.speech_service import SpeechEvent, SpeechEventKind
 
@@ -17,16 +18,19 @@ LOGGER = logging.getLogger(__name__)
 class WindowsListeningOverlayService:
     """HUD nativo e não focável para acompanhar comandos de voz no Windows."""
 
-    WIDTH = 520
-    HEIGHT = 88
+    WIDTH = 480
+    HEIGHT = 76
     BOTTOM_MARGIN = 64
     BACKGROUND = "#24212A"
-    ACCENT = "#C3A0DE"
     ACTIVE = "#67B98A"
-    ERROR = "#E58B91"
+    ERROR = "#EF5B64"
     TEXT = "#FFFFFF"
     TEXT_MUTED = "#C9C5CF"
     TRANSPARENT = "#010203"
+    LOGO_PATH = (
+        Path(__file__).resolve().parent.parent
+        / "assets/images/logo_transparent.png"
+    )
 
     def __init__(self, platform: str | None = None) -> None:
         self.platform = platform or sys.platform
@@ -84,8 +88,12 @@ class WindowsListeningOverlayService:
         self._commands.put(
             (
                 "error" if error else "result",
-                normalized_message or normalized_title or "IRIS",
-                normalized_title,
+                (
+                    "Não consegui executar o comando"
+                    if error
+                    else normalized_message or normalized_title or "IRIS"
+                ),
+                "Tente novamente" if error else normalized_title,
             )
         )
         return True
@@ -113,6 +121,8 @@ class WindowsListeningOverlayService:
             root.update_idletasks()
             self._apply_windows_styles(root.winfo_id())
 
+            images = {"logo": self._load_logo(root)}
+
             hide_job: str | None = None
             feedback_visible_until = 0.0
 
@@ -134,7 +144,13 @@ class WindowsListeningOverlayService:
 
             def show(text: str, subtitle: str, *, error: bool = False) -> None:
                 cancel_hide()
-                self._render(canvas, text, subtitle, error=error)
+                self._render(
+                    canvas,
+                    text,
+                    subtitle,
+                    error=error,
+                    logo_image=images["logo"],
+                )
                 x = max(0, (root.winfo_screenwidth() - self.WIDTH) // 2)
                 y = max(
                     0,
@@ -151,7 +167,6 @@ class WindowsListeningOverlayService:
                         action, text, subtitle = self._commands.get_nowait()
                         if action == "stop":
                             root.quit()
-                            root.destroy()
                             return
                         if action == "show":
                             show(text, subtitle)
@@ -176,6 +191,11 @@ class WindowsListeningOverlayService:
 
             root.after(40, poll)
             root.mainloop()
+            logo_image = images.pop("logo", None)
+            if logo_image is not None:
+                del logo_image
+                gc.collect()
+            root.destroy()
             tk._default_root = None
             del canvas
             del root
@@ -187,48 +207,67 @@ class WindowsListeningOverlayService:
                 if self._thread is threading.current_thread():
                     self._thread = None
 
-    def _render(self, canvas, text: str, subtitle: str, *, error: bool) -> None:
+    def _render(
+        self,
+        canvas,
+        text: str,
+        subtitle: str,
+        *,
+        error: bool,
+        logo_image,
+    ) -> None:
         canvas.delete("all")
-        self._rounded_rectangle(canvas, 2, 2, self.WIDTH - 2, self.HEIGHT - 2, 24)
+        self._rounded_rectangle(
+            canvas,
+            3,
+            3,
+            self.WIDTH - 3,
+            self.HEIGHT - 3,
+            20,
+            outline=self.ERROR if error else "",
+            width=2 if error else 0,
+        )
         accent = self.ERROR if error else self.ACTIVE
-        canvas.create_oval(20, 22, 64, 66, fill=accent, outline="")
-        if error:
-            canvas.create_line(35, 37, 49, 51, fill=self.TEXT, width=3)
-            canvas.create_line(49, 37, 35, 51, fill=self.TEXT, width=3)
+        if logo_image is not None:
+            canvas.create_image(38, 38, image=logo_image)
         else:
-            canvas.create_oval(35, 29, 49, 49, outline=self.TEXT, width=2)
-            canvas.create_arc(
-                30,
-                35,
-                54,
-                57,
-                start=180,
-                extent=180,
-                style="arc",
-                outline=self.TEXT,
-                width=2,
+            canvas.create_oval(18, 18, 58, 58, fill=accent, outline="")
+            canvas.create_text(
+                38,
+                38,
+                text="I",
+                fill=self.TEXT,
+                font=("Segoe UI", 16, "bold"),
             )
-            canvas.create_line(42, 56, 42, 61, fill=self.TEXT, width=2)
-            canvas.create_line(36, 61, 48, 61, fill=self.TEXT, width=2)
         canvas.create_text(
-            82,
-            31,
-            text=self._truncate(text, 58),
+            74,
+            28,
+            text=self._truncate(text, 52),
             fill=self.TEXT,
             anchor="w",
-            font=("Segoe UI", 13, "bold"),
+            font=("Segoe UI Variable Display", 12, "bold"),
         )
         canvas.create_text(
-            82,
-            56,
+            74,
+            50,
             text=subtitle,
             fill=self.TEXT_MUTED,
             anchor="w",
-            font=("Segoe UI", 9),
+            font=("Segoe UI Variable Text", 9),
         )
-        canvas.create_oval(486, 35, 496, 45, fill=accent, outline="")
+        if not error:
+            canvas.create_oval(
+                self.WIDTH - 28,
+                34,
+                self.WIDTH - 20,
+                42,
+                fill=accent,
+                outline="",
+            )
 
-    def _rounded_rectangle(self, canvas, x1, y1, x2, y2, radius) -> None:
+    def _rounded_rectangle(
+        self, canvas, x1, y1, x2, y2, radius, *, outline: str, width: int
+    ) -> None:
         points = (
             x1 + radius, y1, x2 - radius, y1, x2, y1, x2, y1 + radius,
             x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
@@ -239,9 +278,21 @@ class WindowsListeningOverlayService:
             smooth=True,
             splinesteps=24,
             fill=self.BACKGROUND,
-            outline=self.ACCENT,
-            width=1,
+            outline=outline,
+            width=width,
         )
+
+    def _load_logo(self, root):
+        try:
+            from PIL import Image, ImageTk
+
+            with Image.open(self.LOGO_PATH) as source:
+                logo = source.convert("RGBA")
+                logo.thumbnail((44, 44), Image.Resampling.LANCZOS)
+                return ImageTk.PhotoImage(logo, master=root)
+        except Exception:
+            LOGGER.exception("Não foi possível carregar a logo do indicador flutuante.")
+            return None
 
     @staticmethod
     def _truncate(text: str, limit: int) -> str:

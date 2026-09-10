@@ -163,6 +163,9 @@ def get_default_page(page: ft.Page):
             message,
             error=is_error,
         )
+        if is_error:
+            native_shown = tray_service.notify(message, title=title)
+            return overlay_shown or native_shown
         if page.window.visible and not page.window.minimized:
             return overlay_shown
         native_shown = tray_service.notify(message, title=title)
