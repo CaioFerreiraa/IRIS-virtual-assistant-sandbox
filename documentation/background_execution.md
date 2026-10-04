@@ -45,20 +45,39 @@ A pausa feita pela bandeja vale somente para a execução atual. Ela não altera
 configuração de voz persistida. Um duplo clique no ícone também restaura
 a janela.
 
-Resultados de módulos são apresentados no HUD de voz, que cresce verticalmente
-para acomodar o texto. Erros também usam um popup próprio da IRIS, mesmo com a
-janela visível, para preservar a mensagem completa. O feedback interno, o
-histórico e os logs continuam sendo registrados como fallback. O fluxo não
-depende das notificações nativas nem das permissões do Windows.
+O HUD e as notificações externas aparecem somente quando a janela da IRIS não
+tem foco, inclusive quando está minimizada ou oculta. Ao recuperar o foco, os
+overlays são fechados sem repetir avisos antigos. O feedback interno permanece
+na janela quando ela está em foco; o histórico e os logs continuam disponíveis.
 
-Ao reconhecer a palavra de ativação, a IRIS pode apresentar um indicador
-flutuante na parte inferior da tela. Esse HUD (painel compacto sobre outras
-janelas) mostra o estado de escuta e a transcrição parcial sem obter foco nem
-interceptar cliques. Em erros de módulo, usa uma borda vermelha e uma mensagem
-curta; os detalhes permanecem no popup de erro e no histórico. O feedback
-de erro permanece visível mesmo quando a desativação da sessão ocorre logo
-depois da execução. A preferência **Mostrar indicador flutuante de voz** fica nas
-Configurações gerais e vem ligada por padrão.
+Ao reconhecer “IRIS”, o HUD claro aparece na parte inferior da tela com
+“Ouvindo…”, antes do texto do comando. Ele cresce para acomodar o conteúdo até
+o limite da tela e permite rolagem quando necessário. O botão × dispensa
+resultados e erros; durante a escuta, cancela a interação atual e qualquer
+envio por silêncio pendente. Na entrada da escuta, o HUD sobe suavemente até a
+posição final; a animação não reinicia a cada trecho transcrito. Os botões ×
+do HUD e do Notify da IRIS destacam-se e mostram o cursor de mão ao passar o
+mouse. O HUD não obtém foco. A preferência **Mostrar
+indicador flutuante de voz** fica nas Configurações gerais e vem ligada por
+padrão.
+
+Se uma fala finalizada não corresponder a um módulo nem ao começo de um nome
+conhecido, o HUD informa isso brevemente e volta ao estado “Ouvindo…”. A frase
+sem correspondência não é juntada ao próximo comando falado.
+
+O canal de Notify é exclusivo: **Sem Notify**, **Notify da IRIS** ou
+**Notificação do Windows**. A escolha não desliga o HUD. Instalações existentes
+começam com Notify da IRIS. O popup da IRIS usa uma pilha visual clara: o aviso
+mais recente fica na frente, com até dois anteriores parcialmente visíveis.
+Cada aviso expira 6,5 segundos após chegar; passar o mouse sobre o aviso da
+frente pausa somente seu prazo. Ao fechá-lo, aparece o próximo ainda válido.
+Erros idênticos consecutivos são agrupados. Clicar no corpo do aviso abre a
+IRIS. O modo Windows usa as notificações da bandeja (`pystray`) e segue a
+apresentação e o prazo do sistema. O clique na notificação nativa não abre a
+IRIS; essa interação existe no Notify da IRIS. A bandeja permite remover o
+aviso atual; o histórico de notificações do Windows segue o sistema. Se a
+bandeja estiver indisponível, a preferência não é trocada silenciosamente e a
+indisponibilidade aparece nas Configurações gerais.
 
 Ao desligar a opção nas Configurações gerais, a bandeja é encerrada e o botão
 `X` volta a fechar a aplicação. A preferência é persistida para as próximas
@@ -82,8 +101,8 @@ Durante um comando em andamento, o marcador verde aumenta e um contorno da
 mesma cor envolve todo o ícone para tornar o estado ativo mais visível.
 
 Ao concluir, enviar ou cancelar a interação falada, o marcador retorna ao estado
-roxo enquanto o serviço estiver pronto. A primeira versão não tem animação,
-notificação nativa nem som de estado.
+roxo enquanto o serviço estiver pronto. A primeira versão não tem animação
+nem som de estado.
 
 ## Comandos com a janela oculta
 
@@ -138,3 +157,12 @@ nativos. A validação manual no Windows deve cobrir:
 - manter uma interação falada ao ocultar a janela;
 - encerrar todos os recursos pela ação **Sair da IRIS**;
 - preservar o fechamento normal quando a bandeja falhar ao iniciar.
+- dizer “IRIS” sozinha e com comando contínuo nos modos Básico e Tempo real;
+- confirmar que HUD e Notify não aparecem com a janela em foco e somem ao
+  recuperar o foco;
+- conferir altura, rolagem e botão × do HUD com transcrição longa;
+- provocar avisos rápidos, repetidos e expirados para verificar a pilha do
+  Notify da IRIS;
+- alternar entre os três canais e confirmar que somente o escolhido aparece;
+- conferir a notificação nativa pela bandeja e seu fechamento ao recuperar o
+  foco da IRIS.

@@ -24,6 +24,7 @@ modules/
         "module_public_key": "weather",
         "name": "Clima",
         "call_name": "clima",
+        "call_aliases": ["tempo"],
         "icon": "partly_cloudy_day",
         "parent_public_key": null,
         "description": "Consulta informações de clima.",
@@ -75,6 +76,8 @@ open.web
 ```
 
 O ID numérico continua pertencendo ao SQLite. Não use nome, `call_name`, caminho ou ID para identificar uma atualização do manifesto.
+
+`module.call_aliases` é uma lista opcional de nomes alternativos de chamada. Cada nome tem até 100 caracteres. Use-a para variações específicas do módulo, como `"abrir nota"` para o módulo `"abrir notas"`, sem aplicar uma regra de singular ou plural a todo o catálogo. Se um nome corresponder a mais de um módulo, a IRIS solicita uma escolha.
 
 ## Hierarquia
 

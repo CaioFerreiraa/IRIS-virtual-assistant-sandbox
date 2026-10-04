@@ -35,7 +35,7 @@ Fluxo:
 4. o áudio completo é enviado ao modelo Faster-Whisper já carregado;
 5. o texto final é interpretado como ativação ou comando.
 
-Esse modo usa menos componentes e não produz texto parcial. Assim que o limiar de volume inicia a captura, o input apresenta “Ouvindo...” como retorno visual. A palavra de ativação ainda só pode ser confirmada depois do silêncio e da transcrição final.
+Esse modo não produz texto parcial do comando. Assim que o limiar de volume inicia a captura, o input apresenta “Ouvindo...” como retorno visual. Durante a captura, um modelo leve faz verificações curtas para reconhecer “IRIS” antes do fim da frase; o modelo principal ainda produz o texto final depois do silêncio. A detecção antecipada pode exigir o download inicial do modelo leve configurado para tempo real.
 
 Nesta etapa, o modo básico aceita somente áudio de entrada em 16.000 Hz, pois entrega um array NumPy diretamente ao Faster-Whisper. No Windows, a IRIS primeiro tenta abrir o microfone selecionado nesse formato. Quando o endpoint usa WASAPI e não aceita 16.000 Hz diretamente, a aplicação pode solicitar ao mixer compartilhado do Windows a conversão automática da taxa, mantendo o mesmo dispositivo selecionado.
 
@@ -60,7 +60,7 @@ A conversão automática WASAPI descrita para o modo básico não é usada pelo 
 
 A palavra de ativação é “IRIS”. A implementação reconhece também a grafia “Íris”.
 
-Ela é detectada na transcrição, sem exigir Porcupine, OpenWakeWord ou um modelo adicional. Portanto, a detecção depende da qualidade do Whisper e pode apresentar falsos positivos ou não reconhecer a palavra em ambientes ruidosos.
+Ela é detectada por transcrição local, sem Porcupine ou OpenWakeWord. No modo Básico, uma transcrição curta com o modelo leve antecipa a ativação; no modo Tempo real, a ativação pode ocorrer em uma transcrição parcial. A precisão ainda depende dos modelos e do microfone.
 
 A aceitação da palavra de ativação fica habilitada durante a aplicação,
 independentemente da rota visual e mesmo com a janela oculta. A rota de teste do
@@ -79,9 +79,24 @@ Antes da ativação, transcrições comuns são ignoradas. Depois da ativação:
 
 Se o usuário editar manualmente o texto durante uma interação ativa, o conteúdo
 visível substitui o comando acumulado pelo serviço. As transcrições seguintes
-continuam a partir dessa versão corrigida, e apagar o input impede que trechos
+continuam a partir dessa versão corrigida quando ela identifica um módulo ou
+um começo de nome conhecido. Se a edição não corresponder a nenhum dos dois,
+a próxima fala começa uma nova tentativa. Apagar o input impede que trechos
 antigos reapareçam. Atualizações programáticas produzidas pela própria voz não
 disparam essa sincronização de volta para o serviço.
+
+Cada trecho final é comparado com os nomes e caminhos dos módulos disponíveis.
+Quando identifica um módulo, a IRIS preserva o comando para receber argumentos
+em uma fala posterior. Quando o trecho é somente o começo de um nome conhecido,
+como “abrir” para “abrir app”, aguarda a continuação sem executar o grupo ou um
+único filho. Uma fala sem correspondência é mostrada como feedback, mas não é
+somada à próxima fala; a sessão continua ouvindo para uma nova tentativa. No
+HUD, esse feedback volta a “Ouvindo…” depois de 1,8 segundo. Transcrições
+parciais atualizam o texto provisório sem confirmar a classificação. Variantes
+de singular e plural podem ser declaradas como `call_aliases` no manifesto de cada módulo. A IRIS não transforma todos os nomes automaticamente.
+
+As referências de UX e a distinção entre o fim de um trecho de áudio e o fim de
+um comando estão em [Referências de UX para comandos de voz](voice_command_ux_research.md).
 
 O retorno “Ouvindo...” indica apenas que uma frase está sendo capturada. Ele não significa que a palavra “IRIS” já foi reconhecida. Não é necessário clicar no input: enquanto a voz está habilitada e a rota permite comandos, a captura permanece pronta para detectar fala.
 
@@ -226,18 +241,18 @@ persistida. Consulte [Execução em segundo plano](background_execution.md).
 Depois que uma execução termina, com sucesso ou erro retornado pelo módulo, os
 campos de comando e argumento são limpos para deixar a IRIS pronta para uma nova
 interação. O feedback de erro informa explicitamente que o comando foi limpo. O
-HUD usa uma orientação curta, enquanto o popup próprio de erro preserva a
-mensagem completa mesmo quando a janela está visível.
+HUD e o canal de Notify selecionado apresentam o erro quando a janela da IRIS
+está em segundo plano.
 Bloqueios anteriores à execução, como ambiguidade ou argumento obrigatório
 ausente, preservam o texto para permitir correção manual.
 
-Quando habilitado nas Configurações gerais, o indicador flutuante observa os
-mesmos eventos persistentes do gerenciador de voz. `ACTIVATED` abre o HUD,
+Quando habilitado nas Configurações gerais e sem foco na janela, o indicador
+flutuante observa os eventos persistentes do gerenciador de voz. `ACTIVATED` abre o HUD,
 `PARTIAL` e `FINAL` atualizam a transcrição, `DEACTIVATED` e `STOPPED` o ocultam,
 e `ERROR` apresenta uma mensagem temporária antes de fechá-lo. A janela nativa
 do indicador também apresenta resultados e erros de módulos. Nos erros de
-módulo, o HUD aplica uma borda vermelha e mostra apenas uma orientação curta;
-os detalhes ficam no popup de erro da IRIS e no histórico. Esses feedbacks têm
+módulo, o HUD aplica uma borda vermelha; os detalhes também ficam no canal de
+Notify escolhido, quando habilitado, e no histórico. Esses feedbacks têm
 um tempo mínimo de exibição e não são ocultados imediatamente pelo evento
 `DEACTIVATED`. A janela usa uma thread própria e recebe eventos por fila, sem
 executar processamento de áudio.
@@ -274,7 +289,7 @@ Falhas são apresentadas por toaster e não devem derrubar a janela.
 
 ## Limitações atuais
 
-- a palavra de ativação é reconhecida pela transcrição, não por um detector dedicado;
+- a palavra de ativação ainda depende da precisão da transcrição local;
 - o modo básico não mostra texto durante a fala;
 - a enumeração de microfones depende do PortAudio e das permissões disponíveis no sistema;
 - CUDA depende das bibliotecas compatíveis instaladas na máquina;

@@ -63,6 +63,7 @@ controles na interface Flet.
         "module_public_key": "weather",
         "name": "Clima",
         "call_name": "clima",
+        "call_aliases": ["tempo"],
         "icon": "partly_cloudy_day",
         "parent_public_key": null,
         "description": "Consulta informações de clima.",
@@ -176,9 +177,9 @@ Regras atuais:
 
 ## Nome de chamada e pesquisa
 
-`call_name` é definido no manifesto e não é editável. `custom_call_name` é uma preferência opcional do usuário; um novo valor substitui o anterior, sem histórico ou tabela de aliases.
+`call_name` e a lista opcional `call_aliases` são definidos no manifesto e não são editáveis. Os aliases permitem formas específicas, como “abrir nota” para “abrir notas”, sem uma regra geral de plural. `custom_call_name` é uma preferência opcional do usuário; um novo valor substitui o anterior, sem histórico de personalizações.
 
-A Home pesquisa nome exibido, `call_name` e `custom_call_name`. Uma seleção resulta em `module_id`. Se o texto corresponder a mais de um módulo, a IRIS solicita uma escolha e não executa silenciosamente o primeiro resultado.
+A Home pesquisa nome exibido, `call_name`, `call_aliases` e `custom_call_name`. Uma seleção resulta em `module_id`. Se o texto corresponder a mais de um módulo, a IRIS solicita uma escolha e não executa silenciosamente o primeiro resultado.
 
 O ícone persistido acompanha o módulo nas sugestões e no campo da Home, na árvore da sidebar e no cabeçalho da rota selecionada.
 
@@ -199,8 +200,8 @@ def execute(
 
 A execução da Home ocorre em background e devolve o resultado à thread visual do Flet. Toda execução normal gera log no SQLite.
 
-Na tela do próprio módulo, o botão “Executar” abre imediatamente um card de
-resultado acima das abas. Durante o processamento, o card informa que a ação
+Na Home e na tela do próprio módulo, iniciar a execução abre imediatamente um card de
+resultado abaixo do campo na Home ou acima das abas na tela do módulo. Durante o processamento, o card informa que a ação
 está em andamento; ao concluir, apresenta o status de sucesso ou erro e o corpo
 estruturado completo devolvido pelo módulo. Exceções são representadas no mesmo
 card com `success: false`, sem expor traceback na interface.

@@ -1,36 +1,46 @@
 from __future__ import annotations
 
-import ctypes
 import gc
 import logging
 import queue
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
+
+from services.notification_stack import NotificationStack
+from services.overlay_style import (
+    GLASS_BACKGROUND,
+    GLASS_BORDER,
+    GLASS_MUTED,
+    GLASS_TEXT,
+    TRANSPARENT,
+    close_icon,
+    is_close_hit,
+    make_nonactivating,
+    rounded_rectangle,
+    show_without_activation,
+)
 
 
 LOGGER = logging.getLogger(__name__)
 
 
 class WindowsNotificationOverlayService:
-    """Toast próprio da IRIS para mensagens que não podem ser perdidas."""
+    """Pilha visual de avisos da IRIS para o segundo plano."""
 
     WIDTH = 440
-    HEIGHT = 116
+    MIN_HEIGHT = 116
     RIGHT_MARGIN = 24
     BOTTOM_MARGIN = 24
-    BACKGROUND = "#24212A"
-    ERROR = "#EF5B64"
-    TEXT = "#FFFFFF"
-    TEXT_MUTED = "#C9C5CF"
-    TRANSPARENT = "#010203"
-    LOGO_PATH = (
-        Path(__file__).resolve().parent.parent
-        / "assets/images/logo_transparent.png"
-    )
+    LAYER_OFFSET = 12
+    LOGO_PATH = Path(__file__).resolve().parent.parent / "assets/images/logo_transparent.png"
 
-    def __init__(self, platform: str | None = None) -> None:
+    def __init__(
+        self, platform: str | None = None, *, on_open: Callable[[], None] | None = None,
+    ) -> None:
         self.platform = platform or sys.platform
+        self.on_open = on_open
         self._commands: queue.SimpleQueue[tuple[str, str, str]] = queue.SimpleQueue()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -47,9 +57,7 @@ class WindowsNotificationOverlayService:
             if self.available:
                 return True
             self._thread = threading.Thread(
-                target=self._run,
-                name="iris-notification-overlay",
-                daemon=True,
+                target=self._run, name="iris-notification-overlay", daemon=True,
             )
             self._thread.start()
         return True
@@ -63,15 +71,18 @@ class WindowsNotificationOverlayService:
         if thread is not threading.current_thread():
             thread.join(timeout=1)
 
-    def show_error(self, title: str, message: str) -> bool:
-        return self._show("error", title, message)
+    def hide_all(self) -> None:
+        if self.available:
+            self._commands.put(("clear", "", ""))
 
-    def _show(self, kind: str, title: str, message: str) -> bool:
+    def show_error(self, title: str, message: str) -> bool:
         if not self.available:
             return False
-        normalized_title = " ".join(title.strip().split()) or "Erro na IRIS"
-        normalized_message = " ".join(message.strip().split())
-        self._commands.put((kind, normalized_title, normalized_message))
+        self._commands.put((
+            "error",
+            " ".join(title.strip().split()) or "Erro na IRIS",
+            " ".join(message.strip().split()),
+        ))
         return True
 
     def _run(self) -> None:
@@ -81,139 +92,204 @@ class WindowsNotificationOverlayService:
             root = tk.Tk()
             root.withdraw()
             root.overrideredirect(True)
-            root.configure(bg=self.TRANSPARENT)
+            root.configure(bg=TRANSPARENT)
             root.attributes("-topmost", True)
-            root.attributes("-transparentcolor", self.TRANSPARENT)
-            root.attributes("-alpha", 0.98)
-
+            root.attributes("-transparentcolor", TRANSPARENT)
+            root.attributes("-alpha", 0.97)
             canvas = tk.Canvas(
-                root,
-                width=self.WIDTH,
-                height=self.HEIGHT,
-                bg=self.TRANSPARENT,
-                highlightthickness=0,
+                root, width=self.WIDTH, height=self.MIN_HEIGHT,
+                bg=TRANSPARENT, highlightthickness=0,
             )
             canvas.pack()
             root.update_idletasks()
-            self._apply_windows_styles(root.winfo_id())
-            images = {"logo": self._load_logo(root)}
-            hide_job: str | None = None
+            make_nonactivating(root.winfo_id())
+            logo = self._load_logo(root)
+            close_image = close_icon(root)
+            close_hover_image = close_icon(root, hover=True)
+            stack = NotificationStack()
+            scroll = 0
+            max_scroll = 0
+            front_top = 0
+            pointer_inside = False
+            close_hovered = False
 
-            def hide() -> None:
-                nonlocal hide_job
-                hide_job = None
-                root.withdraw()
+            def set_close_hover(hovered: bool) -> None:
+                nonlocal close_hovered
+                if hovered == close_hovered:
+                    return
+                close_hovered = hovered
+                canvas.configure(cursor="hand2" if hovered else "")
+                canvas.itemconfigure(
+                    "close", image=close_hover_image if hovered else close_image,
+                )
 
-            def show(title: str, message: str, *, error: bool) -> None:
-                nonlocal hide_job
-                if hide_job is not None:
-                    root.after_cancel(hide_job)
-                self._render(
-                    canvas,
-                    title,
-                    message,
-                    images["logo"],
-                    error=error,
+            def draw() -> None:
+                nonlocal scroll, max_scroll, front_top
+                layers = stack.layers()
+                if not layers:
+                    set_close_hover(False)
+                    root.withdraw()
+                    return
+                max_height = max(
+                    self.MIN_HEIGHT,
+                    root.winfo_screenheight() - self.BOTTOM_MARGIN * 2,
                 )
-                x = max(
-                    0,
-                    root.winfo_screenwidth() - self.WIDTH - self.RIGHT_MARGIN,
+                height, max_scroll, front_top = self._render(
+                    canvas, layers, logo,
+                    close_hover_image if close_hovered else close_image,
+                    scroll=scroll, max_height=max_height,
                 )
-                y = max(
-                    0,
-                    root.winfo_screenheight() - self.HEIGHT - self.BOTTOM_MARGIN,
-                )
-                root.geometry(f"{self.WIDTH}x{self.HEIGHT}+{x}+{y}")
+                if scroll > max_scroll:
+                    scroll = max_scroll
+                    height, max_scroll, front_top = self._render(
+                        canvas, layers, logo,
+                        close_hover_image if close_hovered else close_image,
+                        scroll=scroll, max_height=max_height,
+                    )
+                left = max(0, root.winfo_screenwidth() - self.WIDTH - self.RIGHT_MARGIN)
+                top = max(0, root.winfo_screenheight() - height - self.BOTTOM_MARGIN)
+                root.geometry(f"{self.WIDTH}x{height}+{left}+{top}")
                 root.deiconify()
-                self._show_without_activation(root.winfo_id(), x, y)
-                hide_job = root.after(6500, hide)
+                show_without_activation(root.winfo_id(), left, top)
+
+            def on_click(event) -> None:
+                nonlocal scroll
+                if event.y < front_top:
+                    return
+                if is_close_hit(event.x, event.y, self.WIDTH, top=front_top):
+                    stack.dismiss_front()
+                    scroll = 0
+                    if pointer_inside:
+                        stack.start_hover()
+                    draw()
+                elif self.on_open is not None:
+                    try:
+                        self.on_open()
+                    except Exception:
+                        LOGGER.exception("Não foi possível abrir a IRIS pelo Notify.")
+
+            def on_enter(_event) -> None:
+                nonlocal pointer_inside
+                pointer_inside = True
+                stack.start_hover()
+
+            def on_leave(_event) -> None:
+                nonlocal pointer_inside
+                pointer_inside = False
+                stack.end_hover()
+                set_close_hover(False)
+
+            def on_motion(event) -> None:
+                set_close_hover(is_close_hit(event.x, event.y, self.WIDTH, top=front_top))
+
+            def on_wheel(event) -> None:
+                nonlocal scroll
+                if max_scroll <= 0:
+                    return
+                scroll = max(0, min(max_scroll, scroll - int(event.delta / 120) * 32))
+                draw()
+
+            canvas.bind("<Button-1>", on_click)
+            canvas.bind("<Enter>", on_enter)
+            canvas.bind("<Leave>", on_leave)
+            canvas.bind("<Motion>", on_motion)
+            canvas.bind("<MouseWheel>", on_wheel)
 
             def poll() -> None:
+                nonlocal scroll
+                changed = False
                 try:
                     while True:
                         action, title, message = self._commands.get_nowait()
                         if action == "stop":
                             root.quit()
                             return
-                        if action == "error":
-                            show(title, message, error=True)
+                        if action == "clear":
+                            stack.clear()
+                            scroll = 0
+                            changed = True
+                        elif action == "error":
+                            stack.push(title, message)
+                            if pointer_inside:
+                                stack.start_hover()
+                            scroll = 0
+                            changed = True
                 except queue.Empty:
                     pass
-                root.after(40, poll)
+                before = stack.front
+                stack.prune()
+                if changed or stack.front is not before:
+                    draw()
+                root.after(50, poll)
 
-            root.after(40, poll)
+            root.after(50, poll)
             root.mainloop()
-            logo_image = images.pop("logo", None)
-            if logo_image is not None:
-                del logo_image
-                gc.collect()
+            del logo
             root.destroy()
-            tk._default_root = None
-            del canvas
-            del root
             gc.collect()
         except Exception:
-            LOGGER.exception("Não foi possível iniciar o toast próprio da IRIS.")
+            LOGGER.exception("Não foi possível iniciar o Notify da IRIS.")
         finally:
             with self._lock:
                 if self._thread is threading.current_thread():
                     self._thread = None
 
     def _render(
-        self,
-        canvas,
-        title: str,
-        message: str,
-        logo_image,
-        *,
-        error: bool,
-    ) -> None:
+        self, canvas, layers, logo, close_image, *, scroll: int, max_height: int,
+    ) -> tuple[int, int, int]:
         canvas.delete("all")
-        self._rounded_rectangle(
-            canvas,
-            3,
-            3,
-            self.WIDTH - 3,
-            self.HEIGHT - 3,
-            20,
-            color=self.ERROR,
-        )
-        if logo_image is not None:
-            canvas.create_image(38, 38, image=logo_image)
-        canvas.create_text(
-            72,
-            25,
-            text=title,
-            fill=self.TEXT,
-            anchor="w",
+        front = layers[0]
+        front_top = self.LAYER_OFFSET * (len(layers) - 1)
+        title = front.title + (f" ({front.count})" if front.count > 1 else "")
+        title_item = canvas.create_text(
+            72, front_top + 20 - scroll, text=title, fill=GLASS_TEXT,
+            anchor="nw", width=self.WIDTH - 136,
             font=("Segoe UI Variable Display", 12, "bold"),
         )
-        canvas.create_text(
-            72,
-            50,
-            text=message,
-            fill=self.TEXT_MUTED,
-            anchor="nw",
-            width=self.WIDTH - 96,
-            font=("Segoe UI Variable Text", 9),
+        title_box = canvas.bbox(title_item) or (72, front_top + 20 - scroll, 72, front_top + 40 - scroll)
+        message_y = title_box[3] + 8
+        message_item = canvas.create_text(
+            72, message_y, text=front.message or "—", fill=GLASS_MUTED,
+            anchor="nw", width=self.WIDTH - 102,
+            font=("Segoe UI Variable Text", 10),
         )
-
-    def _rounded_rectangle(
-        self, canvas, x1, y1, x2, y2, radius, *, color: str
-    ) -> None:
-        points = (
-            x1 + radius, y1, x2 - radius, y1, x2, y1, x2, y1 + radius,
-            x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
-            x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1,
+        message_box = canvas.bbox(message_item) or (72, message_y, 72, message_y + 20)
+        full_card_height = max(self.MIN_HEIGHT, message_box[3] + scroll - front_top + 22)
+        height = min(max_height, full_card_height + front_top)
+        max_scroll = max(0, full_card_height + front_top - height)
+        canvas.configure(height=height)
+        for layer in range(len(layers) - 1, 0, -1):
+            peek_top = front_top - self.LAYER_OFFSET * layer
+            rounded_rectangle(
+                canvas, 3, peek_top + 2, self.WIDTH - 3, height - 3, 18,
+                fill=GLASS_BACKGROUND, outline=GLASS_BORDER, width=1,
+            )
+        background = rounded_rectangle(
+            canvas, 3, front_top + 2, self.WIDTH - 3, height - 3, 18,
+            fill=GLASS_BACKGROUND, outline="#E68891", width=2,
         )
-        canvas.create_polygon(
-            points,
-            smooth=True,
-            splinesteps=24,
-            fill=self.BACKGROUND,
-            outline=color,
-            width=2,
+        canvas.tag_lower(background)
+        # Older cards must remain behind the front card.
+        for item in canvas.find_all():
+            if item not in {title_item, message_item, background}:
+                canvas.tag_lower(item, background)
+        if logo is not None:
+            canvas.create_image(36, front_top + 36, image=logo)
+        else:
+            canvas.create_oval(
+                17, front_top + 17, 55, front_top + 55,
+                fill="#FFD0D3", outline="",
+            )
+            canvas.create_text(36, front_top + 36, text="!", fill=GLASS_TEXT)
+        canvas.create_image(
+            self.WIDTH - 33, front_top + 30, image=close_image, tags=("close",),
         )
+        if max_scroll:
+            canvas.create_text(
+                self.WIDTH - 29, height - 17, text="↕", fill=GLASS_MUTED,
+                font=("Segoe UI", 12),
+            )
+        return height, max_scroll, front_top
 
     def _load_logo(self, root):
         try:
@@ -224,24 +300,5 @@ class WindowsNotificationOverlayService:
                 logo.thumbnail((44, 44), Image.Resampling.LANCZOS)
                 return ImageTk.PhotoImage(logo, master=root)
         except Exception:
-            LOGGER.exception("Não foi possível carregar a logo do toast da IRIS.")
+            LOGGER.exception("Não foi possível carregar a logo do Notify da IRIS.")
             return None
-
-    @staticmethod
-    def _apply_windows_styles(window_handle: int) -> None:
-        user32 = ctypes.windll.user32
-        extended_style = user32.GetWindowLongW(window_handle, -20)
-        extended_style |= 0x00000080 | 0x00000020 | 0x08000000
-        user32.SetWindowLongW(window_handle, -20, extended_style)
-
-    @staticmethod
-    def _show_without_activation(window_handle: int, left: int, top: int) -> None:
-        ctypes.windll.user32.SetWindowPos(
-            window_handle,
-            -1,
-            left,
-            top,
-            0,
-            0,
-            0x0001 | 0x0010 | 0x0040,
-        )

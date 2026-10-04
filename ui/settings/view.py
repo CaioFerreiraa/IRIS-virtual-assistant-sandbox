@@ -32,6 +32,8 @@ def build_settings_view(
     general_settings_service: GeneralSettingsService,
     on_background_execution_change: Callable[[bool], bool],
     on_listening_overlay_change: Callable[[bool], bool],
+    on_notification_mode_change: Callable[[str], bool],
+    get_notification_status: Callable[[], str | None],
 ) -> ft.Container:
     return SettingsViewState(
         speech_manager,
@@ -39,6 +41,8 @@ def build_settings_view(
         general_settings_service,
         on_background_execution_change,
         on_listening_overlay_change,
+        on_notification_mode_change,
+        get_notification_status,
     ).build()
 
 
@@ -50,6 +54,8 @@ class SettingsViewState:
         general_settings_service: GeneralSettingsService,
         on_background_execution_change: Callable[[bool], bool],
         on_listening_overlay_change: Callable[[bool], bool],
+        on_notification_mode_change: Callable[[str], bool],
+        get_notification_status: Callable[[], str | None],
     ):
         self.speech_manager = speech_manager
         self.voice_tab = VoiceSettingsTab(speech_manager, toaster_handler)
@@ -57,6 +63,8 @@ class SettingsViewState:
         self.general_settings_service = general_settings_service
         self.on_background_execution_change = on_background_execution_change
         self.on_listening_overlay_change = on_listening_overlay_change
+        self.on_notification_mode_change = on_notification_mode_change
+        self.get_notification_status = get_notification_status
         self.active_tab = "voice"
         self.tab_content = ft.Container(expand=True)
         self.tab_buttons: dict[str, ft.Container] = {}
@@ -156,6 +164,8 @@ class SettingsViewState:
                 self.toaster_handler,
                 self.on_background_execution_change,
                 self.on_listening_overlay_change,
+                self.on_notification_mode_change,
+                self.get_notification_status,
             )
         else:
             # Origem: ui.settings.passwords_tab.build_passwords_tab

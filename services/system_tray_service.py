@@ -74,6 +74,7 @@ class WindowsSystemTrayService:
         self._icon = None
         self._unsubscribe: Callable[[], None] | None = None
         self._icon_lock = threading.RLock()
+        self.notification_error: str | None = None
 
     @property
     def available(self) -> bool:
@@ -130,6 +131,38 @@ class WindowsSystemTrayService:
             icon.icon = self._build_icon(state)
             icon.title = self.TOOLTIPS[state]
             icon.update_menu()
+
+    def show_notification(self, title: str, message: str) -> bool:
+        if not self.notifications_available():
+            return False
+        try:
+            with self._icon_lock:
+                self._icon.notify(message, title)
+            self.notification_error = None
+            return True
+        except Exception:
+            LOGGER.exception("Não foi possível exibir a notificação nativa da IRIS.")
+            self.notification_error = "O Windows não conseguiu exibir a notificação nativa."
+            return False
+
+    def clear_notifications(self) -> None:
+        with self._icon_lock:
+            if self._icon is None:
+                return
+            try:
+                self._icon.remove_notification()
+            except Exception:
+                LOGGER.exception("Não foi possível fechar a notificação nativa da IRIS.")
+
+    def notifications_available(self) -> bool:
+        if self.platform != "win32" or not self.available:
+            self.notification_error = "A bandeja do Windows não está disponível."
+            return False
+        if not getattr(self._icon, "HAS_NOTIFICATION", False):
+            self.notification_error = "As notificações da bandeja não estão disponíveis."
+            return False
+        self.notification_error = None
+        return True
 
     def _voice_label(self, _item) -> str:
         return "Ativar voz" if self.speech_manager.session_paused else "Pausar voz"

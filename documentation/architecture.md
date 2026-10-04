@@ -200,7 +200,7 @@ O fluxo atual de um comando digitado é:
 7. a Home despacha a operação para background e o core escolhe entre a requisição HTTP declarada, o `ModuleRunner` para Python ou a abertura de URL do `GET` legado;
 8. o resultado é transformado em resposta estruturada;
 9. um log de sucesso ou erro é salvo;
-10. a interface apresenta um toaster;
+10. a interface apresenta o retorno estruturado em um card e um toaster;
 11. o histórico pode exibir a execução.
 
 ## Fluxo atual de voz

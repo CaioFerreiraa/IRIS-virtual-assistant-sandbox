@@ -5,3 +5,4 @@ from dataclasses import dataclass
 class GeneralSettings:
     background_execution_enabled: bool = True
     listening_overlay_enabled: bool = True
+    notification_mode: str = "iris"

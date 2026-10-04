@@ -58,6 +58,8 @@ O SQLAlchemy oferece:
 
 A aplicação usa `SessionLocal` para criar sessões. Toda sessão aberta deve ser encerrada, inclusive em caso de erro.
 
+Os nomes alternativos de chamada declarados por cada manifesto são persistidos em `modules.call_aliases_json`. A migração preenche os módulos existentes com uma lista vazia; a sincronização do manifesto atualiza essa lista.
+
 ## Entidades atuais
 
 ### Module
@@ -207,7 +209,9 @@ bandeja e permanecer ativa quando a janela for fechada. O valor padrão é
 ligado para preservar o comportamento das instalações que já utilizam a
 execução em segundo plano. O campo `listening_overlay_enabled` controla o
 indicador flutuante exibido durante o reconhecimento de voz e também vem ligado
-por padrão.
+por padrão. O campo `notification_mode` guarda um único canal externo:
+`none`, `iris` ou `windows`. O padrão `iris` preserva o popup existente para
+instalações atuais.
 
 ## Relacionamentos
 
@@ -283,7 +287,7 @@ Uma migration deve considerar:
 - downgrade possível;
 - compatibilidade com SQLite.
 
-A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes. A migration `a1f6d8c3b9e2` adiciona `stop_on_failure` e `deleted_at` às rotinas e `argument` às etapas; registros existentes recebem `stop_on_failure=True`. As migrations `a6c8e2f4b1d3` e `c7d9e1a3f5b2` criam as configurações gerais e o controle do indicador de escuta. A migration de merge `f2d4b6a8c0e1` reúne os ramos de rotinas e configurações em um único `head`, sem executar alterações adicionais de esquema.
+A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes. A migration `a1f6d8c3b9e2` adiciona `stop_on_failure` e `deleted_at` às rotinas e `argument` às etapas; registros existentes recebem `stop_on_failure=True`. As migrations `a6c8e2f4b1d3` e `c7d9e1a3f5b2` criam as configurações gerais e o controle do indicador de escuta. A migration de merge `f2d4b6a8c0e1` reúne os ramos de rotinas e configurações. As migrations `f2b8a9d4c6e1` e `a1c9e7d5b2f4` adicionam o modo de notificação e os aliases de chamada dos módulos. A migration de merge `b4e6f8a0c2d3` consolida novamente o histórico em um único `head`, sem alterar tabelas adicionais.
 
 ## Transações
 

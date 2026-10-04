@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import flet as ft
 import ui.home as ui
 from services.home_service import HomeService, ModuleArgumentContext
-from services.speech_service import SpeechEvent, SpeechEventKind
+from services.speech_service import SpeechEvent, SpeechEventKind, VoiceCommandStatus
 from services.speech_service_manager import SpeechServiceManager
 from services.voice_submission_service import (
     ArgumentSource,
@@ -13,6 +13,7 @@ from services.voice_submission_service import (
     VoiceSubmissionService,
     VoiceSubmissionState,
 )
+from ui.shared.components.result_card import build_result_card
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import PASTEL_DARK_PURPLE
@@ -182,7 +183,12 @@ class HomeViewState:
             ui.input.set_input_shell_voice_active(controls.input_shell, True, pulse=True)
             self.update_if_ready(controls.input_shell)
             self.update_if_ready(controls.voice_hint)
-            await controls.command_input_field.focus()
+            try:
+                page = controls.root.page
+            except RuntimeError:
+                page = None
+            if page is not None and page.window.visible and page.window.focused:
+                await controls.command_input_field.focus()
             await asyncio.sleep(0.35)
             if self.is_voice_active:
                 ui.input.set_input_shell_voice_active(controls.input_shell, True)
@@ -191,11 +197,16 @@ class HomeViewState:
 
         if event.kind in {SpeechEventKind.PARTIAL, SpeechEventKind.FINAL}:
             self._cancel_voice_submit()
-            self._apply_voice_text(event.text)
+            is_prefix = event.command_status == VoiceCommandStatus.PREFIX
+            self._apply_voice_text(event.text, allow_resolution=not is_prefix)
             if event.should_submit:
+                if is_prefix:
+                    self.show_module_error("Comando incompleto. Diga o nome do módulo.")
+                    return
                 self.attempt_explicit_submit()
             elif event.kind == SpeechEventKind.FINAL:
-                self._schedule_voice_submit()
+                if event.command_status not in {VoiceCommandStatus.PREFIX, VoiceCommandStatus.UNKNOWN}:
+                    self._schedule_voice_submit()
             return
 
         if event.kind in {SpeechEventKind.DEACTIVATED, SpeechEventKind.ERROR, SpeechEventKind.STOPPED}:
@@ -215,11 +226,18 @@ class HomeViewState:
         self,
         text: str,
         argument_source: ArgumentSource = ArgumentSource.VOICE,
+        *,
+        allow_resolution: bool = True,
     ) -> None:
         controls = self._controls()
         controls.command_input_field.value = text
         self.sync_clear_button_visibility()
         self.update_if_ready(controls.command_input_field)
+
+        if not allow_resolution:
+            self._clear_transient_selection()
+            self._dropdowns().show_module_suggestions(text)
+            return
 
         resolved = ui.dropdowns.resolve_voice_module_option(text, self.module_options)
         if resolved is None:
@@ -425,6 +443,8 @@ class HomeViewState:
             request_revision != self.command_revision
             or request_session_id != self.active_voice_session_id
             or dropdowns.selected_module_id != module_id
+            or not dropdowns.controls.argument_panel.visible
+            or self.is_loading
         ):
             return False
         current_query = self._controls().argument_input_field.value or ""
@@ -501,6 +521,10 @@ class HomeViewState:
             controls.command_input_field.value or "",
             self.module_options,
         )
+        if ui.dropdowns.classify_voice_command(
+            controls.command_input_field.value or "", self.module_options,
+        ) == VoiceCommandStatus.PREFIX:
+            resolved = None
         dropdowns = self._dropdowns()
         module_id = resolved.module_id if resolved is not None else None
         module_path = resolved.path if resolved is not None else ""
@@ -568,6 +592,10 @@ class HomeViewState:
 
     def _ensure_current_module_preselected(self) -> None:
         controls = self._controls()
+        if ui.dropdowns.classify_voice_command(
+            controls.command_input_field.value or "", self.module_options,
+        ) == VoiceCommandStatus.PREFIX:
+            return
         resolved = ui.dropdowns.resolve_voice_module_option(
             controls.command_input_field.value or "",
             self.module_options,
@@ -653,7 +681,12 @@ class HomeViewState:
             self._request_argument_suggestions("")
             return
 
+        self.hide_dropdowns()
         self.is_loading = True
+        self._show_execution_result(
+            "executando",
+            {"status": "executando", "message": "Aguardando retorno do módulo."},
+        )
         ui.input.set_send_button_loading(controls.send_button, self.is_loading)
         self.update_if_ready(controls.send_button)
 
@@ -696,19 +729,23 @@ class HomeViewState:
     ) -> None:
         controls = self._controls()
         if error is not None:
-            message = str(error)
+            message = str(error) or "Não foi possível executar o módulo."
+            self._show_execution_result("erro", {"success": False, "error": message})
             feedback_message = self._cleared_input_feedback(message)
             self.show_module_error(feedback_message)
             self._notify_background("Erro no módulo", feedback_message)
             self._clear_request_inputs()
         elif result is not None and result.get("success", True):
+            self._show_execution_result("sucesso", result)
             self.show_module_success(result)
             self._notify_background(
                 "Módulo executado",
                 self.result_message(result) or "Módulo executado com sucesso.",
             )
             self._clear_request_inputs()
-        elif result is not None:
+        else:
+            result = result or {"success": False}
+            self._show_execution_result("erro", result)
             message = self.result_message(result) or "O módulo retornou erro."
             feedback_message = self._cleared_input_feedback(message)
             self.show_module_error(feedback_message)
@@ -720,6 +757,12 @@ class HomeViewState:
         self.update_if_ready(controls.send_button)
         if self.speech_manager is not None:
             self.speech_manager.deactivate_command()
+
+    def _show_execution_result(self, status: str, result: dict[str, object]) -> None:
+        card = self._controls().execution_result_card
+        card.content = build_result_card(status, result)
+        card.visible = True
+        self.update_if_ready(card)
 
     def show_module_success(self, result: dict) -> None:
         if self.toaster_handler is None:
@@ -746,6 +789,7 @@ class HomeViewState:
 
     def _clear_request_inputs(self) -> None:
         controls = self._controls()
+        self.hide_dropdowns()
         controls.command_input_field.value = ""
         controls.argument_input_field.value = ""
         self.argument_source = ArgumentSource.EMPTY
@@ -882,6 +926,7 @@ class HomeViewControls:
     module_panel: ft.Container
     argument_panel: ft.Container
     dropdown_stack: ft.Stack
+    execution_result_card: ft.Container
     module_suggestions_list: ft.ListView
     argument_suggestions_list: ft.ListView
 
@@ -937,10 +982,13 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
     input_shell.on_click = callbacks.on_input_shell_click
     input_shell.on_hover = callbacks.on_input_shell_hover
 
+    execution_result_card = ft.Container(visible=False, padding=ft.Padding(top=18))
+
     root = build_home_content(
         build_input_title(on_click=callbacks.on_background_click),
         input_shell,
         dropdown_stack,
+        execution_result_card,
         on_background_click=callbacks.on_background_click,
     )
 
@@ -956,6 +1004,7 @@ def build_home_controls(callbacks: HomeViewCallbacks) -> HomeViewControls:
         module_panel=module_panel,
         argument_panel=argument_panel,
         dropdown_stack=dropdown_stack,
+        execution_result_card=execution_result_card,
         module_suggestions_list=module_suggestions_list,
         argument_suggestions_list=argument_suggestions_list,
     )
@@ -992,6 +1041,7 @@ def build_home_content(
     input_title: ft.Container,
     input_shell: ft.Container,
     dropdown_stack: ft.Stack,
+    execution_result_card: ft.Container,
     on_background_click: Callable | None = None,
 ) -> ft.Container:
     # Cria a estrutura visual da home com fundo, titulo, input e dropdowns.
@@ -1009,7 +1059,8 @@ def build_home_content(
                         width=800,
                         tight=True,
                         spacing=0,
-                        controls=[input_title, input_shell, dropdown_stack],
+                        scroll=ft.ScrollMode.AUTO,
+                        controls=[input_title, input_shell, dropdown_stack, execution_result_card],
                     ),
                 ),
             ],

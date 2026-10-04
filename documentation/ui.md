@@ -163,7 +163,8 @@ A home possui:
 - botão para limpar;
 - lista de módulos;
 - lista de argumentos;
-- logo de fundo.
+- logo de fundo;
+- card com o resultado da última execução.
 
 O ícone à esquerda do input acompanha o módulo selecionado. As sugestões também
 usam o ícone persistido; quando não há seleção, o input mostra `explore`.
@@ -174,8 +175,16 @@ interação até a seleção, e fechar uma lista não apaga o texto nem o módul
 selecionado. A altura acompanha a quantidade de sugestões até o limite de 360
 pixels; acima disso, a lista mantém o painel nesse limite e permite rolagem.
 
-A pesquisa considera nome exibido, `call_name` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. O campo secundário usa uma instrução genérica porque pode receber arquivos, cidades ou outros tipos de argumento. Módulos com busca pedem esse valor por padrão, mas podem usar `should_request_argument(variables)` para dispensá-lo quando uma configuração já fornece o valor necessário. A execução acontece em background para manter a interface responsiva.
+A pesquisa considera nome exibido, `call_name`, `call_aliases` e `custom_call_name`. A seleção visual mantém o `module_id`; comandos ambíguos não são executados automaticamente. Somente um dos dropdowns fica aberto por vez. O painel de argumentos fecha ao iniciar a execução e não conserva um indicador de carregamento depois do resultado. Erros de preenchimento antes da execução mantêm o campo aberto para correção. O campo secundário usa uma instrução genérica porque pode receber arquivos, cidades ou outros tipos de argumento. Módulos com busca pedem esse valor por padrão, mas podem usar `should_request_argument(variables)` para dispensá-lo quando uma configuração já fornece o valor necessário. A execução acontece em background para manter a interface responsiva.
 O campo de argumento ocupa a largura do painel, usa contorno azul suave e destaca o foco em roxo pastel.
+
+Ao iniciar uma execução, a Home mostra abaixo do campo o mesmo card de resultado
+utilizado na tela do módulo. Ele apresenta o estado “Executando”, seguido de
+“Sucesso” ou “Erro” e do corpo completo retornado. Exceções aparecem com
+`success: false` e uma mensagem, sem traceback. O último resultado permanece
+visível após os campos serem limpos e é substituído pela próxima execução.
+O card permite recolher o conteúdo e arrastar a borda inferior para ajustar sua
+altura. A área principal permite rolagem quando o conteúdo excede a janela.
 
 ### Tela do módulo
 
@@ -378,17 +387,19 @@ ação explícita **Sair da IRIS** fará o encerramento definitivo. Quando a op�
 estiver desligada, fechar a janela encerrará a aplicação. Os detalhes visuais e
 de fallback estão em [Execução em segundo plano](background_execution.md).
 
-Resultados usam o HUD de voz com altura adaptável. Erros em qualquer estado da
-janela também usam um popup próprio da IRIS. Esse fluxo não depende das
-notificações nativas nem das permissões do Windows e não substitui os toasters
-internos ou os registros de execução.
+Resultados em segundo plano usam o HUD de voz com altura adaptável. Erros em
+segundo plano usam o canal de Notify selecionado nas Configurações gerais:
+nenhum, popup da IRIS ou notificação nativa pela bandeja do Windows. Com a
+janela em foco, o feedback aparece dentro dela, sem overlays externos duplicados.
 
 A opção **Mostrar indicador flutuante de voz** controla um HUD compacto na parte
 inferior da tela. No Windows, ele aparece sem moldura e sempre no topo quando a
-palavra “IRIS” é reconhecida, acompanha o texto parcial, não recebe foco nem
-intercepta o mouse e desaparece após o fim da interação. Em caso de erro de
-módulo, o HUD mostra somente uma borda vermelha e uma orientação curta; a
-mensagem completa é encaminhada para o popup de erro da IRIS.
+palavra “IRIS” é reconhecida, antes de mostrar o texto do comando. Ele acompanha
+o texto parcial sem receber foco e pode ser fechado pelo botão ×. Fechá-lo
+durante a escuta cancela o comando pendente. O HUD e o Notify da IRIS usam
+superfícies claras translúcidas e rolagem para texto longo. Seus botões × têm
+realce e cursor de mão ao passar o mouse. O HUD sobe discretamente quando a
+escuta começa, sem repetir o movimento durante a transcrição.
 
 ## Estados visuais
 

@@ -4,6 +4,7 @@ import re
 
 import flet as ft
 import ui.home as ui
+from services.speech_service import VoiceCommandStatus
 
 from ui.shared.components.material_icons import material_icon
 from ui.theme.colors import BORDER, PASTEL_BLUE, PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE, TEXT_PRIMARY, TEXT_SECONDARY
@@ -129,6 +130,8 @@ class HomeDropdowns:
 
     def show_module_suggestions(self, query: str | None = None, reset_empty_groups: bool = False) -> None:
         # Filtra e renderiza a arvore de modulos no dropdown principal.
+        self.hide_argument_suggestions()
+        self.update_control(self.controls.argument_panel)
         query = query or ""
         matches = filter_modules(query, self.module_options)
         normalized_query = query.strip()
@@ -275,6 +278,36 @@ def resolve_voice_module(
     if resolved is None or resolved.ambiguous:
         return None
     return resolved.path, resolved.argument
+
+
+def classify_voice_command(
+    query: str, module_options: Sequence[ModuleOption],
+) -> VoiceCommandStatus:
+    """Classify a final utterance against known module names and their prefixes."""
+    words = [
+        ui.text_utils.normalize(word).strip(".,!?;:")
+        for word in query.split()
+    ]
+    words = [word for word in words if word]
+    if not words:
+        return VoiceCommandStatus.UNKNOWN
+
+    has_prefix = False
+    for option in module_options:
+        if not option_is_executable(option):
+            continue
+        for path in option_command_paths(option):
+            for name in (path, path.rsplit("/", 1)[-1]):
+                name_words = ui.text_utils.normalize(name.replace("/", " ")).split()
+                if words == name_words:
+                    return VoiceCommandStatus.MATCHED
+                if len(words) < len(name_words) and words == name_words[:len(words)]:
+                    has_prefix = True
+    if has_prefix:
+        return VoiceCommandStatus.PREFIX
+    if resolve_voice_module_option(query, module_options) is not None:
+        return VoiceCommandStatus.MATCHED
+    return VoiceCommandStatus.UNKNOWN
 
 
 def resolve_voice_module_option(

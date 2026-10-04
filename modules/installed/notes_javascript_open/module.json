@@ -4,6 +4,7 @@
         "module_public_key": "notes.javascript.open",
         "name": "Abrir notas",
         "call_name": "abrir notas",
+        "call_aliases": ["abrir nota"],
         "icon": "open_in_browser",
         "parent_public_key": "notes.javascript",
         "description": "Abre a interface local do serviço de notas no navegador.",

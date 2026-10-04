@@ -14,6 +14,7 @@ class FakeSpeechService:
         self.on_event = on_event
         self.stopped = False
         self.command_enabled = True
+        self.classify_command = None
 
     def start(self) -> None:
         self.started.set()
@@ -23,6 +24,9 @@ class FakeSpeechService:
 
     def set_command_enabled(self, enabled: bool) -> None:
         self.command_enabled = enabled
+
+    def set_command_classifier(self, classify_command) -> None:
+        self.classify_command = classify_command
 
     def deactivate_command(self) -> None:
         return
@@ -63,6 +67,19 @@ class SpeechServiceManagerTests(unittest.TestCase):
             self.assertTrue(FakeSpeechService.started.wait(timeout=1))
             self.assertIsNotNone(manager._service)
             self.assertFalse(manager._service.command_enabled)
+        manager.shutdown()
+
+    def test_classifier_is_given_to_backend_before_start(self) -> None:
+        manager = SpeechServiceManager()
+        classify = lambda _text: None
+        manager.set_command_classifier(classify)
+        with patch(
+            "services.speech_service_manager.FasterWhisperSpeechService",
+            FakeSpeechService,
+        ):
+            manager.prepare(VoiceSettings(enabled=True))
+            self.assertTrue(FakeSpeechService.started.wait(timeout=1))
+            self.assertIs(manager._service.classify_command, classify)
         manager.shutdown()
 
 

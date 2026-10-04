@@ -5,6 +5,7 @@ import queue
 import re
 import threading
 import time
+import uuid
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable
@@ -41,6 +42,12 @@ class SpeechEventKind(StrEnum):
     TRANSCRIPTION = "transcription"
 
 
+class VoiceCommandStatus(StrEnum):
+    MATCHED = "matched"
+    PREFIX = "prefix"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True, slots=True)
 class SpeechEvent:
     kind: SpeechEventKind
@@ -50,6 +57,8 @@ class SpeechEvent:
     source: str = ""
     is_partial: bool = False
     audio_level: float = 0.0
+    session_id: str = ""
+    command_status: VoiceCommandStatus | None = None
 
 
 SpeechEventCallback = Callable[[SpeechEvent], None]
@@ -73,6 +82,15 @@ class SpeechService(ABC):
         self._voice_active = False
         self._last_command = ""
         self._committed_command = ""
+        self._wake_probe_activated = False
+        self._session_id = ""
+        self._classify_command: Callable[[str], VoiceCommandStatus] | None = None
+
+    def set_command_classifier(
+        self, classify_command: Callable[[str], VoiceCommandStatus] | None,
+    ) -> None:
+        with self._command_lock:
+            self._classify_command = classify_command
 
     def replace_active_command(self, text: str) -> None:
         """Substitui o comando acumulado quando o usuário edita o input."""
@@ -81,8 +99,10 @@ class SpeechService(ABC):
                 return
 
             normalized_text = " ".join((text or "").strip().split())
-            self._last_command = normalized_text
-            self._committed_command = normalized_text
+            status = self._classify_command(normalized_text) if normalized_text and self._classify_command else None
+            retained_text = normalized_text if status != VoiceCommandStatus.UNKNOWN else ""
+            self._last_command = retained_text
+            self._committed_command = retained_text
 
     @property
     def is_running(self) -> bool:
@@ -111,6 +131,8 @@ class SpeechService(ABC):
             self._voice_active = False
             self._last_command = ""
             self._committed_command = ""
+            self._wake_probe_activated = False
+            self._session_id = ""
 
     def deactivate_command(self) -> None:
         with self._command_lock:
@@ -119,7 +141,9 @@ class SpeechService(ABC):
             self._voice_active = False
             self._last_command = ""
             self._committed_command = ""
+            self._wake_probe_activated = False
             self._emit(SpeechEventKind.DEACTIVATED)
+            self._session_id = ""
 
     def set_command_enabled(self, enabled: bool) -> None:
         """Permite a palavra de ativação no contexto atual da aplicação."""
@@ -149,13 +173,21 @@ class SpeechService(ABC):
                 return
 
             self._voice_active = True
+            self._session_id = uuid.uuid4().hex
             self._emit(SpeechEventKind.ACTIVATED)
             command_text = cleaned_text[wake_word.end():].lstrip(" ,.!?;:-")
         else:
-            repeated_wake_word = bool(LEADING_WAKE_WORD_PATTERN.search(cleaned_text))
-            command_text = LEADING_WAKE_WORD_PATTERN.sub("", cleaned_text, count=1).lstrip(" ,.!?;:-")
+            if self._wake_probe_activated:
+                wake_word = WAKE_WORD_PATTERN.search(cleaned_text)
+                if wake_word is not None:
+                    command_text = cleaned_text[wake_word.end():].lstrip(" ,.!?;:-")
+                self._wake_probe_activated = False
+            else:
+                repeated_wake_word = bool(LEADING_WAKE_WORD_PATTERN.search(cleaned_text))
+                command_text = LEADING_WAKE_WORD_PATTERN.sub("", cleaned_text, count=1).lstrip(" ,.!?;:-")
             if repeated_wake_word:
                 self._committed_command = ""
+                self._last_command = ""
 
         has_send_word = bool(SEND_WORD_PATTERN.search(command_text))
         should_submit = has_send_word and not is_partial
@@ -168,14 +200,24 @@ class SpeechService(ABC):
             current_command = command_text or self._committed_command or self._last_command
 
         if current_command:
-            self._last_command = current_command
+            command_status = None
+            if not is_partial and self._classify_command is not None:
+                command_status = self._classify_command(current_command)
+                if command_status == VoiceCommandStatus.UNKNOWN and self._committed_command and command_text:
+                    fresh_status = self._classify_command(command_text)
+                    if fresh_status != VoiceCommandStatus.UNKNOWN:
+                        current_command = command_text
+                        command_status = fresh_status
+            retained_text = current_command if command_status != VoiceCommandStatus.UNKNOWN else ""
+            self._last_command = retained_text
             self._emit(
                 SpeechEventKind.PARTIAL if is_partial and not should_submit else SpeechEventKind.FINAL,
                 text=current_command,
                 should_submit=should_submit,
+                command_status=command_status,
             )
             if not is_partial and not should_submit:
-                self._committed_command = current_command
+                self._committed_command = retained_text
 
         if should_submit:
             self.deactivate_command()
@@ -204,6 +246,7 @@ class SpeechService(ABC):
         source: str = "",
         is_partial: bool = False,
         audio_level: float = 0.0,
+        command_status: VoiceCommandStatus | None = None,
     ) -> None:
         if self._on_event is not None:
             self._on_event(
@@ -215,6 +258,8 @@ class SpeechService(ABC):
                     source=source,
                     is_partial=is_partial,
                     audio_level=audio_level,
+                    session_id=self._session_id,
+                    command_status=command_status,
                 )
             )
 
@@ -295,12 +340,22 @@ class SpeechService(ABC):
 
 
 class FasterWhisperSpeechService(SpeechService):
-    """Modo básico: captura uma frase e transcreve somente após o silêncio."""
+    """Modo básico: detecta IRIS durante a captura e finaliza texto após silêncio."""
 
     def __init__(self, settings: VoiceSettings, on_event: SpeechEventCallback | None = None):
         super().__init__(settings, on_event)
         self._model: Any = None
+        self._wake_model: Any = None
         self._audio_queue: queue.Queue[Any] = queue.Queue(maxsize=100)
+        self._probe_lock = threading.Lock()
+        self._probe_running = False
+        self._probe_generation = 0
+
+    def deactivate_command(self) -> None:
+        with self._command_lock:
+            with self._probe_lock:
+                self._probe_generation += 1
+            super().deactivate_command()
 
     def _run(self) -> None:
         if self.settings.sample_rate != BASIC_TRANSCRIPTION_SAMPLE_RATE:
@@ -334,6 +389,16 @@ class FasterWhisperSpeechService(SpeechService):
                 device=self.settings.device,
                 compute_type=self.settings.compute_type,
             )
+        if self._wake_model is None:
+            self._wake_model = (
+                self._model
+                if self.settings.realtime_model_size == self.settings.model_size
+                else WhisperModel(
+                    self.settings.realtime_model_size,
+                    device=self.settings.device,
+                    compute_type=self.settings.compute_type,
+                )
+            )
 
         block_size = max(512, int(self.settings.sample_rate * 0.1))
         pre_roll_blocks = max(1, int(0.5 * self.settings.sample_rate / block_size))
@@ -343,6 +408,7 @@ class FasterWhisperSpeechService(SpeechService):
         recording_duration = 0.0
         is_speaking = False
         is_transcribing = False
+        last_probe_at = 0.0
 
         def finish_utterance() -> None:
             nonlocal audio_buffer, silence_duration, recording_duration, is_speaking, is_transcribing
@@ -401,6 +467,8 @@ class FasterWhisperSpeechService(SpeechService):
                 self._emit_audio_level(volume)
                 if volume > self.settings.audio_threshold:
                     if not is_speaking:
+                        with self._probe_lock:
+                            self._probe_generation += 1
                         audio_buffer = list(pre_roll)
                         pre_roll.clear()
                         self._emit(SpeechEventKind.CAPTURE_STARTED)
@@ -408,6 +476,14 @@ class FasterWhisperSpeechService(SpeechService):
                     silence_duration = 0.0
                     audio_buffer.append(data)
                     recording_duration += len(data) / self.settings.sample_rate
+                    if (
+                        recording_duration >= 0.6
+                        and time.monotonic() - last_probe_at >= 0.35
+                    ):
+                        last_probe_at = time.monotonic()
+                        self._schedule_wake_probe(
+                            np.concatenate(audio_buffer[-25:], axis=0).flatten()
+                        )
                     if recording_duration >= MAX_BASIC_UTTERANCE_SECONDS:
                         finish_utterance()
                     continue
@@ -420,9 +496,58 @@ class FasterWhisperSpeechService(SpeechService):
                 block_duration = len(data) / self.settings.sample_rate
                 silence_duration += block_duration
                 recording_duration += block_duration
+                if (
+                    recording_duration >= 0.6
+                    and time.monotonic() - last_probe_at >= 0.35
+                ):
+                    last_probe_at = time.monotonic()
+                    self._schedule_wake_probe(
+                        np.concatenate(audio_buffer[-25:], axis=0).flatten()
+                    )
                 if silence_duration < self.settings.silence_duration:
                     continue
                 finish_utterance()
+
+    def _schedule_wake_probe(self, audio: Any) -> None:
+        with self._command_lock:
+            if not self._command_enabled or self._voice_active:
+                return
+        with self._probe_lock:
+            if self._probe_running:
+                return
+            self._probe_running = True
+            generation = self._probe_generation
+
+        def run_probe() -> None:
+            try:
+                segments, _ = self._wake_model.transcribe(
+                    audio,
+                    language=self.settings.language or None,
+                    beam_size=1,
+                    condition_on_previous_text=False,
+                    vad_filter=False,
+                )
+                text = "".join(segment.text for segment in segments).strip()
+                if WAKE_WORD_PATTERN.search(text) is None:
+                    return
+                with self._command_lock:
+                    with self._probe_lock:
+                        if generation != self._probe_generation or self._stop_event.is_set():
+                            return
+                    if self._command_enabled and not self._voice_active:
+                        self._voice_active = True
+                        self._session_id = uuid.uuid4().hex
+                        self._wake_probe_activated = True
+                        self._emit(SpeechEventKind.ACTIVATED)
+            except Exception:
+                logging.exception("Falha na detecção antecipada da palavra IRIS.")
+            finally:
+                with self._probe_lock:
+                    self._probe_running = False
+
+        threading.Thread(
+            target=run_probe, name="IrisWakeWordProbe", daemon=True,
+        ).start()
 
     @staticmethod
     def _basic_ready_message(capture_strategy: str) -> str:

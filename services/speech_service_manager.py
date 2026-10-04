@@ -10,6 +10,7 @@ from services.speech_service import (
     SpeechEventCallback,
     SpeechEventKind,
     SpeechService,
+    VoiceCommandStatus,
 )
 from services.voice_settings import VoiceSettings
 
@@ -32,6 +33,7 @@ class SpeechServiceManager:
         self._backend_error = False
         self._microphone_available: bool | None = None
         self.last_event: SpeechEvent | None = None
+        self._classify_command: Callable[[str], VoiceCommandStatus] | None = None
 
     @property
     def current_settings(self) -> VoiceSettings:
@@ -126,6 +128,15 @@ class SpeechServiceManager:
         if service is not None:
             service.replace_active_command(text)
 
+    def set_command_classifier(
+        self, classify_command: Callable[[str], VoiceCommandStatus],
+    ) -> None:
+        with self._lock:
+            self._classify_command = classify_command
+            service = self._service
+        if service is not None:
+            service.set_command_classifier(classify_command)
+
     def set_command_enabled(self, enabled: bool) -> None:
         """Controla comandos sem alterar a configuração persistida."""
         with self._lock:
@@ -175,6 +186,7 @@ class SpeechServiceManager:
                     else FasterWhisperSpeechService
                 )
                 service = service_class(settings, self._publish)
+                service.set_command_classifier(self._classify_command)
                 service.set_command_enabled(
                     self._command_enabled and not self._session_paused
                 )

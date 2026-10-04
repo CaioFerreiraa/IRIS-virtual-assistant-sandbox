@@ -110,6 +110,7 @@ class ModuleManifest:
     module_public_key: str
     name: str
     call_name: str
+    call_aliases: tuple[str, ...]
     icon: str
     parent_public_key: str | None
     description: str
@@ -143,6 +144,15 @@ def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
     _validate_public_key(module_public_key, "module_public_key")
     name = _required_string(module_data, "name")
     call_name = _required_string(module_data, "call_name")
+    raw_aliases = module_data.get("call_aliases", [])
+    if not isinstance(raw_aliases, list) or any(
+        not isinstance(alias, str) or not alias.strip() or len(alias.strip()) > 100
+        for alias in raw_aliases
+    ):
+        raise ManifestValidationError(
+            "O campo 'module.call_aliases' deve ser uma lista de nomes não vazios de até 100 caracteres."
+        )
+    call_aliases = tuple(dict.fromkeys(alias.strip() for alias in raw_aliases))
     icon = _optional_string(module_data, "icon", "extension")
     if not icon or len(icon) > 100 or not MATERIAL_ICON_PATTERN.fullmatch(icon):
         raise ManifestValidationError(
@@ -193,6 +203,7 @@ def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
         module_public_key=module_public_key,
         name=name,
         call_name=call_name,
+        call_aliases=call_aliases,
         icon=icon,
         parent_public_key=parent_public_key,
         description=description,

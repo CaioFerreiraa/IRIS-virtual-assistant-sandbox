@@ -30,6 +30,7 @@ class Module(Base):
     module_public_key = Column(String(120), nullable=False, unique=True)
     name = Column(String(100), nullable=False)
     call_name = Column(String(100), nullable=False)
+    call_aliases_json = Column(Text, nullable=False, default="[]")
     custom_call_name = Column(String(100), nullable=True)
     description = Column(Text, nullable=True)
     icon = Column(String(100), nullable=False, default="extension")
@@ -279,3 +280,4 @@ class GeneralSetting(Base):
     id = Column(Integer, primary_key=True, default=1)
     background_execution_enabled = Column(Boolean, nullable=False, default=True)
     listening_overlay_enabled = Column(Boolean, nullable=False, default=True)
+    notification_mode = Column(String(16), nullable=False, default="iris")

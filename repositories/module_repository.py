@@ -1,3 +1,4 @@
+import json
 from itertools import product
 
 from sqlalchemy import func
@@ -66,14 +67,14 @@ class ModuleRepository:
     def list_call_names(self) -> list[str]:
         """Retorna nomes originais e personalizados sem duplicatas."""
         rows = (
-            self.db.query(Module.call_name, Module.custom_call_name)
+            self.db.query(Module.call_name, Module.custom_call_name, Module.call_aliases_json)
             .filter(Module.is_available.is_(True))
             .all()
         )
         names: list[str] = []
         seen: set[str] = set()
-        for call_name, custom_call_name in rows:
-            for value in (call_name, custom_call_name):
+        for call_name, custom_call_name, call_aliases_json in rows:
+            for value in (call_name, custom_call_name, *json.loads(call_aliases_json or "[]")):
                 normalized = (value or "").strip()
                 lookup_key = normalized.casefold()
                 if normalized and lookup_key not in seen:
@@ -125,6 +126,7 @@ class ModuleRepository:
                         item.call_name,
                         item.custom_call_name,
                         item.name,
+                        *json.loads(item.call_aliases_json or "[]"),
                     )
                     if value and value.strip()
                 )

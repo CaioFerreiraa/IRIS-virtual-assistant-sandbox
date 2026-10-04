@@ -48,6 +48,8 @@ def build_route_content(
     general_settings_service: GeneralSettingsService | None = None,
     on_background_execution_change: Callable[[bool], bool] | None = None,
     on_listening_overlay_change: Callable[[bool], bool] | None = None,
+    on_notification_mode_change: Callable[[str], bool] | None = None,
+    get_notification_status: Callable[[], str | None] | None = None,
     module_session_factory=SessionLocal,
     on_module_status_change: Callable[[], None] | None = None,
 ) -> ft.Control:
@@ -96,6 +98,8 @@ def build_route_content(
         and general_settings_service is not None
         and on_background_execution_change is not None
         and on_listening_overlay_change is not None
+        and on_notification_mode_change is not None
+        and get_notification_status is not None
     ):
         return settings_ui.build_settings_view(
             speech_manager,
@@ -103,6 +107,8 @@ def build_route_content(
             general_settings_service,
             on_background_execution_change,
             on_listening_overlay_change,
+            on_notification_mode_change,
+            get_notification_status,
         )
 
     title, subtitle, icon = DEFAULT_ROUTES.get(

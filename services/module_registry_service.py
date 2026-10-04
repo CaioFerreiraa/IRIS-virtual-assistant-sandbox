@@ -317,6 +317,7 @@ class ModuleRegistryService:
 
             module.name = manifest.name
             module.call_name = manifest.call_name
+            module.call_aliases_json = json.dumps(manifest.call_aliases, ensure_ascii=False)
             module.icon = manifest.icon
             module.description = manifest.description
             module.parent_module_id = parent.id if parent is not None else None

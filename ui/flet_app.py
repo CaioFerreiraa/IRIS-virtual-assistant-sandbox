@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from database.db import SessionLocal
 from repositories.module_repository import ModuleRepository
 from services.general_settings_service import GeneralSettingsService
+from services.background_feedback_service import BackgroundFeedbackService
 from services.speech_service_manager import SpeechServiceManager
 from services.application_lifecycle import ApplicationLifecycle
 from services.module_registry_state import get_module_registry_state
@@ -23,6 +24,7 @@ from services.listening_overlay_service import WindowsListeningOverlayService
 from services.notification_overlay_service import WindowsNotificationOverlayService
 from services.voice_settings_service import VoiceSettingsService
 from services.system_tray_service import WindowsSystemTrayService
+from ui.home.dropdowns import classify_voice_command
 from ui.home.view import HOME_ROUTES, HomeViewState
 from ui.shared.components.header import build_header
 from ui.shared.components.sidebar import (
@@ -99,16 +101,18 @@ def get_default_page(page: ft.Page):
     speech_manager = SpeechServiceManager()
     general_settings_service = GeneralSettingsService()
     general_settings = general_settings_service.load()
-    listening_overlay_service = WindowsListeningOverlayService()
-    notification_overlay_service = WindowsNotificationOverlayService()
-    speech_manager.subscribe(
-        listening_overlay_service.on_speech_event,
-        persistent=True,
+    listening_overlay_service = WindowsListeningOverlayService(
+        on_cancel_listening=speech_manager.deactivate_command,
+    )
+    notification_overlay_service = WindowsNotificationOverlayService(
+        on_open=lambda: schedule_window_visibility(True),
     )
 
     lifecycle_holder: dict[str, ApplicationLifecycle] = {}
 
     async def set_window_visible(visible: bool) -> None:
+        background_feedback.set_foreground(visible)
+        toaster_handler.set_foreground(visible)
         page.window.visible = visible
         if visible:
             page.window.minimized = False
@@ -139,6 +143,13 @@ def get_default_page(page: ft.Page):
         on_open=restore_from_tray,
         on_exit=exit_from_tray,
     )
+    background_feedback = BackgroundFeedbackService(
+        listening_overlay_service,
+        notification_overlay_service,
+        tray_service,
+        mode=general_settings.notification_mode,
+    )
+    speech_manager.subscribe(background_feedback.on_speech_event, persistent=True)
     lifecycle = ApplicationLifecycle(
         speech_manager=speech_manager,
         runtime_manager=module_runtime_manager,
@@ -161,18 +172,32 @@ def get_default_page(page: ft.Page):
         return True
 
     def notify_background(title: str, message: str) -> bool:
-        is_error = title in {"Erro no módulo", "Voz indisponível"}
-        overlay_shown = listening_overlay_service.show_feedback(
-            title,
-            message,
-            error=is_error,
-        )
-        if is_error:
-            return notification_overlay_service.show_error(
-                title,
-                message,
+        return background_feedback.notify(title, message)
+
+    def apply_notification_mode(mode: str) -> bool:
+        background_feedback.set_notification_mode(mode)
+        if mode == "iris":
+            return notification_overlay_service.start()
+        notification_overlay_service.stop()
+        return mode != "windows" or tray_service.notifications_available()
+
+    def notification_status() -> str | None:
+        tray_service.notifications_available()
+        return tray_service.notification_error
+
+    def on_lifecycle_change(event: ft.AppLifecycleStateChangeEvent) -> None:
+        if event.state in {ft.AppLifecycleState.INACTIVE, ft.AppLifecycleState.HIDE}:
+            background_feedback.set_foreground(False)
+            toaster_handler.set_foreground(False)
+        elif event.state in {ft.AppLifecycleState.RESUME, ft.AppLifecycleState.SHOW}:
+            foreground = (
+                event.state == ft.AppLifecycleState.RESUME
+                or bool(page.window.focused)
             )
-        return overlay_shown
+            background_feedback.set_foreground(foreground)
+            toaster_handler.set_foreground(foreground)
+
+    page.on_app_lifecycle_state_change = on_lifecycle_change
 
     def apply_listening_overlay(enabled: bool) -> bool:
         if enabled:
@@ -191,6 +216,8 @@ def get_default_page(page: ft.Page):
         apply_background_execution,
         notify_background,
         apply_listening_overlay,
+        apply_notification_mode,
+        notification_status,
         fallback=ft.Container(expand=True, bgcolor=APP_BACKGROUND),
     )
     fatal_error_handler.guard_call(page.add, app_container)
@@ -209,7 +236,8 @@ def get_default_page(page: ft.Page):
         fatal_error_handler.guard_call(tray_service.start)
     if general_settings.listening_overlay_enabled:
         fatal_error_handler.guard_call(listening_overlay_service.start)
-    fatal_error_handler.guard_call(notification_overlay_service.start)
+    if general_settings.notification_mode == "iris":
+        fatal_error_handler.guard_call(notification_overlay_service.start)
     return page
 
 
@@ -223,6 +251,8 @@ def get_app_container(
     on_background_execution_change,
     on_background_feedback,
     on_listening_overlay_change,
+    on_notification_mode_change,
+    get_notification_status,
 ):
     header_slot = ft.Container()
     sidebar_slot = ft.Container()
@@ -251,6 +281,9 @@ def get_app_container(
         toaster_handler,
         speech_manager,
         on_background_feedback,
+    )
+    speech_manager.set_command_classifier(
+        lambda text: classify_voice_command(text, home_view_state.module_options)
     )
     home_content = home_view_state.build()
     home_slot = ft.Container(expand=True, content=home_content)
@@ -349,6 +382,8 @@ def get_app_container(
                 on_background_execution_change=on_background_execution_change,
                 on_module_status_change=render_layout,
                 on_listening_overlay_change=on_listening_overlay_change,
+                on_notification_mode_change=on_notification_mode_change,
+                get_notification_status=get_notification_status,
             )
         rendered_route = current_route
 

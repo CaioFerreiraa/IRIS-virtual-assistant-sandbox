@@ -26,6 +26,13 @@ class ToasterHandler:
         self._current_title = ""
         self._current_message = ""
         self._current_kind = "info"
+        self._foreground = True
+
+    def set_foreground(self, foreground: bool) -> None:
+        self._foreground = foreground
+        if not foreground:
+            self._toast_id += 1
+            self.hide()
 
     def mount(self) -> None:
         if self._is_mounted:
@@ -53,6 +60,8 @@ class ToasterHandler:
         kind: str = "info",
         duration_seconds: float = 4,
     ) -> None:
+        if not self._foreground:
+            return
         self.mount()
         self._toast_id += 1
         toast_id = self._toast_id

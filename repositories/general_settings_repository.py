@@ -17,6 +17,7 @@ class GeneralSettingsRepository:
         return GeneralSettings(
             background_execution_enabled=record.background_execution_enabled,
             listening_overlay_enabled=record.listening_overlay_enabled,
+            notification_mode=record.notification_mode,
         )
 
     def save(self, settings: GeneralSettings) -> GeneralSettings:
@@ -27,6 +28,7 @@ class GeneralSettingsRepository:
 
         record.background_execution_enabled = settings.background_execution_enabled
         record.listening_overlay_enabled = settings.listening_overlay_enabled
+        record.notification_mode = settings.notification_mode
         try:
             self.db.commit()
             self.db.refresh(record)
@@ -36,4 +38,5 @@ class GeneralSettingsRepository:
         return GeneralSettings(
             background_execution_enabled=record.background_execution_enabled,
             listening_overlay_enabled=record.listening_overlay_enabled,
+            notification_mode=record.notification_mode,
         )
