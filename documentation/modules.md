@@ -13,7 +13,19 @@ A IRIS possui dois grupos de módulos:
 - módulos padrão legados, cadastrados pelo seed com chaves públicas explícitas;
 - módulos descobertos em `modules/installed`, declarados por manifesto.
 
-Novos desenvolvimentos devem usar o manifesto. O guia completo e o exemplo mínimo estão em [`modules/README.md`](../modules/README.md).
+Novos desenvolvimentos devem usar o manifesto. O guia completo e o exemplo
+mínimo estão em [Desenvolvimento de módulos](module-development.md).
+
+A ferramenta local `python -m modules` cria módulos Python ou HTTP, valida
+manifestos sem importar código e, mediante o comando explícito `check`, importa
+o entry point para conferir seu contrato. As mesmas regras de pasta são usadas
+pelo registry durante a inicialização.
+
+A aba **Configurações > Módulos locais** reutiliza esse serviço para criar
+templates, validar pastas e listar diagnósticos. Sua ação “Ressincronizar
+módulos” executa o registry completo em background e, portanto, pode importar
+código Python. O resultado aparece na sidebar e na Home na navegação seguinte,
+sem exigir que a janela seja reiniciada.
 
 Os módulos padrão legados também possuem README. O seed registra o caminho desses arquivos sem tratá-los como módulos instalados por manifesto, preservando a compatibilidade do fluxo antigo e permitindo que a rota apresente a documentação.
 

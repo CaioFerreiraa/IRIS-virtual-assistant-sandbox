@@ -2,7 +2,9 @@
 
 ## Uma plataforma construída para crescer
 
-A proposta open source da IRIS permite que sua evolução seja compartilhada entre usuários, desenvolvedores e pessoas interessadas em automação.
+A proposta open source da IRIS busca compartilhar sua evolução entre usuários,
+desenvolvedores e pessoas interessadas em automação. A licença jurídica ainda
+precisa ser escolhida antes da distribuição oficial.
 
 O núcleo da plataforma oferece a estrutura de execução. A comunidade pode ampliar as capacidades por meio de módulos, correções, documentação, testes e propostas de melhoria.
 
@@ -98,11 +100,19 @@ Esses mecanismos ainda não foram definidos.
 
 ## Como criar um módulo
 
-O contrato local inicial está definido em [`modules/README.md`](../modules/README.md). Cada módulo utiliza uma pasta em `modules/installed` com `module.json`, `README.md` e, quando houver runtime Python, `main.py`.
+O contrato local inicial está definido em
+[Desenvolvimento de módulos](module-development.md). Cada módulo utiliza uma
+pasta em `modules/installed` com `module.json`, `README.md` e, quando houver
+runtime Python, `main.py`.
 
 A chave pública identifica atualizações, relações de pai usam outra chave pública e a IRIS gera a interface a partir das variáveis do manifesto. A versão atual aceita somente texto não sensível e não oferece Vault.
 
 O exemplo em `modules/examples/minimal` pode ser copiado para testes. A existência desse contrato local não significa que distribuição, assinatura, permissões ou instalação remota já estejam concluídas.
+
+O comando `python -m modules new` cria um ponto de partida Python ou HTTP.
+`python -m modules validate` confere manifesto e arquivos sem importar código;
+`python -m modules check` também importa o runtime e deve ser usado somente
+depois da revisão do módulo.
 
 ## Como baixar e instalar um módulo
 

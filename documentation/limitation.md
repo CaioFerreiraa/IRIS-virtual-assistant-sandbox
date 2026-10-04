@@ -134,6 +134,11 @@ Módulos podem depender de:
 
 A plataforma possui um manifesto local versão 1 para descoberta, README, runtime Python e variáveis de texto. O contrato definitivo de distribuição, dependências instaláveis e permissões ainda não foi criado.
 
+A aba **Módulos locais** cria templates, valida pastas e aciona o registry, mas
+não é um instalador, gerenciador de dependências, catálogo ou sandbox. Ela não
+baixa nem atualiza código comunitário. Ressincronizar um runtime Python revisado
+continua significando importá-lo no processo da aplicação.
+
 ## Reconhecimento de voz
 
 O reconhecimento de voz possui modo básico com Faster-Whisper e modo em tempo real com RealtimeSTT. A experiência final ainda depende de validação prática em diferentes máquinas.

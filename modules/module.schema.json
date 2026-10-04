@@ -1,0 +1,189 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Manifesto de módulo da IRIS",
+    "type": "object",
+    "required": ["schema_version", "module", "runtime", "variables"],
+    "properties": {
+        "schema_version": {
+            "const": 1
+        },
+        "module": {
+            "$ref": "#/$defs/module"
+        },
+        "runtime": {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "#/$defs/runtime"}
+            ]
+        },
+        "http_request": {
+            "oneOf": [
+                {"type": "null"},
+                {"$ref": "#/$defs/http_request"}
+            ]
+        },
+        "variables": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/variable"}
+        }
+    },
+    "additionalProperties": true,
+    "$defs": {
+        "public_key": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9._-]+$"
+        },
+        "module": {
+            "type": "object",
+            "required": [
+                "module_public_key",
+                "name",
+                "call_name",
+                "parent_public_key",
+                "readme"
+            ],
+            "properties": {
+                "module_public_key": {"$ref": "#/$defs/public_key"},
+                "name": {"type": "string", "minLength": 1},
+                "call_name": {"type": "string", "minLength": 1},
+                "call_aliases": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                    }
+                },
+                "icon": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9_]+$"
+                },
+                "parent_public_key": {
+                    "oneOf": [
+                        {"type": "null"},
+                        {"$ref": "#/$defs/public_key"}
+                    ]
+                },
+                "description": {"type": "string"},
+                "readme": {"type": "string", "minLength": 1},
+                "is_executable": {"type": "boolean"}
+            },
+            "additionalProperties": true
+        },
+        "runtime": {
+            "type": "object",
+            "required": ["type", "entrypoint", "supports_auto_start"],
+            "properties": {
+                "type": {"const": "python"},
+                "entrypoint": {"type": "string", "minLength": 1},
+                "supports_auto_start": {"type": "boolean"}
+            },
+            "additionalProperties": true
+        },
+        "variable": {
+            "type": "object",
+            "required": [
+                "key",
+                "label",
+                "description",
+                "type",
+                "required",
+                "user_editable",
+                "default_value"
+            ],
+            "properties": {
+                "key": {"$ref": "#/$defs/public_key"},
+                "label": {"type": "string", "minLength": 1},
+                "description": {"type": "string", "minLength": 1},
+                "type": {"const": "text"},
+                "required": {"type": "boolean"},
+                "user_editable": {"type": "boolean"},
+                "default_value": {
+                    "type": ["string", "null"]
+                }
+            },
+            "additionalProperties": true
+        },
+        "http_item": {
+            "type": "object",
+            "required": ["key", "value", "description", "enabled"],
+            "properties": {
+                "key": {"type": "string"},
+                "value": {"type": "string"},
+                "description": {"type": "string"},
+                "enabled": {"type": "boolean"}
+            },
+            "additionalProperties": false
+        },
+        "http_request": {
+            "type": "object",
+            "required": [
+                "method",
+                "url",
+                "argument_enabled",
+                "params",
+                "authorization",
+                "headers",
+                "body",
+                "scripts"
+            ],
+            "properties": {
+                "method": {
+                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+                },
+                "url": {
+                    "type": "string",
+                    "pattern": "^https?://"
+                },
+                "argument_enabled": {"type": "boolean"},
+                "params": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/http_item"}
+                },
+                "authorization": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {"type": {"const": "none"}},
+                    "additionalProperties": false
+                },
+                "headers": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/http_item"}
+                },
+                "body": {
+                    "type": "object",
+                    "required": ["mode", "content"],
+                    "properties": {
+                        "mode": {
+                            "enum": ["none", "raw_json", "raw_text", "form_urlencoded"]
+                        },
+                        "content": {
+                            "oneOf": [
+                                {"type": "string"},
+                                {
+                                    "type": "array",
+                                    "items": {"$ref": "#/$defs/http_item"}
+                                }
+                            ]
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "scripts": {
+                    "type": "object",
+                    "required": ["pre_request", "post_response"],
+                    "properties": {
+                        "pre_request": {"const": ""},
+                        "post_response": {"const": ""}
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}

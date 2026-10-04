@@ -348,6 +348,10 @@ def get_app_container(
             sidebar_module_options,
             registry_state.runtime_statuses,
         )
+        home_view_state.replace_module_options(module_options)
+        speech_manager.set_command_classifier(
+            lambda text: classify_voice_command(text, home_view_state.module_options)
+        )
         speech_manager.clear_subscribers()
         speech_manager.set_command_enabled(current_route != "/settings/voice_checking")
         header_slot.content = build_header(

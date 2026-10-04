@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 import json
 import logging
 from pathlib import Path
@@ -12,30 +11,23 @@ from database.db import SessionLocal
 from database.models import Module, ModuleHttpRequest, ModuleVariableDefinition
 from services.module_error_log import append_module_error_log
 from services.http_service import apply_manifest_http_request_definition
-from services.module_loader import load_python_entrypoint
-from services.module_manifest import (
-    ManifestValidationError,
-    ModuleManifest,
-    parse_module_manifest,
-)
+from services.module_manifest import ManifestValidationError, ModuleManifest
 from services.module_registry_state import (
     InvalidModuleInfo,
     ModuleRegistryState,
     get_module_registry_state,
     module_registry_state_store,
 )
+from services.module_validation import (
+    ModuleFolderValidationError,
+    ValidatedModule,
+    validate_module_folder,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INSTALLED_MODULES_DIR = PROJECT_ROOT / "modules" / "installed"
 LOGGER = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class _Candidate:
-    manifest: ModuleManifest
-    loaded_module: object | None
-    readme_content: str
 
 
 class ModuleRegistryService:
@@ -61,93 +53,34 @@ class ModuleRegistryService:
         )
         return get_module_registry_state()
 
-    def _discover_candidates(self) -> list[_Candidate]:
+    def _discover_candidates(self) -> list[ValidatedModule]:
         if not self.installed_modules_dir.is_dir():
             return []
 
-        candidates: list[_Candidate] = []
+        candidates: list[ValidatedModule] = []
         for folder in sorted(self.installed_modules_dir.iterdir(), key=lambda path: path.name.casefold()):
             if not folder.is_dir():
                 continue
-            data: object = None
             try:
-                data = self._load_json(folder)
-                manifest = parse_module_manifest(data, folder)
-                readme_content = manifest.readme_path.read_text(encoding="utf-8")
-            except Exception as error:
-                module_public_key, parent_public_key = _extract_manifest_identity(data)
+                candidate = validate_module_folder(folder, check_runtime=True)
+            except ModuleFolderValidationError as error:
                 self._record_invalid(
                     folder,
-                    "validação do manifesto",
-                    error,
-                    module_public_key=module_public_key,
-                    parent_public_key=parent_public_key,
+                    error.stage,
+                    error.error,
+                    module_public_key=error.module_public_key,
+                    parent_public_key=error.parent_public_key,
                 )
                 continue
 
-            try:
-                loaded_module = self._validate_import(manifest)
-            except Exception as error:
-                self._record_invalid(
-                    folder,
-                    "importação",
-                    error,
-                    module_public_key=manifest.module_public_key,
-                    parent_public_key=manifest.parent_public_key,
-                )
-                continue
-
-            try:
-                self._validate_runtime_contract(manifest, loaded_module)
-            except Exception as error:
-                self._record_invalid(
-                    folder,
-                    "configuração",
-                    error,
-                    module_public_key=manifest.module_public_key,
-                    parent_public_key=manifest.parent_public_key,
-                )
-                continue
-
-            candidates.append(_Candidate(manifest, loaded_module, readme_content))
+            candidates.append(candidate)
         return candidates
 
-    def _load_json(self, folder: Path) -> object:
-        manifest_path = folder / "module.json"
-        if not manifest_path.is_file():
-            raise ManifestValidationError("O arquivo module.json não foi encontrado.")
-        try:
-            return json.loads(manifest_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as error:
-            raise ManifestValidationError("O arquivo module.json contém JSON inválido.") from error
-
-    def _validate_import(self, manifest: ModuleManifest):
-        if manifest.entrypoint_path is None:
-            return None
-        return load_python_entrypoint(
-            manifest.entrypoint_path,
-            manifest.module_public_key,
-        )
-
-    def _validate_runtime_contract(self, manifest: ModuleManifest, loaded_module) -> None:
-        if loaded_module is None:
-            return
-        if manifest.is_executable and not any(
-            callable(getattr(loaded_module, function_name, None))
-            for function_name in ("execute", "run", "main")
-        ):
-            raise ManifestValidationError(
-                "O entry point não possui uma função execute, run ou main."
-            )
-        if manifest.supports_auto_start and not callable(
-            getattr(loaded_module, "start", None)
-        ):
-            raise ManifestValidationError(
-                "Um runtime com auto start precisa fornecer a função start()."
-            )
-
-    def _validate_registry(self, candidates: list[_Candidate]) -> list[_Candidate]:
-        candidates_by_key: dict[str, list[_Candidate]] = defaultdict(list)
+    def _validate_registry(
+        self,
+        candidates: list[ValidatedModule],
+    ) -> list[ValidatedModule]:
+        candidates_by_key: dict[str, list[ValidatedModule]] = defaultdict(list)
         for candidate in candidates:
             candidates_by_key[candidate.manifest.module_public_key].append(candidate)
 
@@ -231,7 +164,10 @@ class ModuleRegistryService:
         finally:
             db.close()
 
-    def _find_cycle_keys(self, candidates: dict[str, _Candidate]) -> set[str]:
+    def _find_cycle_keys(
+        self,
+        candidates: dict[str, ValidatedModule],
+    ) -> set[str]:
         cycle_keys: set[str] = set()
         visited: set[str] = set()
 
@@ -253,7 +189,7 @@ class ModuleRegistryService:
 
     def _sync_candidates(
         self,
-        candidates: list[_Candidate],
+        candidates: list[ValidatedModule],
     ) -> tuple[list[int], set[str], dict[int, str]]:
         pending = {candidate.manifest.module_public_key: candidate for candidate in candidates}
         synced_ids: list[int] = []
@@ -286,7 +222,7 @@ class ModuleRegistryService:
                 break
         return synced_ids, synced_keys, readme_contents
 
-    def _sync_candidate(self, candidate: _Candidate) -> int:
+    def _sync_candidate(self, candidate: ValidatedModule) -> int:
         manifest = candidate.manifest
         db: Session = self.session_factory()
         try:
@@ -473,17 +409,3 @@ def initialize_module_registry() -> ModuleRegistryState:
     except Exception:
         LOGGER.exception("A descoberta de módulos falhou sem interromper a IRIS.")
         return get_module_registry_state()
-
-
-def _extract_manifest_identity(data: object) -> tuple[str | None, str | None]:
-    if not isinstance(data, dict):
-        return None, None
-    module_data = data.get("module")
-    if not isinstance(module_data, dict):
-        return None, None
-    module_public_key = module_data.get("module_public_key")
-    parent_public_key = module_data.get("parent_public_key")
-    return (
-        module_public_key if isinstance(module_public_key, str) else None,
-        parent_public_key if isinstance(parent_public_key, str) else None,
-    )

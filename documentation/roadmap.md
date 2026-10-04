@@ -294,6 +294,8 @@ escopo.
 - [x] Sincronizar por chave pública.
 - [x] Criar tela nativa de módulo e configurações de texto.
 - [x] Registrar falhas técnicas em `module.log`.
+- [x] Criar scaffold e validação local de módulos.
+- [x] Criar modo visual de desenvolvimento e ressincronização local.
 - [ ] Definir empacotamento.
 - [ ] Definir repositório de catálogo.
 - [ ] Definir instalação.

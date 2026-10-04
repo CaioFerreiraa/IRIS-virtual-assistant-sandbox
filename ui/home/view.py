@@ -121,6 +121,31 @@ class HomeViewState:
         if page:
             control.update()
 
+    def replace_module_options(
+        self,
+        module_options: Sequence[ui.dropdowns.ModuleOption],
+    ) -> None:
+        self.module_options = tuple(ui.dropdowns.sort_modules(module_options))
+        self.executable_lookup = ui.dropdowns.module_executable_lookup(
+            self.module_options
+        )
+        if self.dropdowns is None:
+            return
+        self.dropdowns.module_options = self.module_options
+        self.dropdowns.executable_lookup = self.executable_lookup
+        self.dropdowns.icon_lookup = ui.dropdowns.module_icon_lookup(
+            self.module_options
+        )
+        available_ids = {
+            module_id
+            for option in self.module_options
+            if (module_id := ui.dropdowns.option_module_id(option)) is not None
+        }
+        if self.dropdowns.selected_module_id not in available_ids:
+            self.dropdowns.clear_selected_module()
+            self._set_module_icon(None)
+        self.dropdowns.hide_all()
+
     def hide_dropdowns(self, e=None) -> None:
         # Fecha todos os dropdowns.
         self._dropdowns().hide_all(e)

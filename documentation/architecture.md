@@ -165,6 +165,13 @@ Um módulo pode:
 
 Módulos comunitários devem permanecer independentes do layout interno da interface.
 
+O comando `python -m modules` e a aba **Configurações > Módulos locais** usam
+`ModuleDevelopmentService` como interface de desenvolvimento local. A validação
+de pastas fica em `services/module_validation.py` e é reutilizada pelo serviço e
+pelo registry, evitando regras divergentes entre CLI, interface e
+inicialização. A UI somente orquestra esses serviços; a ressincronização que
+pode importar Python ocorre em uma thread de background.
+
 ### `migrations/`
 
 Armazena revisões do Alembic.

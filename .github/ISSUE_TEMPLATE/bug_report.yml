@@ -1,0 +1,43 @@
+name: Relatar um erro
+description: Informe um comportamento reproduzível da IRIS.
+title: "[Erro]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Não publique credenciais ou vulnerabilidades. Para segurança, siga `SECURITY.md`.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: O que aconteceu?
+      description: Descreva o comportamento observado e o esperado.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Como reproduzir?
+      description: Liste os menores passos capazes de reproduzir o problema.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versão ou commit
+      placeholder: Exemplo: main em abc1234
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Ambiente
+      placeholder: Exemplo: Windows 11, Python 3.11
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs sanitizados
+      description: Remova credenciais, caminhos pessoais e dados privados.
+      render: shell

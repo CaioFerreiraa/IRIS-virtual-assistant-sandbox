@@ -2,7 +2,10 @@
 
 ## Bem-vindo
 
-A IRIS é uma plataforma desktop open source de assistência virtual e automação modular. Seu objetivo é permitir que usuários executem tarefas digitais por texto ou voz, usando módulos independentes que podem ser desenvolvidos e ampliados pela comunidade.
+A IRIS é uma plataforma desktop de assistência virtual e automação modular em
+preparação para distribuição open source. Seu objetivo é permitir que usuários
+executem tarefas digitais por texto ou voz, usando módulos independentes que
+podem ser desenvolvidos e ampliados pela comunidade.
 
 A plataforma foi concebida para aproximar pessoas e serviços digitais sem limitar o usuário a um único fornecedor. Em vez de concentrar todas as funcionalidades em um sistema fechado, a IRIS organiza suas capacidades em módulos. Cada módulo representa uma tarefa, uma integração ou um conjunto de ações relacionadas.
 
@@ -49,7 +52,9 @@ O reconhecimento de voz é uma forma de entrada. A decisão sobre o que executar
 
 ### Código aberto
 
-O código da IRIS pode ser estudado, modificado e ampliado. A proposta open source permite que a evolução da plataforma não dependa exclusivamente de um fornecedor.
+A proposta open source busca permitir que o código da IRIS seja estudado,
+modificado e ampliado sem depender exclusivamente de um fornecedor. A licença
+jurídica ainda precisa ser escolhida antes da distribuição oficial.
 
 ### Modularidade
 
@@ -105,6 +110,7 @@ Ainda estão em desenvolvimento ou planejamento:
 - [Inspiração e origem](inspiration.md)
 - [Arquitetura](architecture.md)
 - [Módulos](modules.md)
+- [Desenvolvimento de módulos](module-development.md)
 - [Rotinas](routines.md)
 - [Voz](voice.md)
 - [Execução em segundo plano](background_execution.md)

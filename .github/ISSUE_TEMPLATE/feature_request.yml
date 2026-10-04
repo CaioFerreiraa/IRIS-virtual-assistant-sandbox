@@ -1,0 +1,26 @@
+name: Propor uma melhoria
+description: Sugira uma mudança de comportamento, interface ou documentação.
+title: "[Proposta]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema precisa ser resolvido?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Qual solução você propõe?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+  - type: textarea
+    id: scope
+    attributes:
+      label: Escopo e riscos
+      description: Informe compatibilidade, segurança ou dependências relevantes.

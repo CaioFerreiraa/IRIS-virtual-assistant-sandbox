@@ -450,19 +450,51 @@ A navegação por âncoras internas de títulos ainda pode ser refinada em vers�
 
 ## Configurações
 
-A tela será dividida em:
+A tela é dividida em:
 
 - configurações gerais;
 - configuração de voz;
+- desenvolvimento;
 - senhas.
 
-A seção de voz possui o primeiro formulário completo. Configurações gerais e senhas permanecem como placeholders explícitos.
+A seção de voz possui o formulário de reconhecimento. Configurações gerais
+reúnem as preferências de execução em segundo plano e notificações. Senhas
+permanece como placeholder explícito enquanto o cofre não existe.
 
 O formulário de voz permite escolher modo básico ou tempo real, modelos, idioma, um microfone disponível, CPU ou CUDA, precisão, captura, VAD e opções de reconhecimento. O campo de microfone ocupa a segunda linha da primeira seção e mantém, na mesma linha, uma coluna separada para as ações “Recarregar” e “Deletar microfone”. A primeira consulta novamente os dispositivos; a segunda remove o índice persistido e deixa a seleção sem microfone ativo. O card de estado identifica o microfone selecionado; se não houver seleção, usa o microfone salvo; se também não houver salvo, informa que nenhum microfone está conectado. Abaixo, apresenta o estado do serviço de voz. Cada campo possui um ícone de informação sem ação de clique; a explicação aparece como tooltip no hover. O modo básico oculta os parâmetros exclusivos do RealtimeSTT. O prompt fixo de “IRIS” e o contexto dinâmico dos nomes de chamada dos módulos não são exibidos.
 
 Abaixo do estado do serviço existe um visualizador do nível do microfone efetivo: primeiro o selecionado, depois o salvo e, se ambos estiverem ausentes, nenhum. Quando o backend está pronto, o botão “Testar microfone” abre a rota `/settings/voice_checking` como um modal centralizado. Essa tela exibe transcrições brutas sem exigir a palavra de ativação e permite comparar RealtimeSTT e Faster-Whisper no modo completo.
 
 Salvamentos devem usar toaster para indicar sucesso ou erro. O botão “Salvar” da configuração de voz aparece somente quando existem alterações pendentes e permanece flutuante no centro inferior da aba.
+
+### Módulos locais
+
+A aba **Desenvolvimento** apresenta o título “Módulos locais” e um onboarding
+com os passos para criar, implementar, validar, testar e contribuir. Os botões
+“Guia de módulos” e “Como contribuir” abrem os arquivos Markdown locais em um
+diálogo rolável, sem depender da publicação desses documentos no GitHub.
+“Repositório do projeto” abre o repositório público oficial no navegador.
+O aviso sobre importação de Python fica junto à ação de ressincronização.
+
+A aba de módulos locais apoia o desenvolvimento sem se tornar um editor ou
+catálogo. Ela permite:
+
+- criar um scaffold Python ou HTTP em `modules/installed` sem substituir uma
+  pasta existente;
+- validar manifesto e arquivos de uma pasta local sem importar seu runtime;
+- selecionar a pasta pelo diálogo do sistema, inicialmente em
+  `modules/installed`, ou informar o caminho manualmente;
+- listar diagnósticos estáticos de todas as pastas instaladas e combinar as
+  falhas registradas pela última ressincronização;
+- executar a ressincronização completa em background, com aviso explícito de
+  que entry points Python serão importados no processo da IRIS.
+
+Criar ou validar não altera o banco. Depois de uma ressincronização, a Home e a
+sidebar recarregam as opções na próxima navegação. Falhas mostram o estágio, a
+pasta e, quando disponível, o caminho de `module.log`.
+
+Ao abrir a aba, o diagnóstico carrega em background depois da montagem dos
+controles, permitindo que o formulário apareça antes da leitura das pastas.
 
 ## Acessibilidade
 

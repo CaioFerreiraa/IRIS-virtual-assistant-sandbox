@@ -1,0 +1,44 @@
+name: Propor um módulo
+description: Apresente uma nova capacidade modular para a IRIS.
+title: "[Módulo]: "
+labels: ["module"]
+body:
+  - type: input
+    id: purpose
+    attributes:
+      label: Capacidade do módulo
+      placeholder: Exemplo: consultar compromissos de uma agenda local
+    validations:
+      required: true
+  - type: textarea
+    id: integration
+    attributes:
+      label: Integrações e dependências
+      description: Informe rede, programas, portas, bibliotecas e sistemas necessários.
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: Acesso e permissões
+      description: Informe arquivos, rede, processos e dados que o módulo precisará acessar.
+    validations:
+      required: true
+  - type: textarea
+    id: credentials
+    attributes:
+      label: Credenciais
+      description: Explique se o serviço exige credenciais. Não publique valores reais.
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Forma de execução pretendida
+      options:
+        - Runtime Python
+        - Requisição HTTP declarativa
+        - Módulo organizacional
+        - Ainda não sei
+    validations:
+      required: true
