@@ -1,5 +1,3 @@
-import unicodedata
-
 import flet as ft
 
 from database.db import SessionLocal
@@ -8,16 +6,15 @@ from repositories.log_repository import LogRepository
 from repositories.module_repository import ModuleRepository
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.table import TableColumn, build_responsive_table
+from ui.shared.components.table_search import (
+    build_table_search_bar, build_table_search_input, normalize_search_text,
+)
 from ui.theme.colors import (
-    BLUE_GREY,
-    BORDER,
     CANCEL,
     CONFIRM,
-    PASTEL_DARK_PURPLE,
     PASTEL_BLUE,
     TEXT_PRIMARY,
     WARNING,
-    SURFACE,
     TEXT_SECONDARY,
 )
 
@@ -47,18 +44,8 @@ class HistoryViewState:
             max_lines=2,
             overflow=ft.TextOverflow.ELLIPSIS,
         )
-        self.search_input = ft.TextField(
-            prefix_icon=ft.Icons.SEARCH_ROUNDED,
-            hint_text="Pesquisar no histórico...",
-            text_style=ft.TextStyle(size=12, color=TEXT_PRIMARY),
-            hint_style=ft.TextStyle(size=12, color=TEXT_SECONDARY),
-            border_color=BORDER,
-            focused_border_color=BLUE_GREY,
-            cursor_color=PASTEL_DARK_PURPLE,
-            border_radius=8,
-            dense=True,
-            expand=True,
-            on_change=self.on_search_change,
+        self.search_input = build_table_search_input(
+            "Pesquisar no histórico...", self.on_search_change,
         )
         self.table_container = ft.Container(expand=True)
 
@@ -80,24 +67,7 @@ class HistoryViewState:
         )
 
     def _build_search_bar(self) -> ft.Container:
-        return ft.Container(
-            bgcolor=SURFACE,
-            padding=ft.Padding(left=10, top=8, right=10, bottom=8),
-            content=ft.Row(
-                spacing=8,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                controls=[
-                    self.search_input,
-                    ft.IconButton(
-                        icon=ft.Icons.CLOSE_ROUNDED,
-                        icon_size=18,
-                        icon_color=TEXT_SECONDARY,
-                        tooltip="Limpar pesquisa",
-                        on_click=self.clear_search,
-                    ),
-                ],
-            ),
-        )
+        return build_table_search_bar(self.search_input, self.clear_search)
 
     def on_search_change(self, event: ft.ControlEvent) -> None:
         self._filter_rows(event.control.value or "")
@@ -114,7 +84,7 @@ class HistoryViewState:
         self._update_if_mounted(self.table_container)
 
     def _filter_rows(self, query: str) -> None:
-        normalized_query = _normalize_search_text(query)
+        normalized_query = normalize_search_text(query)
         tokens = normalized_query.split()
         if not tokens:
             self.filtered_rows = list(self.rows)
@@ -183,7 +153,7 @@ def _build_history_row(log: Log, module_repository: ModuleRepository) -> dict[st
         "routine": routine_name,
         "status": _build_status_chip(log.status),
         "message": message,
-        "_search_text": _normalize_search_text(
+        "_search_text": normalize_search_text(
             f"{log.id} {created_at} {module_path} {routine_name} {status_label} {message}"
         ),
     }
@@ -236,15 +206,4 @@ def _format_datetime(value) -> str:
 
 
 def _normalize_search_text(value: str) -> str:
-    normalized_value = unicodedata.normalize("NFD", value.lower())
-    chars: list[str] = []
-    for char in normalized_value:
-        if unicodedata.category(char) == "Mn":
-            continue
-        if char.isalnum() or char.isspace():
-            chars.append(char)
-            continue
-        if char not in "-_":
-            chars.append(" ")
-
-    return " ".join("".join(chars).split())
+    return normalize_search_text(value)

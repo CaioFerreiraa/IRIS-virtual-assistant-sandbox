@@ -5,6 +5,7 @@ import flet as ft
 
 from services.routine_schedule_service import MONTHLY, RoutineScheduleService
 from ui.routines.view import RoutineFormState, RoutinesViewState
+from ui.theme.colors import PASTEL_DARK_PURPLE, PASTEL_PURPLE, SURFACE
 
 
 class FakeRoutineService:
@@ -65,6 +66,22 @@ class RoutinesViewTests(unittest.TestCase):
         self.assertIn("Nenhuma rotina cadastrada.", texts)
         self.assertNotIn("Conteúdo em desenvolvimento.", texts)
 
+    def test_search_filters_routines_and_can_be_cleared(self) -> None:
+        service = FakeRoutineService()
+        service.list_routines = lambda: [
+            {"id": 1, "name": "Café diário", "schedule_description": "Diariamente",
+             "module_count": 2, "schedule_valid": True, "active": True},
+            {"id": 2, "name": "Backup", "schedule_description": "Semanalmente",
+             "module_count": 1, "schedule_valid": True, "active": False},
+        ]
+        state = RoutinesViewState(routine_service=service, toaster_handler=None)
+        state.build()
+        state.search_input.value = "cafe"
+        state.on_search_change(SimpleNamespace(control=state.search_input))
+        self.assertEqual(1, len(state.content_slot.content.content.controls[1].controls))
+        state.clear_search(SimpleNamespace())
+        self.assertEqual(2, len(state.content_slot.content.content.controls[1].controls))
+
     def test_form_contains_required_fields_and_only_available_options(self) -> None:
         parent = RoutinesViewState(
             routine_service=FakeRoutineService(),
@@ -106,6 +123,12 @@ class RoutinesViewTests(unittest.TestCase):
         self.assertIn("Nenhum dia selecionado.", texts)
         self.assertEqual(["1"], option_keys)
         self.assertTrue(form.active_switch.value)
+        self.assertEqual(PASTEL_DARK_PURPLE, form.active_switch.active_color)
+        self.assertEqual(PASTEL_PURPLE, form.active_switch.active_track_color)
+        self.assertEqual(PASTEL_PURPLE, dialog.title.controls[0].bgcolor)
+        general_tab = dialog.content.content.content.controls[1].controls[0]
+        behavior_section = general_tab.content.controls[1]
+        self.assertEqual(SURFACE, behavior_section.controls[1].bgcolor)
         self.assertTrue(form.save_button.disabled)
         self.assertNotEqual(
             form.save_button.style.bgcolor[ft.ControlState.DISABLED],

@@ -21,6 +21,9 @@ from ui.shared.components.form_controls import (
 )
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.table import TableColumn, build_responsive_table
+from ui.shared.components.table_search import (
+    build_table_search_bar, build_table_search_input, normalize_search_text,
+)
 from ui.theme.colors import (
     BLUE_GREY,
     BORDER,
@@ -28,6 +31,7 @@ from ui.theme.colors import (
     CONFIRM,
     PASTEL_BLUE,
     PASTEL_DARK_PURPLE,
+    PASTEL_PURPLE,
     SURFACE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
@@ -63,6 +67,9 @@ class RoutinesViewState:
         self.toaster_handler = toaster_handler
         self.routine_service = routine_service
         self.routines: list[dict[str, object]] = []
+        self.search_input = build_table_search_input(
+            "Pesquisar nas rotinas...", self.on_search_change,
+        )
         self.running_ids: set[int] = set()
         self.content_slot = ft.Container(expand=True)
         self.root: ft.Container | None = None
@@ -77,7 +84,14 @@ class RoutinesViewState:
                 self.open_create_form,
                 height=38,
             ),
-            content=self.content_slot,
+            content=ft.Column(
+                expand=True,
+                spacing=12,
+                controls=[
+                    build_table_search_bar(self.search_input, self.clear_search),
+                    self.content_slot,
+                ],
+            ),
         )
         self.refresh()
         return self.root
@@ -91,15 +105,52 @@ class RoutinesViewState:
         self._update_if_mounted(self.content_slot)
         try:
             self.routines = self.routine_service.list_routines()
-            self.content_slot.content = build_responsive_table(
-                columns=ROUTINE_COLUMNS,
-                rows=[self._build_row(routine) for routine in self.routines],
-                empty_message="Nenhuma rotina cadastrada.",
-                row_height=66,
-            )
+            self._render_table()
         except Exception as error:
             self.content_slot.content = self._build_error_state(error)
         self._update_if_mounted(self.content_slot)
+
+    def on_search_change(self, event: ft.ControlEvent) -> None:
+        self._render_table()
+        self._update_if_mounted(self.content_slot)
+
+    def clear_search(self, event: ft.ControlEvent) -> None:
+        self.search_input.value = ""
+        self._render_table()
+        self._update_if_mounted(self.search_input)
+        self._update_if_mounted(self.content_slot)
+
+    def _render_table(self) -> None:
+        tokens = normalize_search_text(self.search_input.value or "").split()
+        filtered = [
+            routine for routine in self.routines
+            if all(token in self._routine_search_text(routine) for token in tokens)
+        ]
+        self.content_slot.content = build_responsive_table(
+            columns=ROUTINE_COLUMNS,
+            rows=[self._build_row(routine) for routine in filtered],
+            empty_message=(
+                "Nenhuma rotina encontrada."
+                if tokens else "Nenhuma rotina cadastrada."
+            ),
+            row_height=66,
+        )
+
+    def _routine_search_text(self, routine: dict[str, object]) -> str:
+        if not routine.get("schedule_valid"):
+            status = "Agendamento inválido"
+        elif routine.get("id") in self.running_ids:
+            status = "Executando"
+        else:
+            status = "Ativa" if routine.get("active") else "Inativa"
+        return normalize_search_text(" ".join((
+            str(routine.get("name") or ""),
+            str(routine.get("schedule_description") or ""),
+            str(routine.get("module_count", 0)),
+            _format_datetime(routine.get("next_run_at")),
+            _format_datetime(routine.get("last_run_at")),
+            status,
+        )))
 
     def open_create_form(self, event: ft.ControlEvent) -> None:
         self._open_form(event, None)
@@ -250,6 +301,8 @@ class RoutinesViewState:
         schedule_valid = bool(routine.get("schedule_valid"))
         active_switch = ft.Switch(
             value=bool(routine.get("active")),
+            active_color=PASTEL_DARK_PURPLE,
+            active_track_color=PASTEL_PURPLE,
             disabled=is_running or not schedule_valid,
             tooltip=(
                 "Corrija o agendamento antes de ativar."
@@ -431,6 +484,8 @@ class RoutineFormState:
         self.active_switch = ft.Switch(
             label="Rotina ativa",
             value=(bool(routine.get("active")) if routine is not None else True),
+            active_color=PASTEL_DARK_PURPLE,
+            active_track_color=PASTEL_PURPLE,
         )
         self.stop_checkbox = ft.Checkbox(
             label="Parar se alguma requisição falhar",
@@ -470,6 +525,7 @@ class RoutineFormState:
         self.dialog = custom_dialog(
             title="Nova rotina" if create_mode else "Editar rotina",
             icon=ft.Icons.AUTORENEW_ROUNDED,
+            icon_bgcolor=PASTEL_PURPLE,
             modal=True,
             alignment=ft.Alignment.CENTER,
             inset_padding=ft.Padding(left=36, top=24, right=36, bottom=24),
@@ -1039,7 +1095,11 @@ class RoutineFormState:
             controls.append(argument_field)
         return ft.Container(
             padding=12,
-            bgcolor=SURFACE if available else BLUE_GREY,
+            bgcolor=(
+                SURFACE
+                if available
+                else ft.Colors.with_opacity(0.18, CANCEL)
+            ),
             border=ft.Border.all(1, BORDER),
             border_radius=8,
             content=ft.Column(spacing=8, controls=controls),
@@ -1115,7 +1175,7 @@ def _build_form_section(
             ),
             ft.Container(
                 padding=14,
-                bgcolor=BLUE_GREY,
+                bgcolor=SURFACE,
                 border=ft.Border.all(1, BORDER),
                 border_radius=8,
                 content=ft.Column(spacing=12, controls=controls),

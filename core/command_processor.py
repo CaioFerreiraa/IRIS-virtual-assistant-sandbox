@@ -9,17 +9,24 @@ from repositories.module_repository import ModuleRepository
 from services.http_service import ModuleHttpRequestService
 from services.module_manifest import MATERIAL_ICON_PATTERN, PUBLIC_KEY_PATTERN
 from services.module_service import get_effective_module_variables
+from services.vault_service import VaultService
+from util.vault_names import PLACEHOLDER_PATTERN, VAULT_NAME_PATTERN
+from util.vault_values import redact_vault_values
 
 
 class CommandProcessor:
-    def __init__(self, module_repository: ModuleRepository, session_factory=None):
+    def __init__(self, module_repository: ModuleRepository, session_factory=None,
+                 vault_service: VaultService | None = None):
         self.module_repository = module_repository
         self.module_runner = ModuleRunner()
         self.logger_service = LoggerService(LogRepository(module_repository.db))
         self.session_factory = session_factory or sessionmaker(
             bind=module_repository.db.get_bind()
         )
-        self.http_request_service = ModuleHttpRequestService(self.session_factory)
+        self.vault_service = vault_service or VaultService(self.session_factory)
+        self.http_request_service = ModuleHttpRequestService(
+            self.session_factory, vault_service=self.vault_service,
+        )
 
     def create_module(
         self,
@@ -259,12 +266,22 @@ class CommandProcessor:
                 self.module_repository.db,
                 module.id,
             )
-            return self.module_runner.run_entrypoint(
-                module.request_url,
+            declared_names = set(self.vault_service.declared_names(module.id))
+            vault = self.vault_service.resolve_module_keys(module.id)
+            resolved_argument = self._resolve_argument_vault_keys(
                 argument,
+                declared_names,
+                vault,
+            )
+            result = self.module_runner.run_entrypoint(
+                module.request_url,
+                resolved_argument,
                 variables,
                 module.module_public_key,
+                vault=vault,
+                redact_result=False,
             )
+            return self._process_python_result(result, declared_names, vault)
 
         if request_method == "GET":
             opened = webbrowser.open(module.request_url)
@@ -282,6 +299,58 @@ class CommandProcessor:
         raise ValueError(
             f"Método de execução não suportado: {request_method}"
         )
+
+    def _process_python_result(
+        self,
+        result: dict,
+        declared_names: set[str],
+        vault: dict[str, str],
+    ) -> dict:
+        if "vault_update" not in result:
+            return redact_vault_values(result, vault, preserve_result_fields=True)
+        update = result.pop("vault_update")
+        if not isinstance(update, dict) or set(update) != {"name", "value"}:
+            raise ValueError("A atualização do Vault retornada pelo módulo é inválida.")
+        name = update["name"]
+        value = update["value"]
+        if not isinstance(name, str) or name not in declared_names:
+            raise ValueError("O módulo tentou alterar uma Vault Key não declarada.")
+        if not isinstance(value, str) or not value:
+            raise ValueError("O módulo retornou um valor inválido para o Vault.")
+        if result.get("success") is not True:
+            raise ValueError("Um módulo com falha não pode alterar o Vault.")
+
+        self.vault_service.update_value_by_iris(name, value)
+        protected_values = {**vault, name: value}
+        return redact_vault_values(
+            result, protected_values, preserve_result_fields=True,
+        )
+
+    @staticmethod
+    def _resolve_argument_vault_keys(
+        argument: str | None,
+        declared_names: set[str],
+        vault: dict[str, str],
+    ) -> str | None:
+        if argument is None:
+            return None
+
+        def replace(match) -> str:
+            placeholder = match.group(1)
+            if not placeholder.startswith("vk."):
+                return match.group(0)
+            name = placeholder[3:]
+            if not VAULT_NAME_PATTERN.fullmatch(name):
+                raise ValueError("O argumento contém uma referência de Vault Key inválida.")
+            if name not in declared_names:
+                raise ValueError(
+                    f"A Vault Key {name} não foi declarada em vault_keys pelo módulo."
+                )
+            if name not in vault:
+                raise ValueError(f"A Vault Key {name} não foi configurada.")
+            return vault[name]
+
+        return PLACEHOLDER_PATTERN.sub(replace, str(argument))
 
     def _create_execution_log(
         self,

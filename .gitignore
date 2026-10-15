@@ -17,6 +17,7 @@ modules/installed/**/module.log
 modules/installed/**/node.log
 
 .env
+.iris_vault.key
 .env.*
 
 .DS_Store

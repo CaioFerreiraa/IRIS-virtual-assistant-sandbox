@@ -275,7 +275,6 @@ def _open_voice_status_dialog(
         content=_build_voice_status_dialog_content(active_key, active_message),
         width=VOICE_STATUS_DIALOG_WIDTH,
         icon=ft.Icons.MIC_ROUNDED,
-        accent_color=BLUE_GREY,
         alignment=ft.Alignment.CENTER,
         inset_padding=ft.Padding(left=24, top=24, right=24, bottom=24),
     )

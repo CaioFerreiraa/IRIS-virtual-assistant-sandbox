@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from modules.installed_modules import get_installed_modules
 from services.module_loader import load_python_entrypoint
+from util.vault_values import redact_vault_values
 
 
 PYTHON_REQUEST_METHOD = "PYTHON"
@@ -79,14 +80,24 @@ class ModuleRunner:
         argument: str | None = None,
         variables: dict[str, str] | None = None,
         module_public_key: str = "module",
+        vault: dict[str, str] | None = None,
+        redact_result: bool = True,
     ) -> dict:
         module = self._load_entrypoint(entrypoint, module_public_key)
 
         for function_name in ("execute", "run", "main"):
             function = getattr(module, function_name, None)
             if callable(function):
-                result = self._call_entrypoint(function, argument, variables or {})
-                return result if isinstance(result, dict) else {"success": True, "result": result}
+                try:
+                    result = self._call_entrypoint(function, argument, variables or {}, vault or {})
+                except Exception as error:
+                    if vault:
+                        raise RuntimeError(str(redact_vault_values(str(error), vault))) from None
+                    raise
+                result = result if isinstance(result, dict) else {"success": True, "result": result}
+                if redact_result:
+                    return redact_vault_values(result, vault or {}, preserve_result_fields=True)
+                return result
 
         raise ValueError(f"Módulo sem função executável: {entrypoint}")
 
@@ -98,6 +109,7 @@ class ModuleRunner:
         function: Callable,
         argument: str | None,
         variables: dict[str, str],
+        vault: dict[str, str] | None = None,
     ):
         signature = inspect.signature(function)
         parameters = signature.parameters
@@ -105,25 +117,33 @@ class ModuleRunner:
             parameter.kind == inspect.Parameter.VAR_KEYWORD
             for parameter in parameters.values()
         )
+        available = {"argument": argument, "variables": variables, "vault": dict(vault or {})}
         keyword_arguments = {}
-        if "argument" in parameters or accepts_keywords:
-            keyword_arguments["argument"] = argument
-        if "variables" in parameters or accepts_keywords:
-            keyword_arguments["variables"] = variables
-        if keyword_arguments:
-            return function(**keyword_arguments)
-
-        if argument is not None and any(
-            parameter.kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                inspect.Parameter.VAR_POSITIONAL,
-            )
-            for parameter in parameters.values()
+        positional_arguments = []
+        for parameter in parameters.values():
+            if parameter.kind == inspect.Parameter.POSITIONAL_ONLY:
+                if parameter.name in available:
+                    positional_arguments.append(available[parameter.name])
+                elif not positional_arguments and argument is not None:
+                    positional_arguments.append(argument)
+                elif parameter.default is not inspect.Parameter.empty:
+                    positional_arguments.append(parameter.default)
+            elif parameter.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
+                if parameter.name in available:
+                    keyword_arguments[parameter.name] = available[parameter.name]
+                elif not positional_arguments and "argument" not in parameters and not accepts_keywords and argument is not None:
+                    positional_arguments.append(argument)
+            elif parameter.kind == inspect.Parameter.KEYWORD_ONLY and parameter.name in available:
+                keyword_arguments[parameter.name] = available[parameter.name]
+        if accepts_keywords:
+            for name, value in available.items():
+                if name not in parameters:
+                    keyword_arguments[name] = value
+        elif not parameters.keys() & available.keys() and argument is not None and any(
+            parameter.kind == inspect.Parameter.VAR_POSITIONAL for parameter in parameters.values()
         ):
-            return function(argument)
-        return function()
+            positional_arguments.append(argument)
+        return function(*positional_arguments, **keyword_arguments)
 
     def _call_with_optional_query(self, function: Callable, query: str):
         signature = inspect.signature(function)

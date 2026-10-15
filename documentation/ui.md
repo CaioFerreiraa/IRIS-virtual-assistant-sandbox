@@ -81,6 +81,10 @@ O indicador de voz abre um diálogo ao ser clicado, independentemente do estado 
 
 ### Sidebar
 
+A seção de diagnósticos aparece somente quando existem módulos inválidos,
+permanece expandida por padrão e pode ser recolhida ou exibida novamente pelo
+título.
+
 A sidebar apresenta os módulos em uma árvore recolhível: cada submódulo
 fica dentro do menu de seu pai, sem alterar a rota numérica usada na navegação.
 O item ativo mantém seus ancestrais expandidos, exceto quando o usuário
@@ -188,7 +192,10 @@ altura. A área principal permite rolagem quando o conteúdo excede a janela.
 
 ### Tela do módulo
 
-A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo. Em execuções Python e legadas, o botão primário “Executar” aparece à esquerda do status; em módulos HTTP, o mesmo botão fica junto de método e URL na aba “Execução”. Quando o módulo ou um filho executável depende de um backend ancestral offline, essa ação passa a ser “Iniciar módulo”. Depois da inicialização, o estado da sidebar é atualizado e a ação executável volta a ser “Executar”. O conteúdo é dividido em abas:
+A rota `/modules/{module_id}` monta a tela consultando o banco e o estado preparado pelo registry. O cabeçalho usa o ícone Material Symbols Rounded do módulo. Ao lado do status, um botão quadrado com ícone de pasta permanece sempre visível e abre o diretório daquele módulo no Explorador de Arquivos. Em execuções Python e legadas, o botão primário “Executar” aparece à esquerda do status; em módulos HTTP, o mesmo botão fica junto de método e URL na aba “Execução”. Quando o módulo ou um filho executável depende de um backend ancestral offline, essa ação passa a ser “Iniciar módulo”. Depois da inicialização, o estado da sidebar é atualizado e a ação executável volta a ser “Executar”. O conteúdo é dividido em abas:
+
+Nos módulos instalados, o botão usa a pasta do manifesto; nos módulos nativos,
+usa a pasta do README dentro de `modules/default_modules`.
 
 - **Sobre**: descrição, README quando existe e `module.json` formatado com fonte Consolas quando existe;
 - **Execução**: aparece somente em módulos executáveis, concentra o argumento e permite personalizar a definição HTTP quando existe;
@@ -202,7 +209,7 @@ Na aba “Execução”, o card “Argumento da execução” aparece primeiro e
 largura disponível. Módulos Python mantêm o argumento transitório e o fluxo
 atual, sem um card informativo adicional. Módulos HTTP mostram método, URL, a
 ação “Voltar ao module.json” e o único botão “Executar”, seguidos das subabas
-“Parâmetros”, “Autorização”, “Cabeçalhos”, “Corpo” e “Scripts”. Todos os campos
+“Parâmetros”, “Autorização”, “Cabeçalhos”, “Corpo”, “Scripts” e “Resposta → Vault”. Todos os campos
 da definição HTTP podem ser editados. Params e Headers usam linhas com estado,
 chave, valor e descrição, incluindo ações para adicionar ou remover itens;
 Authorization usa o seletor “Sem autenticação”; o body separa modo e conteúdo;
@@ -210,7 +217,8 @@ scripts são textos armazenados, mas não executados. Quando qualquer campo muda
 requisição” aparece da mesma forma que a barra da aba “Configurações”. Salvar
 mantém a personalização no banco; executar salva alterações pendentes antes da
 chamada. “Voltar ao module.json” restaura a definição distribuída e preserva o
-último argumento utilizado.
+último argumento utilizado. A subaba “Resposta → Vault” permite configurar
+a chave de destino e o caminho do token na resposta JSON.
 Quando `argument_enabled` é falso, o campo fica desabilitado e explica que o
 módulo não utiliza argumento de execução. Módulos executáveis indisponíveis
 mantêm a aba visível, com controles desabilitados e o motivo apresentado.
@@ -223,9 +231,10 @@ mínima preserva somente o cabeçalho, e o corpo rolável ocupa o espaço escolh
 sem receber uma altura fixa do fluxo de execução.
 
 Na demonstração Notas, o módulo raiz não possui aba “Execução” e apresenta o
-switch de auto start em “Configurações”. Seus quatro filhos possuem aba
-“Execução”; os três filhos HTTP exibem a definição estilo Postman e o filho
-“Abrir notas” abre a página externa servida pelo backend local.
+switch de auto start em “Configurações”. Seus cinco filhos possuem aba
+“Execução”; os quatro filhos HTTP exibem a definição estilo Postman, “Login nas
+notas” simula o login por HTTP e “Abrir notas” abre a página externa servida pelo
+backend local.
 
 O card “Dados do módulo” fica sempre no fim da aba “Configurações”. Ele lista em
 modo desabilitado todas as colunas mapeadas pela entidade `Module`; novas colunas
@@ -246,13 +255,14 @@ IDs inexistentes ou inválidos exibem “Módulo não encontrado”. Módulos in
 
 ### Rotinas
 
-A rota `/routines` apresenta uma tabela com nome, agendamento amigável,
+A rota `/routines` apresenta uma tabela pesquisável com nome, agendamento amigável,
 quantidade de módulos, próxima e última execução, status e ações. O switch da
 linha ativa ou desativa a rotina e permanece sincronizado com o scheduler. As
 ações permitem executar em segundo plano, editar e excluir com confirmação.
 
 O formulário de criação e edição usa um diálogo amplo dividido nas abas
-“Geral”, “Agendamento” e “Módulos”. A escolha semanal usa um seletor compacto;
+“Geral”, “Agendamento” e “Módulos”. As seções do formulário usam a superfície
+clara e o ícone do diálogo usa roxo pastel. A escolha semanal usa um seletor compacto;
 cada seleção aparece como uma etiqueta removível e o checkbox “Todos os dias”
 preenche ou limpa a semana completa. Para a repetição mensal, o usuário digita
 um número inteiro entre 1 e 31 e confirma pelo botão roxo com ícone de adição.
@@ -278,7 +288,7 @@ por toaster.
 
 Apresenta registros em tabela responsiva que ocupa toda a área disponível da
 rota. As colunas são distribuídas por peso para acompanhar a largura da linha,
-com reticências e tooltip quando o conteúdo não couber.
+com reticências e tooltip em todas as células não destinadas a ações.
 
 A tela possui uma barra de pesquisa que filtra os registros por ID, data,
 módulo, rotina, status e mensagem. A pesquisa ignora diferenças entre
@@ -346,15 +356,28 @@ Utilizado quando uma ação exige:
 - aviso;
 - conteúdo complementar.
 
+Os diálogos compartilhados exibem um botão × no canto superior direito e uma
+alça no cabeçalho para redimensionar o conteúdo. O ícone do título fica sobre
+`BLUE_GREY`, sem borda, preservando o mesmo padrão dos cabeçalhos de seções.
+
 ### Tabela
 
-Oferece estrutura reutilizável para listas com colunas.
+Oferece estrutura reutilizável para listas com colunas. O cabeçalho usa
+`PASTEL_PURPLE`; toda célula que não seja de ações apresenta tooltip com seu
+texto. Textos e números podem ser selecionados com o mouse, e um clique copia
+o conteúdo da célula para a área de transferência. Células de ações não são
+copiadas.
 
 ### Controles de formulário
+
+Todos os switches usam roxo escuro no seletor ativo e roxo pastel na trilha
+ativa, mantendo o mesmo estado visual nas configurações, módulos e rotinas.
 
 Centralizam estilos de dropdowns, campos de texto, botões primários e mensagens de tooltip usados por formulários. Somente campos de entrada desabilitados usam fundo `GREY_200`, texto `TEXT_PRIMARY` e borda `TEXT_PRIMARY`. Campos habilitados preservam o fundo padrão, a borda `BORDER` e a borda de foco roxa. Botões primários desabilitados usam fundo e texto em tons de cinza, distinguindo-se visualmente do estado ativo roxo. O valor, o rótulo e o placeholder dos campos usam tamanho 14; o texto auxiliar preserva o tamanho padrão do Flet.
 Campos de entrada devem preencher toda a largura disponível na célula da grid, independentemente do tamanho do texto exibido.
 Quando um campo possuir texto de ajuda, o mesmo conteúdo deve ficar disponível como tooltip.
+Campos de múltiplas linhas mantêm ícone, placeholder e texto alinhados ao
+início do input, inclusive quando vazios ou com altura ampliada.
 `build_floating_save_bar` mantém a barra de salvamento montada e anima sua
 entrada de baixo para cima, com saída no sentido inverso e transição de
 opacidade. O fundo do painel é branco com leve transparência para preservar a
@@ -455,17 +478,55 @@ A tela é dividida em:
 - configurações gerais;
 - configuração de voz;
 - desenvolvimento;
-- senhas.
+- Vault Keys.
+
+Ao abrir Configurações, a aba inicial é **Configurações gerais**.
 
 A seção de voz possui o formulário de reconhecimento. Configurações gerais
-reúnem as preferências de execução em segundo plano e notificações. Senhas
-permanece como placeholder explícito enquanto o cofre não existe.
+reúnem as preferências de execução em segundo plano e notificações. Vault Keys
+permite cadastrar e administrar variáveis globais locais.
 
 O formulário de voz permite escolher modo básico ou tempo real, modelos, idioma, um microfone disponível, CPU ou CUDA, precisão, captura, VAD e opções de reconhecimento. O campo de microfone ocupa a segunda linha da primeira seção e mantém, na mesma linha, uma coluna separada para as ações “Recarregar” e “Deletar microfone”. A primeira consulta novamente os dispositivos; a segunda remove o índice persistido e deixa a seleção sem microfone ativo. O card de estado identifica o microfone selecionado; se não houver seleção, usa o microfone salvo; se também não houver salvo, informa que nenhum microfone está conectado. Abaixo, apresenta o estado do serviço de voz. Cada campo possui um ícone de informação sem ação de clique; a explicação aparece como tooltip no hover. O modo básico oculta os parâmetros exclusivos do RealtimeSTT. O prompt fixo de “IRIS” e o contexto dinâmico dos nomes de chamada dos módulos não são exibidos.
 
 Abaixo do estado do serviço existe um visualizador do nível do microfone efetivo: primeiro o selecionado, depois o salvo e, se ambos estiverem ausentes, nenhum. Quando o backend está pronto, o botão “Testar microfone” abre a rota `/settings/voice_checking` como um modal centralizado. Essa tela exibe transcrições brutas sem exigir a palavra de ativação e permite comparar RealtimeSTT e Faster-Whisper no modo completo.
 
 Salvamentos devem usar toaster para indicar sucesso ou erro. O botão “Salvar” da configuração de voz aparece somente quando existem alterações pendentes e permanece flutuante no centro inferior da aba.
+
+### Vault Keys
+
+A aba **Configurações → Vault Keys** apresenta uma tabela CRUD (cadastro,
+consulta, edição e exclusão) com Nome, Descrição, Valor, Módulos que usam,
+IRIS pode alterar e Ações. Um valor presente aparece como `••••••••`; uma
+chave sem valor aparece como `—`. A tabela não revela nem copia segredos.
+A listagem consulta somente metadados. Os módulos vêm de `vault_keys_json`;
+quando não houver declaração, aparece “Nenhum módulo”.
+
+“Cadastrar chave” abre um formulário horizontal com duas colunas. A primeira
+contém nome, valor mascarado e o switch “IRIS pode alterar o valor”, desligado
+por padrão; a segunda contém apenas a descrição opcional. Na edição, o nome
+fica visualmente desabilitado. Se houver valor, o campo “Novo valor” mostra um
+marcador censurado fixo, sem revelar o segredo: mantê-lo preserva o valor,
+apagá-lo e salvar limpa o valor, e digitar outro o substitui. Se não houver
+valor, o campo começa vazio. O diálogo abre com altura ajustada ao
+conteúdo, e os ícones dos inputs usam `PASTEL_DARK_PURPLE`. O usuário pode
+alterar valores
+independentemente desse switch. Excluir exige confirmação e lista os módulos
+afetados, mas continua permitido. Na próxima execução, HTTP informa chave não
+configurada e Python recebe o dicionário sem esse nome.
+
+O carregamento e as operações de banco executam fora da thread visual. A aba
+apresenta estado vazio, carregamento e erro; salvamentos e exclusões usam o
+toaster existente. Botões usam os componentes e as cores padrão da aplicação.
+A proteção é local e básica para o MVP; veja [Vault Keys](vault.md).
+A barra de pesquisa segue o Histórico e filtra nome, descrição, módulos e
+permissão sem consultar valores secretos.
+
+Nos campos textuais da requisição HTTP e no campo de argumento, `vk.` abre uma
+lista das Vault Keys declaradas pelo módulo e cadastradas no Vault. A escolha
+insere `{{vk.NOME_DA_CHAVE}}`. Referências ausentes usam fundo vermelho. O
+placeholder reservado `{{argument}}` usa fundo azul acinzentado pastel nos
+campos e nos textos explicativos, facilitando a distinção visual.
+
 
 ### Módulos locais
 

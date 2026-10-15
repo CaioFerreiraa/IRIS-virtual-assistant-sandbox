@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from core.command_processor import CommandProcessor
 from database.db import SessionLocal
 from repositories.module_repository import ModuleRepository
+from services.vault_service import VaultService
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,9 @@ class HomeService:
             return []
         finally:
             db.close()
+
+    def list_module_vault_keys(self, module_id: int) -> tuple[str, ...]:
+        return VaultService(self.session_factory).available_names(module_id)
 
     def execute_module(
         self,

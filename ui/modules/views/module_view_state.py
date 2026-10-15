@@ -6,7 +6,7 @@ import flet as ft
 
 from database.db import SessionLocal
 from services.home_service import HomeService
-from services.module_service import get_module_detail
+from services.module_service import get_module_detail, open_module_directory
 from ui.modules.components.not_found import build_module_not_found_view
 from ui.modules.components.status_chip import build_status_chip
 from ui.modules.constants import ERROR_TAB, MODULE_TABS
@@ -139,6 +139,7 @@ class ModuleViewState(
         )
         self.execute_button.height = 40
         self.status_chip = build_status_chip(str(self.detail["status"]))
+        self.open_folder_button = self._build_open_folder_button()
         self._sync_action_button()
         self.execution_result_card = self._build_execution_result_card()
         self.log_container = ft.Container(expand=True)
@@ -198,13 +199,50 @@ class ModuleViewState(
         controls: list[ft.Control] = []
         if self.http_request is None:
             controls.append(self.execute_button)
-        controls.append(self.status_chip)
+        controls.extend([self.status_chip, self.open_folder_button])
         return ft.Row(
             tight=True,
             spacing=12,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=controls,
         )
+
+    def _build_open_folder_button(self) -> ft.Container:
+        def on_hover(event: ft.ControlEvent) -> None:
+            hovering = str(event.data).lower() == "true"
+            event.control.bgcolor = (
+                PASTEL_PURPLE
+                if hovering
+                else ft.Colors.with_opacity(0.45, PASTEL_PURPLE)
+            )
+            event.control.update()
+
+        return ft.Container(
+            width=40,
+            height=40,
+            border_radius=8,
+            alignment=ft.Alignment.CENTER,
+            bgcolor=ft.Colors.with_opacity(0.45, PASTEL_PURPLE),
+            content=ft.Icon(
+                ft.Icons.FOLDER_OPEN_ROUNDED,
+                size=21,
+                color=PASTEL_DARK_PURPLE,
+            ),
+            on_click=self.on_open_module_folder,
+            on_hover=on_hover,
+            tooltip="Abrir pasta do módulo",
+            ink=True,
+            ink_color=ft.Colors.with_opacity(0.08, PASTEL_PURPLE),
+        )
+
+    def on_open_module_folder(self, _event: ft.ControlEvent) -> None:
+        try:
+            open_module_directory(
+                str(self.detail.get("module_directory") or "")
+            )
+        except ValueError as error:
+            if self.toaster_handler is not None:
+                self.toaster_handler.show_error(str(error), title="Módulo")
 
     def _build_breadcrumb(self) -> ft.Row:
         controls: list[ft.Control] = []

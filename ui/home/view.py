@@ -13,10 +13,16 @@ from services.voice_submission_service import (
     VoiceSubmissionService,
     VoiceSubmissionState,
 )
+from util.vault_names import active_vault_query, insert_vault_placeholder
 from ui.shared.components.result_card import build_result_card
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
-from ui.theme.colors import PASTEL_DARK_PURPLE
+from ui.shared.components.vault_reference_field import (
+    cursor_offset,
+    matching_vault_names,
+    sync_reference_field_style,
+)
+from ui.theme.colors import BLUE_GREY, PASTEL_DARK_PURPLE
 from ui.theme.fonts import TITLE_FONT
 
 
@@ -156,6 +162,11 @@ class HomeViewState:
         controls = self._controls()
         controls.command_input_field.value = ""
         controls.argument_input_field.value = ""
+        sync_reference_field_style(
+            controls.argument_input_field,
+            (),
+            default_background=BLUE_GREY,
+        )
         self.argument_source = ArgumentSource.EMPTY
         self.requires_explicit_confirmation = False
         self.argument_match_count = None
@@ -382,13 +393,62 @@ class HomeViewState:
         self._cancel_voice_submit()
         argument = (e.control.value or "").strip()
         self.argument_source = ArgumentSource.MANUAL if argument else ArgumentSource.EMPTY
+        dropdowns = self._dropdowns()
+        module_id = dropdowns.selected_module_id
+        available_names = (
+            self.home_service.list_module_vault_keys(module_id)
+            if module_id is not None
+            else ()
+        )
+        sync_reference_field_style(
+            e.control,
+            available_names,
+            default_background=BLUE_GREY,
+        )
+        self.update_if_ready(e.control)
         if self.is_voice_active and self.speech_manager is not None:
-            module_path = self._dropdowns().selected_module_path or ""
+            module_path = dropdowns.selected_module_path or ""
             command = self._voice_command_with_argument(module_path, argument)
             self.speech_manager.replace_active_command(command)
+        query = active_vault_query(argument, cursor_offset(e.control))
+        if query is not None:
+            names = matching_vault_names(
+                argument,
+                available_names,
+                cursor_offset(e.control),
+            )
+            self.argument_match_count = None
+            dropdowns.apply_vault_key_suggestions(
+                names,
+                self.select_vault_key_argument,
+            )
+            return
+        if "{{vk." in argument:
+            dropdowns.apply_vault_key_suggestions((), self.select_vault_key_argument)
+            return
         self._request_argument_suggestions(argument)
         if self.is_voice_active:
             self._schedule_voice_submit()
+
+    def select_vault_key_argument(self, name: str) -> None:
+        field = self._controls().argument_input_field
+        value, offset = insert_vault_placeholder(
+            field.value or "",
+            name,
+            cursor_offset(field),
+        )
+        field.value = value
+        field.selection = ft.TextSelection(offset, offset)
+        sync_reference_field_style(
+            field,
+            self.home_service.list_module_vault_keys(
+                self._dropdowns().selected_module_id
+            ) if self._dropdowns().selected_module_id is not None else (),
+            default_background=BLUE_GREY,
+        )
+        self.argument_source = ArgumentSource.MANUAL
+        self._dropdowns().apply_vault_key_suggestions((), self.select_vault_key_argument)
+        self.update_if_ready(field)
 
     def _request_argument_suggestions(self, query: str) -> None:
         dropdowns = self._dropdowns()
@@ -817,6 +877,11 @@ class HomeViewState:
         self.hide_dropdowns()
         controls.command_input_field.value = ""
         controls.argument_input_field.value = ""
+        sync_reference_field_style(
+            controls.argument_input_field,
+            (),
+            default_background=BLUE_GREY,
+        )
         self.argument_source = ArgumentSource.EMPTY
         self.requires_explicit_confirmation = False
         self.argument_match_count = None

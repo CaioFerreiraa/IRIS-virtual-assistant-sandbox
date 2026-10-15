@@ -22,6 +22,15 @@
                 {"$ref": "#/$defs/http_request"}
             ]
         },
+        "vault_keys": {
+            "type": "array",
+            "uniqueItems": true,
+            "default": [],
+            "items": {
+                "type": "string",
+                "pattern": "^[A-Z_][A-Z0-9_]*$"
+            }
+        },
         "variables": {
             "type": "array",
             "items": {"$ref": "#/$defs/variable"}
@@ -181,6 +190,20 @@
                         "post_response": {"const": ""}
                     },
                     "additionalProperties": false
+                },
+                "response_vault": {
+                    "oneOf": [
+                        {"type": "null"},
+                        {
+                            "type": "object",
+                            "required": ["key", "path"],
+                            "properties": {
+                                "key": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$"},
+                                "path": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"}
+                            },
+                            "additionalProperties": false
+                        }
+                    ]
                 }
             },
             "additionalProperties": false

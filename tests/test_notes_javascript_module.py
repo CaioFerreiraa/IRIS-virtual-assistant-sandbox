@@ -21,6 +21,8 @@ from repositories.module_repository import ModuleRepository
 from services.module_loader import load_python_entrypoint
 from services.module_manifest import parse_module_manifest
 from services.module_registry_service import ModuleRegistryService
+from services.vault_service import VaultService
+from tests.module_test_utils import copy_manifest_modules
 from services.module_runtime_service import ModuleRuntimeManager
 from services.module_service import get_module_detail
 from ui.modules.views.module_view_state import ModuleViewState
@@ -34,6 +36,7 @@ NOTES_FOLDERS = (
     "notes_javascript_create",
     "notes_javascript_edit",
     "notes_javascript_delete",
+    "notes_javascript_login",
 )
 NOTES_PUBLIC_KEYS = (
     "notes.javascript",
@@ -41,6 +44,7 @@ NOTES_PUBLIC_KEYS = (
     "notes.javascript.create",
     "notes.javascript.edit",
     "notes.javascript.delete",
+    "notes.javascript.login",
 )
 
 
@@ -61,12 +65,15 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
         enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
         self.session_factory = sessionmaker(bind=self.engine)
+        self.installed_root = copy_manifest_modules(
+            INSTALLED_MODULES_ROOT, Path(self.temporary_directory.name) / "installed",
+        )
         self.registry = ModuleRegistryService(
-            INSTALLED_MODULES_ROOT,
+            self.installed_root,
             self.session_factory,
         )
 
-    def test_all_five_manifests_are_valid(self) -> None:
+    def test_all_six_manifests_are_valid(self) -> None:
         manifests = []
         for folder_name in NOTES_FOLDERS:
             folder = INSTALLED_MODULES_ROOT / folder_name
@@ -92,7 +99,7 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
                 .all()
             }
             root = modules["notes.javascript"]
-            self.assertEqual(5, len(modules))
+            self.assertEqual(6, len(modules))
             self.assertIsNone(root.parent_module_id)
             self.assertFalse(root.is_executable)
             self.assertTrue(root.supports_auto_start)
@@ -105,6 +112,7 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
                 self.assertFalse(child.supports_auto_start)
 
             self.assertEqual("PYTHON", modules["notes.javascript.open"].request_method)
+            self.assertIsNone(modules["notes.javascript.login"].request_method)
             for child_key in NOTES_PUBLIC_KEYS[2:]:
                 self.assertIsNotNone(modules[child_key].http_request)
         finally:
@@ -125,6 +133,7 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
                     "notes.javascript.create",
                     "notes.javascript.edit",
                     "notes.javascript.delete",
+                    "notes.javascript.login",
                 },
                 set(definitions),
             )
@@ -138,6 +147,9 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
                     "value": "application/json",
                     "description": "Indica que o corpo contém JSON.",
                     "enabled": True,
+                }, {
+                    "key": "X-IRIS-Vault", "value": "{{vk.TOKEN_NOTAS}}",
+                    "description": "Token emitido pelo submódulo Login nas notas.", "enabled": True,
                 }],
                 json.loads(create.headers_json),
             )
@@ -159,7 +171,25 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
 
             delete = definitions["notes.javascript.delete"]
             self.assertEqual("DELETE", delete.method)
-            self.assertEqual([], json.loads(delete.headers_json))
+            self.assertEqual([{
+                "key": "X-IRIS-Vault", "value": "{{vk.TOKEN_NOTAS}}",
+                "description": "Token emitido pelo submódulo Login nas notas.", "enabled": True,
+            }], json.loads(delete.headers_json))
+            for request in definitions.values():
+                if request.module.module_public_key != "notes.javascript.login":
+                    self.assertEqual('["TOKEN_NOTAS"]', request.module.vault_keys_json)
+            login = definitions["notes.javascript.login"]
+            self.assertEqual("POST", login.method)
+            self.assertEqual("http://127.0.0.1:8765/api/login", login.url)
+            self.assertEqual(
+                {"mode": "raw_json", "content":
+                 '{"login":"{{vk.LOGIN_NOTAS}}","password":"{{vk.SENHA_NOTAS}}"}'},
+                json.loads(login.body_json),
+            )
+            self.assertEqual(
+                {"key": "TOKEN_NOTAS", "path": "data.token"},
+                json.loads(login.response_vault_json),
+            )
             self.assertEqual(
                 {"mode": "none", "content": ""},
                 json.loads(delete.body_json),
@@ -197,8 +227,8 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
                 for request in requests
                 if request.module.module_public_key == "notes.javascript.create"
             )
-            self.assertEqual(5, module_count)
-            self.assertEqual(3, len(requests))
+            self.assertEqual(6, module_count)
+            self.assertEqual(4, len(requests))
             self.assertEqual("Comprar café", create.argument)
         finally:
             db.close()
@@ -244,7 +274,10 @@ class NotesPythonAdapterTests(unittest.TestCase):
         )
 
     def test_root_adapter_reports_missing_node_clearly(self) -> None:
-        with patch.object(self.root_adapter.shutil, "which", return_value=None):
+        with (
+            patch.object(self.root_adapter, "_has_healthy_backend", return_value=False),
+            patch.object(self.root_adapter.shutil, "which", return_value=None),
+        ):
             with self.assertRaisesRegex(
                 RuntimeError,
                 "Node.js não foi encontrado",
@@ -255,6 +288,7 @@ class NotesPythonAdapterTests(unittest.TestCase):
         process = Mock()
         process.poll.return_value = None
         with (
+            patch.object(self.root_adapter, "_has_healthy_backend", return_value=False),
             patch.object(self.root_adapter.shutil, "which", return_value="node"),
             patch.object(self.root_adapter, "_ensure_port_available"),
             patch.object(self.root_adapter, "_wait_for_health"),
@@ -283,6 +317,16 @@ class NotesPythonAdapterTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(RuntimeError, "já está em uso"):
                     self.root_adapter.start()
+
+    def test_root_adapter_reuses_healthy_backend(self) -> None:
+        with (
+            patch.object(self.root_adapter, "_has_healthy_backend", return_value=True),
+            patch.object(self.root_adapter.shutil, "which") as find_node,
+        ):
+            process = self.root_adapter.start()
+
+        self.assertIsNone(process)
+        find_node.assert_not_called()
 
     def test_health_wait_detects_process_ending_during_startup(self) -> None:
         process = Mock()
@@ -354,6 +398,11 @@ class NotesNodeServerIntegrationTests(unittest.TestCase):
         self.addCleanup(self.environment_patch.stop)
         self.process = self.root_adapter.start()
         self.addCleanup(self._stop_process)
+        status, payload, _ = self._request(
+            "POST", "/api/login", {"login": "admin", "password": "admin"},
+        )
+        self.assertEqual(200, status)
+        self.token = payload["data"]["token"]
 
     def _stop_process(self) -> None:
         if self.process.poll() is None:
@@ -367,7 +416,14 @@ class NotesNodeServerIntegrationTests(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertIn("application/json", content_type)
 
-        status, html, content_type = self._request("GET", "/", parse_json=False)
+        status, login_html, _ = self._request("GET", "/", parse_json=False)
+        self.assertEqual(200, status)
+        self.assertIn("<title>Entrar nas notas</title>", login_html)
+
+        status, html, content_type = self._request(
+            "GET", "/", parse_json=False,
+            headers={"Cookie": f"iris_notes_session={self.token}"},
+        )
         self.assertEqual(200, status)
         self.assertIn("<title>Notas</title>", html)
         self.assertIn("text/html", content_type)
@@ -479,8 +535,11 @@ class NotesNodeServerIntegrationTests(unittest.TestCase):
         enable_sqlite_foreign_keys(engine)
         Base.metadata.create_all(engine)
         session_factory = sessionmaker(bind=engine)
+        installed_root = copy_manifest_modules(
+            INSTALLED_MODULES_ROOT, Path(temporary_directory.name) / "installed",
+        )
         ModuleRegistryService(
-            INSTALLED_MODULES_ROOT,
+            installed_root,
             session_factory,
         ).sync()
 
@@ -497,10 +556,23 @@ class NotesNodeServerIntegrationTests(unittest.TestCase):
             request.url = request.url.replace(":8765", f":{self.port}")
         db.commit()
 
+        vault = VaultService(session_factory, Path(temporary_directory.name) / ".iris_vault.key")
+        vault.create("login_notas", "admin")
+        vault.create("senha_notas", "admin")
+        vault.create("token_notas", None, allow_iris_update=True)
         processor = CommandProcessor(
-            ModuleRepository(db),
-            session_factory,
+            ModuleRepository(db), session_factory, vault,
         )
+        self.assertEqual(4, len(vault.modules_using("TOKEN_NOTAS")))
+        login = processor.execute_module_id(modules["notes.javascript.login"].id)
+        self.assertTrue(login["success"])
+        self.assertEqual(200, login["status_code"])
+        self.assertNotIn("vault_update", login)
+        token = vault.get_value("token_notas")
+        self.assertIsNotNone(token)
+        self.assertNotIn(token, json.dumps(login))
+        self.assertEqual("[valor protegido]", login["body"]["data"]["token"])
+        self.assertNotIn(token, str([log.message for log in db.query(Log).all()]))
         created = processor.execute_module_id(
             modules["notes.javascript.create"].id,
             "Comprar café amanhã",
@@ -548,6 +620,56 @@ class NotesNodeServerIntegrationTests(unittest.TestCase):
         self.assertIn("falha antes da resposta", error_log.message)
         self.assertNotIn("Sem servidor", error_log.message)
 
+    def test_vault_header_rejects_wrong_token_without_exposing_it(self) -> None:
+        status, payload, _ = self._request("POST", "/api/notes", {"text": "Vault"},
+                                         headers={"X-IRIS-Vault": "wrong-demo-token"})
+        self.assertEqual(401, status)
+        self.assertNotIn("wrong-demo-token", json.dumps(payload))
+        status, _, _ = self._request("POST", "/api/notes", {"text": "Vault"},
+                                    headers={"X-IRIS-Vault": self.token})
+        self.assertEqual(201, status)
+        status, _, _ = self._request("PUT", "/api/notes/1", {"text": "Editada"},
+                                    headers={"X-IRIS-Vault": self.token})
+        self.assertEqual(200, status)
+        status, _, _ = self._request("DELETE", "/api/notes/1",
+                                    headers={"X-IRIS-Vault": self.token})
+        self.assertEqual(200, status)
+
+    def test_new_login_invalidates_old_token(self) -> None:
+        status, payload, _ = self._request(
+            "POST", "/api/login", {"login": "admin", "password": "admin"},
+        )
+        self.assertEqual(200, status)
+        new_token = payload["data"]["token"]
+        self.assertNotEqual(self.token, new_token)
+        status, _, _ = self._request("POST", "/api/notes", {"text": "Vault"},
+                                    headers={"X-IRIS-Vault": self.token})
+        self.assertEqual(401, status)
+        status, _, _ = self._request("POST", "/api/notes", {"text": "Vault"},
+                                    headers={"X-IRIS-Vault": new_token})
+        self.assertEqual(201, status)
+
+    def test_login_rejects_wrong_credentials(self) -> None:
+        status, payload, _ = self._request(
+            "POST", "/api/login", {"login": "", "password": "valor"},
+        )
+        self.assertEqual(401, status)
+        self.assertNotIn("valor", json.dumps(payload))
+
+    def test_note_routes_require_login(self) -> None:
+        for method, path, body in (
+            ("GET", "/api/notes", None),
+            ("POST", "/api/notes", {"text": "Protegida"}),
+            ("PUT", "/api/notes/1", {"text": "Protegida"}),
+            ("DELETE", "/api/notes/1", None),
+        ):
+            with self.subTest(method=method, path=path):
+                status, payload, _ = self._request(
+                    method, path, body, headers={},
+                )
+                self.assertEqual(401, status)
+                self.assertFalse(payload["success"])
+
     def _request(
         self,
         method: str,
@@ -556,15 +678,20 @@ class NotesNodeServerIntegrationTests(unittest.TestCase):
         *,
         raw_body: bytes | None = None,
         parse_json: bool = True,
+        headers: dict[str, str] | None = None,
     ) -> tuple[int, object, str]:
         data = raw_body
         if body is not None:
             data = json.dumps(body).encode("utf-8")
+        request_headers = {"Content-Type": "application/json"} if data is not None else {}
+        if headers is None and path.startswith("/api/notes"):
+            request_headers["X-IRIS-Vault"] = self.token
+        request_headers.update(headers or {})
         request = Request(
             f"http://127.0.0.1:{self.port}{path}",
             data=data,
             method=method,
-            headers={"Content-Type": "application/json"} if data is not None else {},
+            headers=request_headers,
         )
         try:
             response = urlopen(request, timeout=2)

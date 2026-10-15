@@ -19,14 +19,17 @@ SERVER_PATH = MODULE_DIRECTORY / "server.js"
 NODE_LOG_PATH = MODULE_DIRECTORY / "node.log"
 
 
-def start() -> subprocess.Popen:
+def start() -> subprocess.Popen | None:
+    port = _configured_port()
+    if _has_healthy_backend(port):
+        return None
+
     node_path = shutil.which("node")
     if node_path is None:
         raise RuntimeError(
             "Node.js não foi encontrado. Instale o Node.js para utilizar o módulo Notas."
         )
 
-    port = _configured_port()
     _ensure_port_available(port)
     environment = os.environ.copy()
     environment["IRIS_NOTES_PORT"] = str(port)
@@ -52,6 +55,16 @@ def start() -> subprocess.Popen:
         _terminate_process(process)
         raise
     return process
+
+
+def _has_healthy_backend(port: int) -> bool:
+    health_url = f"http://127.0.0.1:{port}/health"
+    try:
+        with urlopen(health_url, timeout=0.5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            return response.status == 200 and payload.get("success") is True
+    except (OSError, URLError, json.JSONDecodeError):
+        return False
 
 
 def _configured_port() -> int:

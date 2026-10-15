@@ -4,15 +4,13 @@ import flet as ft
 
 from ui.shared.components.custom_dialog import show_custom_dialog
 from ui.theme.colors import (
+    BLUE_GREY,
     BORDER,
-    CANCEL,
-    CONFIRM,
     PASTEL_DARK_PURPLE,
     PASTEL_PURPLE,
     SURFACE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
-    WARNING,
 )
 
 class ToasterHandler:
@@ -156,7 +154,6 @@ class ToasterHandler:
 
 
 def _build_toast_content(title: str, message: str, kind: str) -> ft.Container:
-    accent_color = _accent_color(kind)
     icon = _icon(kind)
 
     return ft.Container(
@@ -189,8 +186,7 @@ def _build_toast_content(title: str, message: str, kind: str) -> ft.Container:
                                         height=24,
                                         border_radius=6,
                                         alignment=ft.Alignment.CENTER,
-                                        bgcolor=accent_color,
-                                        border=ft.Border.all(1, BORDER),
+                                        bgcolor=BLUE_GREY,
                                         content=ft.Icon(
                                             icon=icon,
                                             size=14,
@@ -224,16 +220,6 @@ def _build_toast_content(title: str, message: str, kind: str) -> ft.Container:
             ],
         ),
     )
-
-
-def _accent_color(kind: str) -> str:
-    return {
-        "success": CONFIRM,
-        "error": CANCEL,
-        "warning": WARNING,
-    }.get(kind, PASTEL_PURPLE)
-
-
 
 
 def _icon(kind: str):

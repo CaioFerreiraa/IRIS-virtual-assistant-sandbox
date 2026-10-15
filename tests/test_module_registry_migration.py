@@ -33,7 +33,7 @@ class ModuleRegistryMigrationTests(unittest.TestCase):
             revision = connection.execute(
                 sa.text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            self.assertEqual("b4e6f8a0c2d3", revision)
+            self.assertEqual("e3a6c9f1d2b4", revision)
             table_names = set(sa.inspect(connection).get_table_names())
             self.assertIn("general_settings", table_names)
             self.assertIn("routine", table_names)

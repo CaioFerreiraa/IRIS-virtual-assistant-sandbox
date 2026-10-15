@@ -20,7 +20,9 @@ O fluxo de Rotinas está implementado com:
 - registro de cada módulo no histórico com o identificador da rotina;
 - prevenção de duas execuções simultâneas da mesma rotina.
 
-A rota `/routines` apresenta a listagem, os estados de carregamento, vazio e erro, além do formulário completo em diálogo.
+A rota `/routines` apresenta a listagem, os estados de carregamento, vazio e
+erro, uma pesquisa textual na tabela e o formulário completo em diálogo. A
+pesquisa ignora acentos e permite limpar o filtro sem recarregar as rotinas.
 
 ## Agendamento
 
@@ -83,7 +85,9 @@ O mesmo módulo pode aparecer mais de uma vez, inclusive com argumentos diferent
 
 O argumento pertence à `RoutineAction` e não altera a configuração global do módulo. Em módulos HTTP, a execução de rotina não substitui silenciosamente o último argumento salvo na tela do módulo.
 
-Argumentos que aparentam conter token, senha, chave de API ou credencial são rejeitados antes da persistência. O Vault não faz parte desta entrega.
+Argumentos que aparentam conter token, senha, chave de API ou credencial são
+rejeitados antes da persistência. Módulos em rotinas recebem Vault Keys
+declaradas apenas durante a execução, como nos demais caminhos.
 
 Não existe passagem automática do resultado de uma etapa para a próxima. Cada argumento é um texto fixo configurado previamente.
 

@@ -298,7 +298,26 @@ def _ensure_module_registry_schema() -> None:
 
     if not has_alembic_version:
         if "icon" in module_columns:
-            _stamp_alembic_revision("head")
+            if "vault_keys_json" in module_columns and "vault_keys" in table_names:
+                request_columns = {
+                    column["name"]
+                    for column in inspector.get_columns("module_http_requests")
+                } if "module_http_requests" in table_names else set()
+                vault_column = next(
+                    (column for column in inspector.get_columns("vault_keys")
+                     if column["name"] == "encrypted_value"),
+                    None,
+                )
+                if "response_vault_json" in request_columns:
+                    revision = "head" if vault_column and vault_column["nullable"] else "a9d7c4b2e6f1"
+                else:
+                    revision = "c8a2f6d4e9b1"
+                _stamp_alembic_revision(revision)
+                if revision != "head":
+                    _upgrade_alembic_revision("head")
+                return
+            _stamp_alembic_revision("b4e6f8a0c2d3")
+            _upgrade_alembic_revision("head")
             return
         _stamp_alembic_revision("f8c1d4a7b2e9")
 

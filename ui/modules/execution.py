@@ -211,6 +211,13 @@ class ModuleExecutionMixin:
         else:
             body_content = body_content_text
 
+        response_key = str(values["response_vault_key"]).strip()
+        response_path = str(values["response_vault_path"]).strip()
+        if bool(response_key) != bool(response_path):
+            raise ValueError(
+                "Informe a Vault Key de destino e o caminho JSON da resposta."
+            )
+
         return {
             "method": values["method"],
             "url": values["url"],
@@ -229,6 +236,12 @@ class ModuleExecutionMixin:
                     "pre_request": values["pre_request"],
                     "post_response": values["post_response"],
                 },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            "response_vault_json": json.dumps(
+                {"key": response_key, "path": response_path}
+                if response_key else None,
                 ensure_ascii=False,
                 separators=(",", ":"),
             ),

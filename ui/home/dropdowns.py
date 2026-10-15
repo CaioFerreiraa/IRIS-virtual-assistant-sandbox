@@ -181,6 +181,20 @@ class HomeDropdowns:
         self.update_control(self.controls.argument_panel)
         self.sync_stack()
 
+    def apply_vault_key_suggestions(
+        self,
+        names: Sequence[str],
+        on_select: Callable[[str], None],
+    ) -> None:
+        if self.selected_module_id is None:
+            return
+        self.controls.argument_suggestions_list.controls = (
+            ui.argument_dropdown.build_vault_key_suggestion_controls(names, on_select)
+        )
+        self.controls.argument_panel.visible = self.selected_module_path is not None
+        self.update_control(self.controls.argument_panel)
+        self.sync_stack()
+
     def open_argument_dropdown(
         self,
         module_id: int,

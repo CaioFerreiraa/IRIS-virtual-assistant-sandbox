@@ -3,19 +3,18 @@ from collections.abc import Callable, Sequence
 import flet as ft
 
 from ui.theme.colors import (
-    BORDER,
-    CANCEL,
-    CONFIRM,
+    BLUE_GREY,
     PASTEL_DARK_PURPLE,
-    PASTEL_PURPLE,
     SURFACE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
-    WARNING,
 )
 
 
 DialogCallback = Callable[[ft.ControlEvent], None]
+MIN_DIALOG_CONTENT_WIDTH = 320
+MIN_DIALOG_CONTENT_HEIGHT = 120
+DEFAULT_RESIZED_CONTENT_HEIGHT = 240
 
 
 def custom_dialog(
@@ -32,13 +31,15 @@ def custom_dialog(
     width: int = 460,
     alignment=ft.Alignment.TOP_CENTER,
     inset_padding: ft.Padding | None = None,
-    accent_color: str | None = None,
     icon=None,
+    icon_bgcolor: str | None = None,
     selectable_message: bool = True,
 ) -> ft.AlertDialog:
-    effective_accent_color = accent_color or _accent_color(kind)
     effective_icon = icon or _icon(kind)
     dialog_actions = list(actions) if actions is not None else [_default_close_button(close_text)]
+    dialog_content = content or _message_content(message, width, selectable_message)
+    resize_handle = _build_resize_handle(dialog_content, width)
+    close_button = _build_close_button()
 
     dialog = ft.AlertDialog(
         modal=modal,
@@ -58,8 +59,7 @@ def custom_dialog(
                     height=32,
                     border_radius=8,
                     alignment=ft.Alignment.CENTER,
-                    bgcolor=effective_accent_color,
-                    border=ft.Border.all(1, BORDER),
+                    bgcolor=icon_bgcolor or BLUE_GREY,
                     content=ft.Icon(
                         icon=effective_icon,
                         size=18,
@@ -73,14 +73,17 @@ def custom_dialog(
                     color=TEXT_PRIMARY,
                     expand=True,
                 ),
+                resize_handle,
+                close_button,
             ],
         ),
-        content=content or _message_content(message, width, selectable_message),
+        content=dialog_content,
         actions=dialog_actions,
         actions_alignment=ft.MainAxisAlignment.END,
         on_dismiss=on_dismiss,
     )
 
+    close_button.on_click = _build_close_handler(dialog, on_close)
     if actions is None:
         dialog_actions[0].on_click = _build_close_handler(dialog, on_close)
 
@@ -130,6 +133,58 @@ def _default_close_button(close_text: str) -> ft.TextButton:
     )
 
 
+def _build_close_button() -> ft.IconButton:
+    return ft.IconButton(
+        icon=ft.Icons.CLOSE_ROUNDED,
+        icon_size=20,
+        icon_color=TEXT_SECONDARY,
+        width=32,
+        height=32,
+        padding=0,
+        tooltip="Fechar diálogo",
+    )
+
+
+def _build_resize_handle(content: ft.Control, default_width: int) -> ft.GestureDetector:
+    """Cria a alça que redimensiona o conteúdo de qualquer diálogo compartilhado."""
+    initial_width = _dimension_or_default(getattr(content, "width", None), default_width)
+    initial_height = _dimension_or_default(getattr(content, "height", None), None)
+
+    def on_resize(event: ft.DragUpdateEvent) -> None:
+        delta = event.local_delta
+        if delta is None:
+            return
+
+        if delta.x:
+            current_width = _dimension_or_default(
+                getattr(content, "width", None), initial_width,
+            )
+            content.width = max(MIN_DIALOG_CONTENT_WIDTH, current_width + delta.x)
+        if delta.y:
+            current_height = _dimension_or_default(
+                getattr(content, "height", None),
+                initial_height or DEFAULT_RESIZED_CONTENT_HEIGHT,
+            )
+            content.height = max(MIN_DIALOG_CONTENT_HEIGHT, current_height + delta.y)
+        _update_if_mounted(content)
+
+    return ft.GestureDetector(
+        width=28,
+        height=32,
+        mouse_cursor=ft.MouseCursor.RESIZE_UP_LEFT_DOWN_RIGHT,
+        tooltip="Arraste para redimensionar o diálogo",
+        on_pan_update=on_resize,
+        content=ft.Container(
+            alignment=ft.Alignment.CENTER,
+            content=ft.Icon(
+                ft.Icons.DRAG_HANDLE_ROUNDED,
+                size=18,
+                color=TEXT_SECONDARY,
+            ),
+        ),
+    )
+
+
 def _build_close_handler(
     dialog: ft.AlertDialog,
     on_close: DialogCallback | None,
@@ -153,12 +208,19 @@ def _build_close_handler(
     return close_dialog
 
 
-def _accent_color(kind: str) -> str:
-    return {
-        "success": CONFIRM,
-        "error": CANCEL,
-        "warning": WARNING,
-    }.get(kind, PASTEL_PURPLE)
+def _dimension_or_default(
+    value: int | float | None,
+    default: int | float | None,
+) -> float | None:
+    return float(value) if value is not None else default
+
+
+def _update_if_mounted(control: ft.Control) -> None:
+    try:
+        if control.page is not None:
+            control.update()
+    except RuntimeError:
+        return
 
 
 def _icon(kind: str):

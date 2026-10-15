@@ -25,6 +25,8 @@ class VoiceSettingsMicrophoneTests(unittest.TestCase):
         tab.fields = {"input_device_index": ft.Dropdown()}
         tab.saved_microphone_index = saved_index
         tab.selected_microphone_id = selected_id
+        tab._saved_form_values = {}
+        tab.save_bar = None
         tab._microphones_loaded = loaded
         tab._microphones_by_id = {}
         tab.selected_microphone_text = ft.Text()

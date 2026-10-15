@@ -12,14 +12,17 @@ from database.models import (
     ModuleVariableValue,
     Routine,
     RoutineAction,
+    VaultKey,
 )
 
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from sqlalchemy import inspect
 
 from alembic import context
+from alembic.script import ScriptDirectory
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -91,7 +94,14 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
-            context.run_migrations()
+            script = ScriptDirectory.from_config(config)
+            if not inspect(connection).get_table_names() and context.get_revision_argument() == script.get_current_head():
+                # O histórico inicial possui esquemas divergentes. Bases vazias
+                # usam o modelo atual, como init_db(), sem editar revisões aplicadas.
+                target_metadata.create_all(connection)
+                context.get_context().stamp(script, "head")
+            else:
+                context.run_migrations()
 
         if is_sqlite:
             connection.commit()

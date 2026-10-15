@@ -25,5 +25,6 @@
             "user_editable": true,
             "default_value": "IRIS"
         }
-    ]
+    ],
+    "vault_keys": []
 }

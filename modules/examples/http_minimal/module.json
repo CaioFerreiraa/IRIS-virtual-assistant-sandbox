@@ -36,5 +36,6 @@
             "post_response": ""
         }
     },
-    "variables": []
+    "variables": [],
+    "vault_keys": []
 }

@@ -91,3 +91,15 @@ def create_module_folder(
     if create_entrypoint:
         (folder / "main.py").write_text(main_source, encoding="utf-8")
     return folder
+
+
+def copy_manifest_modules(source: Path, target: Path) -> Path:
+    """Isola o catálogo de teste de resíduos locais sem module.json."""
+    import shutil
+
+    target.mkdir(parents=True, exist_ok=True)
+    for folder in source.iterdir():
+        if folder.is_dir() and (folder / "module.json").is_file():
+            shutil.copytree(folder, target / folder.name,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.log"))
+    return target

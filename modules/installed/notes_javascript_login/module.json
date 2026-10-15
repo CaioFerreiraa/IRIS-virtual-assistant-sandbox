@@ -1,0 +1,37 @@
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "notes.javascript.login",
+        "name": "Login nas notas",
+        "call_name": "login nas notas",
+        "icon": "login",
+        "parent_public_key": "notes.javascript",
+        "description": "Simula o login no serviço local de notas e guarda o token retornado no Vault.",
+        "readme": "README.md",
+        "is_executable": true
+    },
+    "runtime": null,
+    "http_request": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8765/api/login",
+        "argument_enabled": false,
+        "params": [],
+        "authorization": {"type": "none"},
+        "headers": [
+            {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "Indica que o corpo contém JSON.",
+                "enabled": true
+            }
+        ],
+        "body": {
+            "mode": "raw_json",
+            "content": "{\"login\":\"{{vk.LOGIN_NOTAS}}\",\"password\":\"{{vk.SENHA_NOTAS}}\"}"
+        },
+        "scripts": {"pre_request": "", "post_response": ""},
+        "response_vault": {"key": "TOKEN_NOTAS", "path": "data.token"}
+    },
+    "variables": [],
+    "vault_keys": ["LOGIN_NOTAS", "SENHA_NOTAS", "TOKEN_NOTAS"]
+}

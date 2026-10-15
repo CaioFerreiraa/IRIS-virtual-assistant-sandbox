@@ -295,7 +295,8 @@ Um manifesto pode declarar uma única requisição HTTP simples por meio do camp
 
 O argumento HTTP é uma string persistida separadamente das configurações do módulo, ao salvar a aba Execução ou disparar a requisição, e pode substituir o placeholder literal `{{argument}}` na URL, nos parâmetros, nos cabeçalhos e no body.
 
-O serviço HTTP monta somente os campos habilitados, executa com timeout fixo e redirecionamentos habilitados e devolve status, duração, cabeçalhos e corpo limitado para exibição. Authorization com segredo continua proibida. Scripts vazios são exigidos no manifesto; textos de script personalizados podem ser armazenados localmente e exibidos, mas nunca são executados. Fluxos com múltiplas chamadas ou lógica personalizada continuam pertencendo a runtimes Python.
+O serviço HTTP monta somente os campos habilitados, executa com timeout fixo e redirecionamentos habilitados e devolve status, duração, cabeçalhos e corpo limitado para exibição. Authorization continua aceitando somente `none`; segredos literais são
+proibidos, mas referências a Vault Keys declaradas são resolvidas na execução. Scripts vazios são exigidos no manifesto; textos de script personalizados podem ser armazenados localmente e exibidos, mas nunca são executados. Fluxos com múltiplas chamadas ou lógica personalizada continuam pertencendo a runtimes Python.
 
 ### Processo externo iniciado por adaptador Python
 
@@ -370,3 +371,24 @@ A rota do módulo também agrega falhas técnicas dos submódulos na aba “Erro
 - Não transformar todo recurso em uma abstração.
 - Registrar decisões quando um novo tipo de integração for criado.
 - Manter esta documentação compatível com o código real.
+
+## Vault Keys no MVP
+
+`VaultService` criptografa valores com Fernet e usa `VaultRepository` para
+acessar a tabela `vault_keys`. A chave Fernet fica em `.iris_vault.key` na raiz;
+é proteção local básica, sem garantia de segurança de produção. Não há nova
+API de autenticação, providers ou relação N:N. As declarações ficam em
+`Module.vault_keys_json`.
+
+O processador central resolve o dicionário Python somente na execução. HTTP
+resolve placeholders dos campos habilitados imediatamente antes da chamada.
+A UI consulta somente metadados em background. Os caminhos de execução
+ocultam valores resolvidos em resultados e erros; não há cache de segredos ou
+injeção no ambiente global. Um entry point Python pode retornar
+`vault_update`; o processador só grava uma chave declarada, existente e com
+permissão de alteração pela IRIS, retirando o valor do resultado e do log.
+Uma requisição HTTP pode declarar `response_vault` para gravar uma string
+da resposta JSON em uma chave declarada, existente e com permissão de alteração
+pela IRIS. O submódulo Login nas notas demonstra esse fluxo HTTP com um backend
+local com credenciais fixas didáticas, sem segurança de produção. Veja
+[Vault Keys](vault.md) para o ciclo de vida.

@@ -8,7 +8,7 @@ from services.general_settings_service import GeneralSettingsService
 from services.speech_service_manager import SpeechServiceManager
 from ui.settings.general_tab import build_general_settings_tab
 from ui.settings.module_developer_tab import ModuleDeveloperTab
-from ui.settings.passwords_tab import build_passwords_tab
+from ui.settings.vault_keys_tab import VaultKeysTab
 from ui.settings.voice_tab import VoiceSettingsTab
 from ui.shared.components.route_content_container import build_route_content_container
 from ui.shared.components.toaster_handler import ToasterHandler
@@ -24,7 +24,7 @@ SETTINGS_TABS = (
     ("general", "Configurações gerais", ft.Icons.TUNE_ROUNDED),
     ("voice", "Configuração de voz", ft.Icons.MIC_ROUNDED),
     ("modules", "Desenvolvimento", ft.Icons.DEVELOPER_MODE_ROUNDED),
-    ("passwords", "Senhas", ft.Icons.LOCK_OUTLINE_ROUNDED),
+    ("vault", "Vault Keys", ft.Icons.LOCK_OUTLINE_ROUNDED),
 )
 
 
@@ -68,7 +68,7 @@ class SettingsViewState:
         self.on_listening_overlay_change = on_listening_overlay_change
         self.on_notification_mode_change = on_notification_mode_change
         self.get_notification_status = get_notification_status
-        self.active_tab = "voice"
+        self.active_tab = "general"
         self.tab_content = ft.Container(expand=True)
         self.tab_buttons: dict[str, ft.Container] = {}
 
@@ -173,8 +173,7 @@ class SettingsViewState:
         elif self.active_tab == "modules":
             self.tab_content.content = self.module_developer_tab.build()
         else:
-            # Origem: ui.settings.passwords_tab.build_passwords_tab
-            self.tab_content.content = build_passwords_tab()
+            self.tab_content.content = VaultKeysTab(self.toaster_handler)
 
     def _sync_tab_buttons(self) -> None:
         for key, button in self.tab_buttons.items():

@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
@@ -10,6 +11,9 @@ const DEFAULT_PORT = 8765;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_NOTE_LENGTH = 500;
 const INDEX_PATH = path.join(__dirname, "public", "index.html");
+const LOGIN_PATH = path.join(__dirname, "public", "login.html");
+const DEMO_LOGIN = "admin";
+const DEMO_PASSWORD = "admin";
 
 const configuredPort = Number.parseInt(process.env.IRIS_NOTES_PORT || "", 10);
 const port = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65535
@@ -18,6 +22,7 @@ const port = Number.isInteger(configuredPort) && configuredPort > 0 && configure
 
 const notes = [];
 let nextId = 1;
+let currentToken = null;
 
 class RequestError extends Error {
     constructor(statusCode, message) {
@@ -31,9 +36,32 @@ function sendJson(response, statusCode, payload, extraHeaders = {}) {
     response.writeHead(statusCode, {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Length": content.length,
+        "Cache-Control": "no-store",
         ...extraHeaders,
     });
     response.end(content);
+}
+
+async function sendHtml(response, filePath) {
+    const html = await fs.promises.readFile(filePath);
+    response.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": html.length,
+        "Cache-Control": "no-store",
+    });
+    response.end(html);
+}
+
+function isAuthorized(request) {
+    if (!currentToken) {
+        return false;
+    }
+    const headerToken = request.headers["x-iris-vault"];
+    const cookieHeader = request.headers.cookie || "";
+    const cookieToken = cookieHeader.split(";").map((part) => part.trim())
+        .find((part) => part.startsWith("iris_notes_session="))
+        ?.slice("iris_notes_session=".length);
+    return headerToken === currentToken || cookieToken === currentToken;
 }
 
 function sendMethodNotAllowed(response, allowedMethods) {
@@ -146,16 +174,54 @@ async function handleRequest(request, response) {
             sendMethodNotAllowed(response, ["GET"]);
             return;
         }
-        const html = await fs.promises.readFile(INDEX_PATH);
-        response.writeHead(200, {
-            "Content-Type": "text/html; charset=utf-8",
-            "Content-Length": html.length,
+        if (!isAuthorized(request)) {
+            response.writeHead(302, { Location: "/login", "Cache-Control": "no-store" });
+            response.end();
+            return;
+        }
+        await sendHtml(response, INDEX_PATH);
+        return;
+    }
+
+    if (pathname === "/login") {
+        if (request.method !== "GET") {
+            sendMethodNotAllowed(response, ["GET"]);
+            return;
+        }
+        if (isAuthorized(request)) {
+            response.writeHead(302, { Location: "/", "Cache-Control": "no-store" });
+            response.end();
+            return;
+        }
+        await sendHtml(response, LOGIN_PATH);
+        return;
+    }
+
+    if (pathname === "/api/login") {
+        if (request.method !== "POST") {
+            sendMethodNotAllowed(response, ["POST"]);
+            return;
+        }
+        const payload = await readJsonBody(request);
+        if (typeof payload.login !== "string" || typeof payload.password !== "string"
+            || payload.login !== DEMO_LOGIN || payload.password !== DEMO_PASSWORD) {
+            throw new RequestError(401, "Usuário ou senha inválidos.");
+        }
+        currentToken = crypto.randomBytes(32).toString("hex");
+        sendJson(response, 200, {
+            success: true,
+            message: "Login realizado na demonstração.",
+            data: { token: currentToken },
+        }, {
+            "Set-Cookie": `iris_notes_session=${currentToken}; HttpOnly; SameSite=Strict; Path=/`,
         });
-        response.end(html);
         return;
     }
 
     if (pathname === "/api/notes") {
+        if (!isAuthorized(request)) {
+            throw new RequestError(401, "Acesso não autorizado. Faça login nas notas.");
+        }
         if (request.method === "GET") {
             sendJson(response, 200, {
                 success: true,
@@ -182,6 +248,9 @@ async function handleRequest(request, response) {
 
     const noteMatch = pathname.match(/^\/api\/notes\/([^/]+)$/);
     if (noteMatch) {
+        if (!isAuthorized(request)) {
+            throw new RequestError(401, "Acesso não autorizado. Faça login nas notas.");
+        }
         if (request.method !== "PUT" && request.method !== "DELETE") {
             sendMethodNotAllowed(response, ["PUT", "DELETE"]);
             return;

@@ -79,7 +79,7 @@ def build_dropdown(
 
 def build_text_field(
     label: str,
-    value: str,
+    value: str | None,
     *,
     helper: str | None = None,
     multiline: bool = False,
@@ -88,10 +88,17 @@ def build_text_field(
 ) -> ft.TextField:
     return ft.TextField(
         label=label,
-        value=value,
+        value=value or "",
         multiline=multiline,
         min_lines=2 if multiline else None,
         max_lines=3 if multiline else 1,
+        text_align=ft.TextAlign.START,
+        text_vertical_align=ft.VerticalAlignment.START if multiline else None,
+        align_label_with_hint=True if multiline else None,
+        content_padding=(
+            ft.Padding(left=12, top=12, right=12, bottom=12)
+            if multiline else None
+        ),
         tooltip=build_tooltip_container(helper) if helper else None,
         helper=helper,
         disabled=disabled,

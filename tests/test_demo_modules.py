@@ -12,6 +12,7 @@ from database.models import Module, ModuleVariableDefinition, ModuleVariableValu
 from repositories.module_repository import ModuleRepository
 from services.module_loader import load_python_entrypoint
 from services.module_registry_service import ModuleRegistryService
+from tests.module_test_utils import copy_manifest_modules
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -34,15 +35,18 @@ class DemoModuleRegistryTests(unittest.TestCase):
         enable_sqlite_foreign_keys(self.engine)
         Base.metadata.create_all(self.engine)
         self.session_factory = sessionmaker(bind=self.engine)
+        self.installed_root = copy_manifest_modules(
+            INSTALLED_MODULES_ROOT, Path(self.temporary_directory.name) / "installed",
+        )
 
     def test_all_installed_demo_modules_are_valid_and_documented(self) -> None:
         state = ModuleRegistryService(
-            INSTALLED_MODULES_ROOT,
+            self.installed_root,
             self.session_factory,
         ).sync()
 
         self.assertEqual((), state.invalid_modules)
-        self.assertEqual(15, len(state.synced_module_ids))
+        self.assertEqual(16, len(state.synced_module_ids))
         self.assertTrue(all(content.strip() for content in state.readme_contents.values()))
         self.assertTrue(
             all("O que" in content for content in state.readme_contents.values())
@@ -86,7 +90,7 @@ class DemoModuleRegistryTests(unittest.TestCase):
 
     def test_weather_requests_argument_only_without_default_location(self) -> None:
         ModuleRegistryService(
-            INSTALLED_MODULES_ROOT,
+            self.installed_root,
             self.session_factory,
         ).sync()
         db = self.session_factory()

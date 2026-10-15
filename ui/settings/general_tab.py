@@ -9,7 +9,6 @@ from services.general_settings_service import GeneralSettingsService
 from ui.shared.components.toaster_handler import ToasterHandler
 from ui.theme.colors import (
     BORDER,
-    BLUE_GREY,
     PASTEL_DARK_PURPLE,
     PASTEL_PURPLE,
     TEXT_PRIMARY,
@@ -158,7 +157,6 @@ def build_general_settings_tab(
 
     return ft.Container(
         padding=24,
-        bgcolor=BLUE_GREY,
         border=ft.Border.all(1, BORDER),
         border_radius=8,
         content=ft.Column(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from database.models import Module, ModuleVariableValue
 from repositories.module_repository import ModuleRepository
 from services.http_service import ModuleHttpRequestService, build_http_request_detail
 from services.module_registry_state import get_module_registry_state
+from services.vault_service import VaultService
 from core.module_runner import ModuleRunner
 
 
@@ -138,14 +140,45 @@ def get_module_detail(
             "readme_error": readme_error,
             "manifest_content": manifest_content,
             "manifest_error": manifest_error,
+            "manifest_directory": module.manifest_directory or "",
+            "module_directory": _get_module_directory(module),
             "has_arguments": has_arguments,
             "http_request": http_request,
             "technical_errors": _deduplicate_errors(technical_errors),
             "model_data": _build_model_data(module),
             "variables": variables,
+            "vault_keys": list(VaultService(session_factory).available_names(module.id)),
         }
     finally:
         db.close()
+
+
+def open_module_directory(module_directory: str) -> None:
+    if not module_directory:
+        raise ValueError("A pasta do módulo não foi encontrada.")
+
+    resolved_directory = Path(module_directory).resolve()
+    if not resolved_directory.is_dir():
+        raise ValueError("A pasta do módulo não foi encontrada.")
+    try:
+        os.startfile(str(resolved_directory))
+    except OSError as error:
+        raise ValueError("Não foi possível abrir a pasta do módulo.") from error
+
+
+def _get_module_directory(module: Module) -> str:
+    if module.manifest_directory:
+        return str(Path(module.manifest_directory).resolve())
+
+    if not module.readme_path:
+        return ""
+
+    readme_path = Path(module.readme_path).resolve()
+    try:
+        readme_path.relative_to(DEFAULT_MODULES_ROOT.resolve())
+    except ValueError:
+        return ""
+    return str(readme_path.parent)
 
 
 def _build_http_request_detail(module) -> tuple[dict[str, object] | None, str]:
@@ -209,6 +242,7 @@ def save_http_request_definition(
         headers_json=str(values.get("headers_json", "")),
         body_json=str(values.get("body_json", "")),
         scripts_json=str(values.get("scripts_json", "")),
+        response_vault_json=str(values.get("response_vault_json", "null")),
     )
 
 

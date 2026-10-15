@@ -19,7 +19,7 @@ from services.module_service import apply_effective_runtime_statuses
 from ui.theme.colors import (
     BLUE_GREY,
     BORDER,
-    CANCEL,
+    PASTEL_DARK_RED,
     GREY_100,
     GREY_200,
     GREY_300,
@@ -295,7 +295,7 @@ class SidebarTests(unittest.TestCase):
         child_item = _module_list(sidebar).controls[0].controls[1].controls[0]
         dot = child_item.content.controls[1].controls[0]
 
-        self.assertEqual(CANCEL, dot.bgcolor)
+        self.assertEqual(PASTEL_DARK_RED, dot.bgcolor)
         self.assertEqual("Módulo com problema", dot.tooltip)
 
     def test_child_runtime_error_stays_red_when_parent_is_online(self) -> None:
@@ -325,7 +325,7 @@ class SidebarTests(unittest.TestCase):
         child_item = _module_list(sidebar).controls[0].controls[1].controls[0]
         dot = child_item.content.controls[1].controls[0]
 
-        self.assertEqual(CANCEL, dot.bgcolor)
+        self.assertEqual(PASTEL_DARK_RED, dot.bgcolor)
         self.assertEqual("Módulo com problema", dot.tooltip)
 
     def test_problem_module_has_red_status_dot(self) -> None:
@@ -345,7 +345,7 @@ class SidebarTests(unittest.TestCase):
             and control.height == STATUS_DOT_SIZE
         ]
 
-        self.assertTrue(any(dot.bgcolor == CANCEL for dot in dots))
+        self.assertTrue(any(dot.bgcolor == PASTEL_DARK_RED for dot in dots))
 
     def test_invalid_module_has_red_status_dot(self) -> None:
         sidebar = build_sidebar(
@@ -368,7 +368,7 @@ class SidebarTests(unittest.TestCase):
             and control.height == STATUS_DOT_SIZE
         ]
 
-        self.assertTrue(any(dot.bgcolor == CANCEL for dot in dots))
+        self.assertTrue(any(dot.bgcolor == PASTEL_DARK_RED for dot in dots))
 
     def test_module_icon_colors_do_not_change_with_status(self) -> None:
         problem_icon = _build_module_icons(

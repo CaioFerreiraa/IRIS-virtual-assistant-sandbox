@@ -11,10 +11,15 @@ from ui.shared.components.form_controls import (
     build_text_field,
 )
 from ui.shared.components.tooltip_container import build_tooltip_container
+from ui.shared.components.vault_reference_field import (
+    VaultReferenceField,
+    build_placeholder_text,
+)
 from ui.theme.colors import (
     BORDER,
     PASTEL_BLUE,
     PASTEL_DARK_PURPLE,
+    PASTEL_PURPLE,
     SURFACE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
@@ -125,6 +130,8 @@ class ModuleExecutionTabMixin:
             "body_content": self.http_body_content_field.value or "",
             "pre_request": self.http_pre_request_field.value or "",
             "post_response": self.http_post_response_field.value or "",
+            "response_vault_key": self.http_response_vault_key_field.value or "",
+            "response_vault_path": self.http_response_vault_path_field.value or "",
         }
 
     def _reset_execution_save_state(self) -> None:
@@ -182,7 +189,11 @@ class ModuleExecutionTabMixin:
             str(self.http_request["url"]),
             disabled=not is_available,
         )
-        self.http_url_field.on_change = self.on_execution_form_change
+        self.http_url_reference_field = VaultReferenceField(
+            self.http_url_field,
+            self.detail.get("vault_keys", ()),
+            self.on_execution_form_change,
+        )
         restore_button = build_secondary_button(
             "Resetar",
             self.on_restore_http_request,
@@ -190,7 +201,7 @@ class ModuleExecutionTabMixin:
             tooltip="Voltar ao padrão do module.json",
         )
         self.http_method_field.col = {"sm": 12, "md": 2}
-        self.http_url_field.col = {"sm": 12, "md": 6}
+        self.http_url_reference_field.col = {"sm": 12, "md": 6}
         restore_button.col = {"sm": 12, "md": 2}
         self.execute_button.col = {"sm": 12, "md": 2}
         return self._build_execution_section(
@@ -202,7 +213,7 @@ class ModuleExecutionTabMixin:
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 controls=[
                     self.http_method_field,
-                    self.http_url_field,
+                    self.http_url_reference_field,
                     restore_button,
                     self.execute_button,
                 ],
@@ -210,7 +221,12 @@ class ModuleExecutionTabMixin:
         )
 
     def _build_argument_section(self) -> ft.Container:
-        content: ft.Control = self.argument_field
+        self.argument_reference_field = VaultReferenceField(
+            self.argument_field,
+            self.detail.get("vault_keys", ()),
+            self.on_execution_form_change,
+        )
+        content: ft.Control = self.argument_reference_field
         if self.http_request is not None:
             self.http_argument_enabled_switch = ft.Switch(
                 label="Utilizar argumento na requisição",
@@ -218,13 +234,13 @@ class ModuleExecutionTabMixin:
                 disabled=not bool(self.detail["is_available"]),
                 on_change=self.on_http_argument_enabled_change,
                 active_color=PASTEL_DARK_PURPLE,
+                active_track_color=PASTEL_PURPLE,
             )
-            self.argument_field.on_change = self.on_execution_form_change
             content = ft.Column(
                 spacing=10,
                 controls=[
                     self.http_argument_enabled_switch,
-                    self.argument_field,
+                    self.argument_reference_field,
                 ],
             )
         return self._build_execution_section(
@@ -242,7 +258,7 @@ class ModuleExecutionTabMixin:
             border_radius=8,
             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
             content=ft.Tabs(
-                length=5,
+                length=6,
                 content=ft.Column(
                     expand=True,
                     spacing=0,
@@ -257,6 +273,7 @@ class ModuleExecutionTabMixin:
                                 ft.Tab(label="Autorização"),
                                 ft.Tab(label="Cabeçalhos"),
                                 ft.Tab(label="Corpo"),
+                                ft.Tab(label="Resposta → Vault"),
                                 ft.Tab(label="Scripts"),
                             ],
                         ),
@@ -275,6 +292,7 @@ class ModuleExecutionTabMixin:
                                     "Nenhum cabeçalho configurado.",
                                 ),
                                 self._build_body_view(),
+                                self._build_response_vault_view(),
                                 self._build_scripts_view(),
                             ],
                         ),
@@ -325,8 +343,9 @@ class ModuleExecutionTabMixin:
                 scroll=ft.ScrollMode.AUTO,
                 spacing=10,
                 controls=[
-                    ft.Text(
-                        "Edite somente os itens necessários. O placeholder {{argument}} é permitido.",
+                    build_placeholder_text(
+                        "Edite somente os itens necessários. O placeholder {{argument}} é permitido. "
+                        "Para Vault Keys, digite vk. e selecione uma sugestão.",
                         size=12,
                         color=TEXT_SECONDARY,
                     ),
@@ -349,6 +368,7 @@ class ModuleExecutionTabMixin:
             disabled=not is_available,
             on_change=self.on_execution_form_change,
             active_color=PASTEL_DARK_PURPLE,
+            active_track_color=PASTEL_PURPLE,
         )
         key_field = build_text_field(
             "Chave",
@@ -365,8 +385,17 @@ class ModuleExecutionTabMixin:
             str(item.get("description") or ""),
             disabled=not is_available,
         )
-        for field in (key_field, value_field, description_field):
-            field.on_change = self.on_execution_form_change
+        key_reference_field = VaultReferenceField(
+            key_field,
+            self.detail.get("vault_keys", ()),
+            self.on_execution_form_change,
+        )
+        value_reference_field = VaultReferenceField(
+            value_field,
+            self.detail.get("vault_keys", ()),
+            self.on_execution_form_change,
+        )
+        description_field.on_change = self.on_execution_form_change
         remove_button = ft.IconButton(
             icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
             tooltip="Remover item",
@@ -374,8 +403,8 @@ class ModuleExecutionTabMixin:
             icon_color=TEXT_SECONDARY,
         )
         enabled.col = {"sm": 12, "md": 1}
-        key_field.col = {"sm": 12, "md": 3}
-        value_field.col = {"sm": 12, "md": 3}
+        key_reference_field.col = {"sm": 12, "md": 3}
+        value_reference_field.col = {"sm": 12, "md": 3}
         description_field.col = {"sm": 12, "md": 4}
         remove_button.col = {"sm": 12, "md": 1}
         row_state: dict[str, object] = {
@@ -397,8 +426,8 @@ class ModuleExecutionTabMixin:
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 enabled,
-                key_field,
-                value_field,
+                key_reference_field,
+                value_reference_field,
                 description_field,
                 remove_button,
             ],
@@ -529,7 +558,11 @@ class ModuleExecutionTabMixin:
         )
         self.http_body_content_field.min_lines = 6
         self.http_body_content_field.max_lines = 9
-        self.http_body_content_field.on_change = self.on_execution_form_change
+        self.http_body_reference_field = VaultReferenceField(
+            self.http_body_content_field,
+            self.detail.get("vault_keys", ()),
+            self.on_execution_form_change,
+        )
         return ft.Container(
             expand=True,
             padding=14,
@@ -538,7 +571,43 @@ class ModuleExecutionTabMixin:
                 spacing=12,
                 controls=[
                     self.http_body_mode_field,
-                    self.http_body_content_field,
+                    self.http_body_reference_field,
+                ],
+            ),
+        )
+
+    def _build_response_vault_view(self) -> ft.Container:
+        mapping = self.http_request.get("response_vault") or {}
+        is_available = bool(self.detail["is_available"])
+        self.http_response_vault_key_field = build_text_field(
+            "Vault Key de destino",
+            str(mapping.get("key") or ""),
+            helper="Use uma chave declarada em vault_keys e habilite 'IRIS pode alterar' nela.",
+            disabled=not is_available,
+        )
+        self.http_response_vault_path_field = build_text_field(
+            "Caminho JSON na resposta",
+            str(mapping.get("path") or ""),
+            helper="Exemplo: data.token. Deixe ambos os campos vazios para não salvar a resposta.",
+            disabled=not is_available,
+        )
+        self.http_response_vault_key_field.on_change = self.on_execution_form_change
+        self.http_response_vault_path_field.on_change = self.on_execution_form_change
+        return ft.Container(
+            expand=True,
+            padding=14,
+            content=ft.Column(
+                scroll=ft.ScrollMode.AUTO,
+                spacing=12,
+                controls=[
+                    ft.Text(
+                        "Somente um campo de uma resposta HTTP bem-sucedida é salvo. "
+                        "O valor permanece oculto no resultado e nos logs.",
+                        size=12,
+                        color=TEXT_SECONDARY,
+                    ),
+                    self.http_response_vault_key_field,
+                    self.http_response_vault_path_field,
                 ],
             ),
         )
@@ -602,7 +671,11 @@ class ModuleExecutionTabMixin:
                                 weight=ft.FontWeight.W_700,
                                 color=TEXT_PRIMARY,
                             ),
-                            ft.Text(description, size=13, color=TEXT_SECONDARY),
+                            build_placeholder_text(
+                                description,
+                                size=13,
+                                color=TEXT_SECONDARY,
+                            ),
                         ],
                     ),
                     content,

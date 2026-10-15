@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 import re
 from time import perf_counter
 from typing import Any
+from collections.abc import Callable
 from urllib.parse import parse_qsl, urlsplit
 
 import httpx
@@ -13,6 +15,7 @@ from database.db import SessionLocal
 from database.models import ModuleHttpRequest
 from repositories.module_http_request_repository import ModuleHttpRequestRepository
 from services.module_manifest import (
+    JSON_RESPONSE_PATH_PATTERN,
     ManifestHttpItem,
     ManifestHttpRequest,
     SENSITIVE_HTTP_NAME_PATTERN,
@@ -20,12 +23,27 @@ from services.module_manifest import (
     SUPPORTED_HTTP_BODY_MODES,
     SUPPORTED_HTTP_METHODS,
     parse_module_manifest,
+    is_vault_placeholder_value,
+    validate_non_sensitive_http_content,
 )
+from services.vault_service import VaultService
+from util.vault_names import (
+    PLACEHOLDER_PATTERN,
+    VAULT_NAME_PATTERN,
+    http_url_for_validation,
+    load_vault_names,
+)
+from util.vault_values import redact_vault_values
 
 
 REQUEST_TIMEOUT_SECONDS = 30.0
 MAX_RESPONSE_BODY_CHARACTERS = 100_000
 TRUNCATED_BODY_SUFFIX = "\n\n[Resposta truncada pela IRIS.]"
+
+# O histórico da IRIS já registra o resumo. HTTPX/Core em INFO/DEBUG podem
+# registrar URLs ou cabeçalhos resolvidos; mantenha apenas diagnósticos de falha.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 class HttpService:
@@ -38,6 +56,8 @@ class HttpService:
         body: object | None = None,
         *,
         body_mode: str = "none",
+        vault: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response, bool], None] | None = None,
     ) -> dict[str, object]:
         request_arguments: dict[str, object] = {
             "params": params or None,
@@ -93,6 +113,8 @@ class HttpService:
         elapsed_ms = _elapsed_ms(started_at)
         status_code = response.status_code
         success = 200 <= status_code <= 399
+        if on_response is not None:
+            on_response(response, success)
         message = (
             f"Requisição concluída com status {status_code}."
             if success
@@ -105,7 +127,7 @@ class HttpService:
             "reason_phrase": response.reason_phrase,
             "elapsed_ms": elapsed_ms,
             "headers": dict(response.headers),
-            "body": _decode_response_body(response),
+            "body": _decode_response_body(response, vault),
         }
 
     def get(self, url: str, **kwargs):
@@ -120,9 +142,11 @@ class ModuleHttpRequestService:
         self,
         session_factory=SessionLocal,
         http_service: HttpService | None = None,
+        vault_service: VaultService | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.http_service = http_service or HttpService()
+        self.vault_service = vault_service or VaultService(session_factory)
 
     def execute(
         self,
@@ -141,28 +165,103 @@ class ModuleHttpRequestService:
             if bool(definition["argument_enabled"])
             else ""
         )
-        url = _replace_argument(str(definition["url"]), effective_argument)
+        declared_names = set(definition["vault_keys"])
+        vault: dict[str, str] = {}
+
+        def resolve_vault(name: str) -> str:
+            if not VAULT_NAME_PATTERN.fullmatch(name):
+                raise ValueError("A requisição contém um placeholder de Vault Key inválido.")
+            if name not in declared_names:
+                raise ValueError(f"A Vault Key {name} não foi declarada em vault_keys pelo módulo.")
+            if name not in vault:
+                value = self.vault_service.get_value(name)
+                if value is None:
+                    raise ValueError(f"A Vault Key {name} não foi configurada.")
+                vault[name] = value
+            return vault[name]
+
+        try:
+            return self._execute_request(definition, effective_argument, resolve_vault, vault)
+        except Exception as error:
+            if vault:
+                raise ValueError(str(redact_vault_values(str(error), vault))) from None
+            raise
+
+    def _execute_request(self, definition: dict[str, object], effective_argument: str,
+                         resolve_vault: Callable[[str], str], vault: dict[str, str]) -> dict[str, object]:
+        response_vault = definition["response_vault"]
+        if response_vault is not None:
+            self.vault_service.ensure_iris_update_allowed(str(response_vault["key"]))
+        url = _replace_argument(str(definition["url"]), effective_argument, resolve_vault)
         params = _build_enabled_values(
             list(definition["params"]),
             effective_argument,
+            resolve_vault,
         )
         headers = _build_enabled_values(
             list(definition["headers"]),
             effective_argument,
+            resolve_vault,
         )
         body_mode = str(definition["body"]["mode"])
         body = _build_body(
             dict(definition["body"]),
             effective_argument,
+            resolve_vault,
         )
-        return self.http_service.request(
+        response_handler = None
+        if response_vault is not None:
+            response_handler = lambda response, success: self._capture_response_vault(
+                response, dict(response_vault), vault, success,
+            )
+        result = self.http_service.request(
             str(definition["method"]),
             url,
             params=params,
             headers=headers,
             body=body,
             body_mode=body_mode,
+            vault=vault,
+            on_response=response_handler,
         )
+        return redact_vault_values(result, vault, preserve_result_fields=True)
+
+    def _capture_response_vault(
+        self,
+        response: httpx.Response,
+        mapping: dict[str, str],
+        vault: dict[str, str],
+        success: bool,
+    ) -> None:
+        try:
+            payload = response.json()
+        except ValueError:
+            if not success:
+                return
+            raise ValueError(
+                "A resposta HTTP não contém JSON para salvar no Vault."
+            ) from None
+        value: object = payload
+        for part in mapping["path"].split("."):
+            if not isinstance(value, dict) or part not in value:
+                if not success:
+                    return
+                raise ValueError(
+                    "O caminho JSON configurado para o Vault não foi encontrado na resposta."
+                )
+            value = value[part]
+        if not isinstance(value, str) or not value:
+            if not success:
+                return
+            raise ValueError(
+                "A resposta HTTP não contém um valor de texto válido para o Vault."
+            )
+        key = mapping["key"]
+        if key in vault:
+            vault[f"__previous_{key}"] = vault[key]
+        vault[key] = value
+        if success:
+            self.vault_service.update_value_by_iris(key, value)
 
     def save_argument(self, module_id: int, argument: str) -> None:
         db = self.session_factory()
@@ -196,6 +295,7 @@ class ModuleHttpRequestService:
         headers_json: str,
         body_json: str,
         scripts_json: str,
+        response_vault_json: str | None = None,
     ) -> dict[str, object]:
         if type(argument_enabled) is not bool:
             raise ValueError("O estado do argumento da execução deve ser booleano.")
@@ -211,6 +311,8 @@ class ModuleHttpRequestService:
         )
         if not all(isinstance(value, str) for value in text_values):
             raise ValueError("Os campos da requisição HTTP devem conter texto.")
+        if response_vault_json is not None and not isinstance(response_vault_json, str):
+            raise ValueError("A configuração de resposta para o Vault deve conter texto.")
         validate_non_sensitive_argument(argument)
 
         db = self.session_factory()
@@ -227,6 +329,8 @@ class ModuleHttpRequestService:
             request.headers_json = headers_json
             request.body_json = body_json
             request.scripts_json = scripts_json
+            if response_vault_json is not None:
+                request.response_vault_json = response_vault_json
             request.is_customized = True
             detail = build_http_request_detail(request)
             request.params_json = _serialize_json_value(detail["params"])
@@ -236,6 +340,7 @@ class ModuleHttpRequestService:
             request.headers_json = _serialize_json_value(detail["headers"])
             request.body_json = _serialize_json_value(detail["body"])
             request.scripts_json = _serialize_json_value(detail["scripts"])
+            request.response_vault_json = _serialize_json_value(detail["response_vault"])
             db.commit()
             return detail
         except Exception:
@@ -305,6 +410,7 @@ class ModuleHttpRequestService:
             if request is None:
                 raise ValueError("O módulo não possui uma requisição HTTP configurada.")
             definition = build_http_request_detail(request)
+            definition["vault_keys"] = load_vault_names(request.module.vault_keys_json)
             if bool(request.argument_enabled):
                 normalized_argument = str(argument or "")
                 validate_non_sensitive_argument(normalized_argument)
@@ -325,10 +431,11 @@ def build_http_request_detail(request: ModuleHttpRequest) -> dict[str, object]:
     if method not in SUPPORTED_HTTP_METHODS:
         raise ValueError("A configuração HTTP persistida possui um método inválido.")
     url = str(request.url or "").strip()
-    if not url.startswith(("http://", "https://")):
+    validation_url = http_url_for_validation(url)
+    if not validation_url.startswith(("http://", "https://")):
         raise ValueError("A configuração HTTP persistida possui uma URL inválida.")
     try:
-        parsed_url = httpx.URL(url)
+        parsed_url = httpx.URL(validation_url)
     except httpx.InvalidURL as error:
         raise ValueError(
             "A configuração HTTP persistida possui uma URL inválida."
@@ -354,6 +461,10 @@ def build_http_request_detail(request: ModuleHttpRequest) -> dict[str, object]:
             "A configuração HTTP persistida contém uma autorização não suportada."
         )
     body = _load_http_body(request.body_json)
+    response_vault = _load_response_vault(
+        request.response_vault_json,
+        load_vault_names(request.module.vault_keys_json) if request.module else (),
+    )
     scripts = _load_json_mapping(request.scripts_json, "scripts")
     if set(scripts) != {"pre_request", "post_response"} or not all(
         isinstance(scripts[key], str)
@@ -378,6 +489,7 @@ def build_http_request_detail(request: ModuleHttpRequest) -> dict[str, object]:
         "headers": headers,
         "body": body,
         "scripts": scripts,
+        "response_vault": response_vault,
         "is_customized": bool(request.is_customized),
     }
 
@@ -397,6 +509,12 @@ def apply_manifest_http_request_definition(
     )
     request.headers_json = _serialize_http_items(definition.headers)
     request.body_json = _serialize_http_body(definition)
+    request.response_vault_json = _serialize_json_value(
+        {
+            "key": definition.response_vault.key,
+            "path": definition.response_vault.path,
+        } if definition.response_vault else None
+    )
     request.scripts_json = json.dumps(
         {
             "pre_request": definition.scripts.pre_request,
@@ -497,6 +615,28 @@ def _load_http_body(raw_value: str) -> dict[str, object]:
     return {"mode": mode, "content": content}
 
 
+def _load_response_vault(
+    raw_value: str | None,
+    vault_keys: tuple[str, ...],
+) -> dict[str, str] | None:
+    try:
+        value = json.loads(raw_value or "null")
+    except (TypeError, json.JSONDecodeError):
+        raise ValueError("A configuração de resposta para o Vault contém JSON inválido.") from None
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"key", "path"}:
+        raise ValueError("A configuração de resposta para o Vault é inválida.")
+    key = value["key"]
+    path = value["path"]
+    if not isinstance(key, str) or key not in vault_keys:
+        raise ValueError("A Vault Key de destino da resposta não foi declarada.")
+    if (not isinstance(path, str) or len(path) > 200
+            or not JSON_RESPONSE_PATH_PATTERN.fullmatch(path)):
+        raise ValueError("O caminho JSON da resposta para o Vault é inválido.")
+    return {"key": key, "path": path}
+
+
 def _load_json_mapping(raw_value: str, label: str) -> dict[str, Any]:
     try:
         value = json.loads(raw_value)
@@ -522,11 +662,13 @@ def _validate_loaded_http_items(
 def _build_enabled_values(
     items: list[dict[str, object]],
     argument: str,
+    resolve_vault: Callable[[str], str] | None = None,
 ) -> dict[str, str] | None:
     values = {
-        _replace_argument(str(item["key"]), argument): _replace_argument(
+        _replace_argument(str(item["key"]), argument, resolve_vault): _replace_argument(
             str(item["value"]),
             argument,
+            resolve_vault,
         )
         for item in items
         if bool(item["enabled"]) and str(item["key"])
@@ -534,28 +676,67 @@ def _build_enabled_values(
     return values or None
 
 
-def _build_body(body: dict[str, object], argument: str) -> object | None:
+def _build_body(body: dict[str, object], argument: str,
+                resolve_vault: Callable[[str], str] | None = None) -> object | None:
     mode = str(body["mode"])
     content = body["content"]
     if mode == "none":
         return None
     if mode == "raw_text":
-        return _replace_argument(str(content), argument)
+        return _replace_argument(str(content), argument, resolve_vault)
     if mode == "raw_json":
-        replaced_content = _replace_argument(str(content), argument)
+        replaced_content = _replace_argument(str(content), argument, resolve_vault, json_mode=True)
         try:
             return json.loads(replaced_content)
         except json.JSONDecodeError as error:
             raise ValueError(
                 "O body raw_json ficou com JSON inválido após substituir o argumento."
-            ) from error
+            ) from None
     if mode == "form_urlencoded":
-        return _build_enabled_values(list(content), argument)
+        return _build_enabled_values(list(content), argument, resolve_vault)
     raise ValueError(f"Modo de body HTTP não suportado: {mode}")
 
 
-def _replace_argument(value: str, argument: str) -> str:
-    return value.replace("{{argument}}", argument)
+def _replace_argument(value: str, argument: str,
+                      resolve_vault: Callable[[str], str] | None = None,
+                      *, json_mode: bool = False) -> str:
+    def replace(match: re.Match) -> str:
+        placeholder = match.group(1)
+        if placeholder == "argument":
+            return _replace_vault_references(
+                argument,
+                resolve_vault,
+                json_mode=json_mode,
+            )
+        if not placeholder.startswith("vk."):
+            raise ValueError(
+                "O placeholder HTTP é inválido. Use {{argument}} ou {{vk.NOME_DA_CHAVE}}."
+            )
+        if resolve_vault is None:
+            raise ValueError("A requisição contém uma Vault Key sem resolução configurada.")
+        name = placeholder[3:]
+        resolved = resolve_vault(name)
+        return json.dumps(resolved, ensure_ascii=False)[1:-1] if json_mode else resolved
+    return PLACEHOLDER_PATTERN.sub(replace, value)
+
+
+def _replace_vault_references(
+    value: str,
+    resolve_vault: Callable[[str], str] | None,
+    *,
+    json_mode: bool = False,
+) -> str:
+    def replace(match: re.Match) -> str:
+        placeholder = match.group(1)
+        if not placeholder.startswith("vk."):
+            return match.group(0)
+        if resolve_vault is None:
+            raise ValueError("A requisição contém uma Vault Key sem resolução configurada.")
+        name = placeholder[3:]
+        resolved = resolve_vault(name)
+        return json.dumps(resolved, ensure_ascii=False)[1:-1] if json_mode else resolved
+
+    return PLACEHOLDER_PATTERN.sub(replace, value)
 
 
 def _validate_no_sensitive_values(
@@ -570,24 +751,13 @@ def _validate_no_sensitive_values(
         key = str(item["key"])
         value = str(item["value"])
         _validate_no_sensitive_http_item(key, value)
-    if isinstance(body["content"], str) and SENSITIVE_HTTP_VALUE_PATTERN.search(
-        str(body["content"])
-    ):
-        raise ValueError(
-            "A configuração HTTP persistida contém uma credencial não suportada."
-        )
-    if isinstance(body["content"], str) and re.search(
-        r"[\"']?(?:api[._\- ]*key|authorization|credential|password|secret|senha|token)"
-        r"[\"']?\s*[:=]",
-        str(body["content"]),
-        re.IGNORECASE,
-    ):
-        raise ValueError(
-            "A configuração HTTP persistida contém uma credencial não suportada."
-        )
+    if isinstance(body["content"], str):
+        validate_non_sensitive_http_content(str(body["content"]))
 
 
 def _validate_no_sensitive_http_item(key: str, value: str) -> None:
+    if is_vault_placeholder_value(value):
+        return
     if (
         SENSITIVE_HTTP_NAME_PATTERN.search(key)
         or SENSITIVE_HTTP_VALUE_PATTERN.search(value)
@@ -618,14 +788,14 @@ def validate_non_sensitive_argument(value: str | None) -> None:
         )
 
 
-def _decode_response_body(response: httpx.Response) -> object:
-    body_text = response.text
+def _decode_response_body(response: httpx.Response, vault: dict[str, str] | None = None) -> object:
+    body_text = str(redact_vault_values(response.text, vault or {}))
     if len(body_text) > MAX_RESPONSE_BODY_CHARACTERS:
         return body_text[:MAX_RESPONSE_BODY_CHARACTERS] + TRUNCATED_BODY_SUFFIX
     if not body_text:
         return ""
     try:
-        return response.json()
+        return redact_vault_values(response.json(), vault or {})
     except ValueError:
         return body_text
 

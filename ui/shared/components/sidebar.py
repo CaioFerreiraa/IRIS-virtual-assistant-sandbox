@@ -13,7 +13,7 @@ from ui.shared.components.material_icons import material_icon
 from ui.theme.colors import (
     BLUE_GREY,
     BORDER,
-    CANCEL,
+    PASTEL_DARK_RED,
     GREY_100,
     GREY_200,
     GREY_300,
@@ -57,6 +57,7 @@ class SidebarViewState:
     root: ft.Container = field(init=False)
     module_title: ft.Container | None = field(init=False, default=None)
     module_count: int = field(init=False, default=-1)
+    diagnostics_collapsed: bool = False
 
     def __post_init__(self) -> None:
         self.module_list = ft.ListView(
@@ -70,7 +71,7 @@ class SidebarViewState:
             bgcolor=SURFACE,
             content=self.module_list,
         )
-        self.panel_column = ft.Column(expand=True, spacing=20)
+        self.panel_column = ft.Column(expand=True, spacing=0)
         self.root = ft.Container(expand=True)
 
     def set_controls(self, controls: Sequence[ft.Control]) -> None:
@@ -189,7 +190,7 @@ def _build_status_dot(module: Mapping[str, object]) -> ft.Container | None:
         and status != "online"
     )
     if module_has_problem(module):
-        color = CANCEL
+        color = PASTEL_DARK_RED
         tooltip = "Módulo com problema"
     elif is_root_without_auto_start:
         color = PASTEL_DARK_GREEN
@@ -492,7 +493,7 @@ def _build_invalid_module_item(module: InvalidModuleInfo) -> ft.Container:
                     height=STATUS_DOT_SIZE,
                     margin=ft.Margin(top=3),
                     border_radius=STATUS_DOT_SIZE / 2,
-                    bgcolor=CANCEL,
+                    bgcolor=PASTEL_DARK_RED,
                     border=ft.Border.all(1, BORDER),
                     tooltip="Módulo com problema",
                 ),
@@ -530,38 +531,52 @@ def _build_invalid_module_item(module: InvalidModuleInfo) -> ft.Container:
     )
 
 
-def _build_section_title(label: str, icon: ft.IconData, count: int) -> ft.Container:
+def _build_section_title(
+    label: str,
+    icon: ft.IconData,
+    count: int,
+    trailing: ft.Control | None = None,
+    on_click: Callable[[ft.ControlEvent], None] | None = None,
+    tooltip: str | None = None,
+    top_padding: float = 28,
+) -> ft.Container:
+    controls: list[ft.Control] = [
+        ft.Icon(icon, size=17, color=PASTEL_DARK_PURPLE),
+        ft.Text(
+            label,
+            expand=True,
+            size=16,
+            weight=ft.FontWeight.BOLD,
+            color=TEXT_PRIMARY,
+            font_family=TITLE_FONT,
+        ),
+        ft.Container(
+            width=24,
+            height=22,
+            alignment=ft.Alignment.CENTER,
+            bgcolor=SURFACE,
+            border_radius=11,
+            content=ft.Text(
+                str(count),
+                size=10,
+                weight=ft.FontWeight.W_700,
+                color=TEXT_SECONDARY,
+            ),
+        ),
+    ]
+    if trailing is not None:
+        controls.append(trailing)
+
     return ft.Container(
-        padding=ft.Padding(left=16, top=28, right=14, bottom=16),
-        #bgcolor=GREY_100,
-        #border=ft.Border.only(bottom=ft.BorderSide(0.3, PASTEL_PURPLE)),
+        padding=ft.Padding(left=16, top=top_padding, right=14, bottom=16),
+        ink=on_click is not None,
+        ink_color=ft.Colors.with_opacity(0.05, PASTEL_DARK_PURPLE),
+        tooltip=tooltip,
+        on_click=on_click,
         content=ft.Row(
             spacing=7,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            controls=[
-                ft.Icon(icon, size=17, color=PASTEL_DARK_PURPLE),
-                ft.Text(
-                    label,
-                    expand=True,
-                    size=16,
-                    weight=ft.FontWeight.BOLD,
-                    color=TEXT_PRIMARY,
-                    font_family=TITLE_FONT
-                ),
-                ft.Container(
-                    width=24,
-                    height=22,
-                    alignment=ft.Alignment.CENTER,
-                    bgcolor=SURFACE,
-                    border_radius=11,
-                    content=ft.Text(
-                        str(count),
-                        size=10,
-                        weight=ft.FontWeight.W_700,
-                        color=TEXT_SECONDARY,
-                    ),
-                ),
-            ],
+            controls=controls,
         ),
     )
 
@@ -622,20 +637,58 @@ def build_sidebar(
         for module in invalid_modules or ()
     ]
     if invalid_items:
+        diagnostics_list = ft.ListView(
+            spacing=0,
+            padding=0,
+            height=min(220, len(invalid_items) * 96),
+            visible=not active_view_state.diagnostics_collapsed,
+            controls=invalid_items,
+        )
+        diagnostics_toggle_icon = ft.Icon(
+            (
+                ft.Icons.KEYBOARD_ARROW_RIGHT_ROUNDED
+                if active_view_state.diagnostics_collapsed
+                else ft.Icons.KEYBOARD_ARROW_DOWN_ROUNDED
+            ),
+            size=18,
+            color=TEXT_SECONDARY,
+        )
+
+        def on_diagnostics_toggle(_: ft.ControlEvent) -> None:
+            is_expanded = bool(diagnostics_list.visible)
+            diagnostics_list.visible = not is_expanded
+            active_view_state.diagnostics_collapsed = is_expanded
+            diagnostics_toggle_icon.name = (
+                ft.Icons.KEYBOARD_ARROW_DOWN_ROUNDED
+                if diagnostics_list.visible
+                else ft.Icons.KEYBOARD_ARROW_RIGHT_ROUNDED
+            )
+            diagnostics_title.tooltip = (
+                "Recolher diagnósticos"
+                if diagnostics_list.visible
+                else "Mostrar diagnósticos"
+            )
+            _update_if_mounted(diagnostics_toggle_icon)
+            _update_if_mounted(diagnostics_title)
+            _update_if_mounted(diagnostics_list)
+
+        diagnostics_title = _build_section_title(
+            "Diagnósticos",
+            ft.Icons.HEALTH_AND_SAFETY_OUTLINED,
+            len(invalid_items),
+            trailing=diagnostics_toggle_icon,
+            on_click=on_diagnostics_toggle,
+            tooltip=(
+                "Mostrar diagnósticos"
+                if active_view_state.diagnostics_collapsed
+                else "Recolher diagnósticos"
+            ),
+            top_padding=20,
+        )
         panel_controls.extend(
             [
-                ft.Divider(height=1, color=BORDER),
-                _build_section_title(
-                    "Diagnóstico",
-                    ft.Icons.HEALTH_AND_SAFETY_OUTLINED,
-                    len(invalid_items),
-                ),
-                ft.ListView(
-                    spacing=0,
-                    padding=0,
-                    height=min(220, len(invalid_items) * 96),
-                    controls=invalid_items,
-                ),
+                diagnostics_title,
+                diagnostics_list,
             ]
         )
 

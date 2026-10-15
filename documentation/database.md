@@ -72,6 +72,7 @@ Campos:
 - `module_public_key`: chave pública obrigatória, única e estável;
 - `name`: nome exibido;
 - `call_name`: nome padrão usado em comandos;
+- `vault_keys_json`: lista JSON dos nomes de Vault Keys declarados, com padrão `[]`;
 - `custom_call_name`: nome personalizado;
 - `description`: explicação;
 - `icon`: nome da ligature do Material Icons usada pela interface;
@@ -130,11 +131,24 @@ Campos:
 - `module_id`, obrigatório e único;
 - `method` e `url`, inicialmente definidos pelo manifesto e personalizáveis pelo usuário;
 - `argument_enabled` e `argument`, uma string opcional com o último valor usado;
-- `params_json`, `authorization_json`, `headers_json`, `body_json` e `scripts_json`, serializados explicitamente em colunas `Text`;
+- `params_json`, `authorization_json`, `headers_json`, `body_json`, `scripts_json` e `response_vault_json`, serializados explicitamente em colunas `Text`;
 - `is_customized`, que distingue a definição sincronizada do manifesto da versão editada pelo usuário;
 - `created_at` e `updated_at`.
 
 Os JSONs são validados nos serviços e não dependem do tipo JSON específico do SQLite. A tabela não pode armazenar token, senha, API key ou credencial.
+
+### VaultKey
+
+Armazena uma variável global local. Campos: `id`, `name` obrigatório e único,
+`description` opcional, `encrypted_value` nulo ou criptografado, `allow_iris_update`
+booleano com padrão falso, `created_date` e `edited_date`. O nome é normalizado
+para maiúsculas e fica imutável após criar.
+
+O valor é criptografado com Fernet antes de persistir. A chave fica no arquivo
+local `.iris_vault.key`; perder esse arquivo impede a leitura dos valores.
+Não há coluna em texto puro nem tabela associativa. Módulos que usam uma chave
+são calculados por `Module.vault_keys_json`. Não há seed de Vault Keys.
+Veja as limitações de proteção básica do MVP em [Vault Keys](vault.md).
 
 ### Routine
 
@@ -289,6 +303,12 @@ Uma migration deve considerar:
 
 A migration do registry é `f8c1d4a7b2e9`. Ela cria as tabelas de variáveis, adiciona os campos do manifesto e reforça a FK da hierarquia com restrição de exclusão. A migration `b7e4a1c9d2f6` adiciona o ícone dos módulos. A migration `d9f2a6c4e1b8` cria somente a tabela genérica `module_http_requests`; módulos comunitários continuam sendo cadastrados pelo registry, sem migrations ou seeds próprios. A migration aditiva `e4b7c2d9a6f1` acrescenta `is_customized` com padrão falso para preservar personalizações locais sem alterar registros existentes. A migration `a1f6d8c3b9e2` adiciona `stop_on_failure` e `deleted_at` às rotinas e `argument` às etapas; registros existentes recebem `stop_on_failure=True`. As migrations `a6c8e2f4b1d3` e `c7d9e1a3f5b2` criam as configurações gerais e o controle do indicador de escuta. A migration de merge `f2d4b6a8c0e1` reúne os ramos de rotinas e configurações. As migrations `f2b8a9d4c6e1` e `a1c9e7d5b2f4` adicionam o modo de notificação e os aliases de chamada dos módulos. A migration de merge `b4e6f8a0c2d3` consolida novamente o histórico em um único `head`, sem alterar tabelas adicionais.
 
+A migration `a9d7c4b2e6f1` adiciona `response_vault_json` às requisições
+HTTP existentes, com padrão `null`, sem alterar os demais campos.
+A migration `e3a6c9f1d2b4` permite `vault_keys.encrypted_value` nulo, sem
+alterar os valores criptografados existentes. O downgrade recusa chaves ainda
+sem valor para não descartar seu estado silenciosamente.
+
 ## Transações
 
 Operações de escrita devem:
@@ -349,9 +369,10 @@ não possuem modelo definido.
 
 ## Credenciais
 
-Credenciais não devem ser armazenadas diretamente nas tabelas atuais.
+Segredos em texto puro não podem ser armazenados nas tabelas. Vault Keys
+usa somente o valor Fernet criptografado em `vault_keys.encrypted_value`.
 
-O banco poderá guardar metadados, por exemplo:
+Metadados podem incluir, por exemplo:
 
 - nome da credencial;
 - serviço;
@@ -372,3 +393,17 @@ O segredo deve permanecer em um mecanismo protegido. Consulte [Cofre e BYOK](vau
 - Não expor segredo em logs.
 - Não apagar histórico sem ação explícita.
 - Atualizar este documento quando os modelos mudarem.
+
+## Migration de Vault Keys
+
+`c8a2f6d4e9b1` tem `down_revision=b4e6f8a0c2d3`, o head anterior real.
+Ela cria somente `vault_keys` e adiciona `modules.vault_keys_json`, preenchendo
+módulos existentes com `[]`. O histórico permanece intacto e não há seed.
+O downgrade remove a tabela e a coluna; ele perde as chaves cadastradas.
+
+`alembic upgrade head` em uma base completamente vazia cria o modelo atual e
+registra o head, como a inicialização da aplicação. Isso evita reproduzir a
+divergência de colunas entre revisões históricas iniciais sem editar migrations
+já aplicadas. Bases existentes continuam percorrendo as migrations pendentes.
+Bases atuais sem versão Alembic são marcadas no head anterior antes do upgrade
+do Vault. A alteração estrutural não usa um novo `ALTER TABLE` manual no startup.

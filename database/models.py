@@ -31,6 +31,7 @@ class Module(Base):
     name = Column(String(100), nullable=False)
     call_name = Column(String(100), nullable=False)
     call_aliases_json = Column(Text, nullable=False, default="[]")
+    vault_keys_json = Column(Text, nullable=False, default="[]", server_default="[]")
     custom_call_name = Column(String(100), nullable=True)
     description = Column(Text, nullable=True)
     icon = Column(String(100), nullable=False, default="extension")
@@ -81,6 +82,18 @@ class Module(Base):
     )
 
 
+class VaultKey(Base):
+    __tablename__ = "vault_keys"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    encrypted_value = Column(Text, nullable=True)
+    allow_iris_update = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    edited_date = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ModuleHttpRequest(Base):
     __tablename__ = "module_http_requests"
     __table_args__ = (
@@ -117,6 +130,7 @@ class ModuleHttpRequest(Base):
         nullable=False,
         default='{"pre_request":"","post_response":""}',
     )
+    response_vault_json = Column(Text, nullable=False, default="null", server_default="null")
     is_customized = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(

@@ -211,7 +211,7 @@ def _default_call_name(module_public_key: str) -> str:
 
 def _build_scaffold_readme(name: str, kind: str) -> str:
     execution = (
-        "A função `execute(argument, variables)` em `main.py` contém a ação do módulo."
+        "A função `execute(argument, variables, vault=None)` em `main.py` contém a ação do módulo."
         if kind == "python"
         else "A seção `http_request` de `module.json` contém a requisição declarativa."
     )

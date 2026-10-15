@@ -44,6 +44,8 @@ O repositório inclui módulos instalados voltados a demonstração e testes man
   por meio de auto start;
 - `notes.javascript.open`: adaptador Python que verifica o backend e abre sua
   interface HTML;
+- `notes.javascript.login`: requisição HTTP declarativa que envia referências
+  de login e senha do Vault e salva o token da resposta em `TOKEN_NOTAS`;
 - `notes.javascript.create`, `notes.javascript.edit` e
   `notes.javascript.delete`: filhos HTTP declarativos para demonstrar CRUD e
   substituição de `{{argument}}`.
@@ -226,18 +228,19 @@ O manifesto versão 1 aceita o campo opcional `http_request` para uma única cha
 
 O placeholder literal `{{argument}}` pode aparecer na URL, nos parâmetros, nos cabeçalhos e no body. `argument_enabled` controla se a string pode ser informada; o último valor utilizado é salvo em `ModuleHttpRequest.argument` e recarregado na tela do módulo. Essa capacidade é independente de `search_arguments()`, que continua sendo um contrato dos módulos Python atuais.
 
-O registry cria ou atualiza `ModuleHttpRequest` pelo `module_id` e preserva o argumento salvo durante ressincronizações. Enquanto `is_customized` for falso, a definição acompanha o `module.json`. Depois que o usuário salva uma personalização, o registry preserva método, URL, argumento habilitado, parâmetros, Authorization, cabeçalhos, body e scripts do banco. A ação “Voltar ao module.json” reaplica a definição atual do manifesto, mantém o último argumento e limpa o estado de personalização.
+O registry cria ou atualiza `ModuleHttpRequest` pelo `module_id` e preserva o argumento salvo durante ressincronizações. Enquanto `is_customized` for falso, a definição acompanha o `module.json`. Depois que o usuário salva uma personalização, o registry preserva método, URL, argumento habilitado, parâmetros, Authorization, cabeçalhos, body, scripts e mapeamento da resposta para o Vault no banco. A ação “Voltar ao module.json” reaplica a definição atual do manifesto, mantém o último argumento e limpa o estado de personalização.
 
 Um módulo novo copiado para `modules/installed` usa o mesmo fluxo de inicialização e não exige migration ou seed próprio. A restrição única de `module_id` impede mais de uma requisição principal por módulo.
 
 Na interface, método, URL, argumento habilitado, argumento, parâmetros,
-Authorization, cabeçalhos, body e scripts podem ser personalizados. Qualquer
+Authorization, cabeçalhos, body, scripts e destino da resposta no Vault podem
+ser personalizados. Qualquer
 alteração exibe a barra flutuante “Salvar requisição”; executar também salva
 alterações pendentes e preserva o último argumento usado. Params e Headers são
 editados em linhas com estado, chave, valor e descrição, enquanto o body separa
 modo e conteúdo.
-Authorization aceita apenas `{"type":"none"}` e credenciais continuam
-proibidas. Scripts personalizados são armazenados e exibidos como texto, mas
+Authorization aceita apenas `{"type":"none"}`. Credenciais literais continuam
+proibidas; referências a Vault Keys declaradas são aceitas. Scripts personalizados são armazenados e exibidos como texto, mas
 não são executados. O manifesto distribuído continua exigindo scripts vazios.
 
 Respostas HTTP são apresentadas de forma estruturada, com corpo limitado para exibição. O histórico persiste somente um resumo com método, status e duração; não salva corpo, cabeçalhos ou query string completos. Múltiplas requisições e lógica personalizada continuam sendo implementadas com Python.
@@ -259,10 +262,21 @@ Python, e seu `main.py` apenas localiza o executável `node`, inicia `server.js`
 aguarda o health check e devolve o `subprocess.Popen` ao gerenciador atual.
 
 O módulo raiz não é executável e concentra o switch “Iniciar com a IRIS”. Os
-quatro filhos são executáveis: “Abrir notas” usa Python exclusivamente para
-abrir o navegador, enquanto criar, editar e deletar usam `ModuleHttpRequest`.
+cinco filhos são executáveis: “Abrir notas” usa Python exclusivamente para
+abrir o navegador, enquanto “Login nas notas”, criar, editar e deletar usam
+`ModuleHttpRequest`. O login declara a gravação de `data.token` da resposta
+em `TOKEN_NOTAS`.
 O backend escuta somente em `127.0.0.1:8765`, usa módulos nativos do Node.js e
 mantém os dados apenas em memória. Reiniciar o processo apaga todas as notas.
+O login didático usa `admin`/`admin`, emite um token novo e cria um cookie
+de sessão para a página web. `/health` e `/login` são públicos; a página
+principal e todas as rotas de notas exigem token ou sessão válida. A senha
+fixa é apenas para a demonstração local, não para produção.
+
+Se já houver um backend de Notas respondendo ao health check na porta
+configurada, a IRIS o reutiliza sem tentar iniciar outro processo nem encerrá-lo
+ao fechar. Uma porta ocupada por outro serviço continua sendo uma falha de
+inicialização e é registrada no `module.log`.
 
 ## Auto start
 
@@ -282,3 +296,46 @@ O contrato mínimo exige `start()`. `stop()` é opcional para recursos no proces
 ## Segurança atual
 
 Importar um módulo Python executa código no processo da IRIS. O registry evita que exceções comuns derrubem a inicialização, mas não é uma sandbox de segurança. Instalação, assinatura, permissões e distribuição comunitária confiável ainda precisam de um contrato futuro.
+
+## Vault Keys
+
+O campo opcional raiz `vault_keys`, por exemplo `["NOTES_ACCESS_KEY"]`, declara
+os nomes que um módulo pode receber, sem valores ou outros metadados. Ele não
+muda `schema_version: 1` e ausente equivale a `[]`. Os nomes seguem
+`^[A-Z_][A-Z0-9_]*$`, em maiúsculas e sem duplicados. O registry persiste a lista
+em `Module.vault_keys_json` sem criar chaves automaticamente.
+
+HTTP substitui `{{vk.NOTES_ACCESS_KEY}}` na URL, parâmetros, cabeçalhos e body
+habilitados durante a execução. `{{argument}}` continua reservado ao argumento.
+Na interface, `vk.` lista as chaves declaradas e configuradas para o módulo e
+insere a referência completa. Referências ausentes deixam o campo vermelho;
+campos com `{{argument}}` recebem fundo azul acinzentado pastel.
+Chaves não declaradas ou ausentes interrompem a chamada com mensagem clara.
+Não há autenticação Bearer específica. Um módulo HTTP pode declarar
+`response_vault: {"key": "TOKEN_NOTAS", "path": "data.token"}` para guardar um
+campo textual de uma resposta JSON bem-sucedida. A chave precisa estar
+declarada, cadastrada e com “IRIS pode alterar” ativado. A chamada nem é
+enviada se faltar essa permissão; a resposta exibida oculta o valor capturado.
+
+Python pode fornecer `execute(argument=None, variables=None, vault=None)`.
+Use `token = (vault or {}).get("NOTES_ACCESS_KEY")` e retorne erro amigável se
+não houver valor. Somente funções que aceitam `vault` ou `**kwargs` recebem
+nomes declarados e existentes. Ausentes não entram no dicionário; `variables`
+e `os.environ` não recebem segredos. Callbacks de busca e auto start não recebem
+Vault Keys. Valores são descriptografados somente na execução, sem cache global.
+
+Um entry point Python confiável pode retornar `vault_update` no formato
+`{"name": "TOKEN_NOTAS", "value": token}` junto de `"success": true`.
+O processador grava o valor somente se a chave já existir, estiver declarada
+em `vault_keys` e tiver “IRIS pode alterar” ativado. O campo é retirado do
+resultado e o valor é ocultado de mensagens e logs. Um resultado de falha
+não pode alterar o Vault. O login simulado de Notas usa o mapeamento HTTP
+`response_vault`, não esse contrato Python.
+
+Os módulos HTTP de criar, editar e excluir Notas demonstram o header
+`X-IRIS-Vault` com `TOKEN_NOTAS`, preenchido pelo submódulo Login nas notas.
+`Abrir notas` não depende do Vault. Cadastre as chaves seguindo o README de
+Notas. Veja exemplos
+completos HTTP/Python, ciclo de vida e limites de proteção local em
+[Vault Keys](vault.md). Valores resolvidos são ocultados em retornos e erros;
+o módulo também deve evitar registrá-los por conta própria.

@@ -5,11 +5,16 @@ from pathlib import Path
 import re
 from urllib.parse import parse_qsl, urlsplit
 
+from util.vault_names import http_url_for_validation, validate_vault_names
+
 
 SCHEMA_VERSION = 1
 PUBLIC_KEY_PATTERN = re.compile(r"^[a-z0-9._-]+$")
 VARIABLE_KEY_PATTERN = re.compile(r"^[a-z0-9._-]+$")
 MATERIAL_ICON_PATTERN = re.compile(r"^[a-z0-9_]+$")
+JSON_RESPONSE_PATH_PATTERN = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$"
+)
 SUPPORTED_VARIABLE_TYPES = {"text"}
 SUPPORTED_HTTP_METHODS = {
     "GET",
@@ -93,6 +98,12 @@ class ManifestHttpScripts:
 
 
 @dataclass(frozen=True)
+class ManifestHttpResponseVault:
+    key: str
+    path: str
+
+
+@dataclass(frozen=True)
 class ManifestHttpRequest:
     method: str
     url: str
@@ -102,6 +113,7 @@ class ManifestHttpRequest:
     headers: tuple[ManifestHttpItem, ...]
     body: ManifestHttpBody
     scripts: ManifestHttpScripts
+    response_vault: ManifestHttpResponseVault | None
 
 
 @dataclass(frozen=True)
@@ -121,6 +133,7 @@ class ModuleManifest:
     is_executable: bool
     http_request: ManifestHttpRequest | None
     variables: tuple[ManifestVariable, ...]
+    vault_keys: tuple[str, ...] = ()
 
 
 def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
@@ -139,6 +152,10 @@ def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
     runtime_data = _required_field(data, "runtime")
     http_request_data = data.get("http_request")
     variables_data = _required_field(data, "variables")
+    try:
+        vault_keys = validate_vault_names(data.get("vault_keys", []))
+    except ValueError as error:
+        raise ManifestValidationError(str(error)) from None
 
     module_public_key = _required_string(module_data, "module_public_key")
     _validate_public_key(module_public_key, "module_public_key")
@@ -178,7 +195,7 @@ def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
         runtime_data,
         folder,
     )
-    http_request = _parse_http_request(http_request_data)
+    http_request = _parse_http_request(http_request_data, vault_keys)
     if runtime_type is not None and http_request is not None:
         raise ManifestValidationError(
             "Um módulo não pode declarar runtime Python e http_request simultaneamente nesta versão."
@@ -214,10 +231,14 @@ def parse_module_manifest(data: object, folder: Path) -> ModuleManifest:
         is_executable=is_executable,
         http_request=http_request,
         variables=variables,
+        vault_keys=vault_keys,
     )
 
 
-def _parse_http_request(http_request_data: object) -> ManifestHttpRequest | None:
+def _parse_http_request(
+    http_request_data: object,
+    vault_keys: tuple[str, ...],
+) -> ManifestHttpRequest | None:
     if http_request_data is None:
         return None
     if not isinstance(http_request_data, dict):
@@ -235,7 +256,7 @@ def _parse_http_request(http_request_data: object) -> ManifestHttpRequest | None
             "headers",
             "body",
             "scripts",
-        },
+        } | ({"response_vault"} if "response_vault" in http_request_data else set()),
         "http_request",
     )
 
@@ -246,7 +267,7 @@ def _parse_http_request(http_request_data: object) -> ManifestHttpRequest | None
         )
 
     url = _required_string(http_request_data, "url")
-    if not url.startswith(("http://", "https://")):
+    if not http_url_for_validation(url).startswith(("http://", "https://")):
         raise ManifestValidationError(
             "A URL HTTP deve começar com http:// ou https://."
         )
@@ -265,6 +286,9 @@ def _parse_http_request(http_request_data: object) -> ManifestHttpRequest | None
     )
     body = _parse_http_body(_required_field(http_request_data, "body"))
     scripts = _parse_http_scripts(_required_field(http_request_data, "scripts"))
+    response_vault = _parse_http_response_vault(
+        http_request_data.get("response_vault"), vault_keys,
+    )
     _validate_http_safety(url, params, headers, body)
 
     return ManifestHttpRequest(
@@ -276,7 +300,32 @@ def _parse_http_request(http_request_data: object) -> ManifestHttpRequest | None
         headers=headers,
         body=body,
         scripts=scripts,
+        response_vault=response_vault,
     )
+
+
+def _parse_http_response_vault(
+    value: object,
+    vault_keys: tuple[str, ...],
+) -> ManifestHttpResponseVault | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"key", "path"}:
+        raise ManifestValidationError(
+            "http_request.response_vault deve conter key e path."
+        )
+    key = value["key"]
+    path = value["path"]
+    if not isinstance(key, str) or key not in vault_keys:
+        raise ManifestValidationError(
+            "A Vault Key de destino da resposta deve estar declarada em vault_keys."
+        )
+    if (not isinstance(path, str) or len(path) > 200
+            or not JSON_RESPONSE_PATH_PATTERN.fullmatch(path)):
+        raise ManifestValidationError(
+            "O caminho JSON da resposta para o Vault é inválido."
+        )
+    return ManifestHttpResponseVault(key=key, path=path)
 
 
 def _parse_http_items(
@@ -404,30 +453,41 @@ def _validate_http_safety(
         for item in body.content:
             _reject_sensitive_http_item(item.key, item.value)
     else:
-        _reject_sensitive_http_content(body.content)
+        validate_non_sensitive_http_content(body.content)
 
 
 def _reject_sensitive_http_item(key: str, value: str) -> None:
+    if is_vault_placeholder_value(value):
+        return
     if SENSITIVE_HTTP_NAME_PATTERN.search(key) or SENSITIVE_HTTP_VALUE_PATTERN.search(value):
         raise ManifestValidationError(
             "O manifesto HTTP não pode conter token, senha, API key ou credencial."
         )
 
 
-def _reject_sensitive_http_content(content: str) -> None:
+def validate_non_sensitive_http_content(content: str) -> None:
+    # Apenas referências são persistidas; valores literais continuam proibidos.
+    sensitive_name = r"[\"']?(?:api[._\- ]*key|authorization|credential|password|secret|senha|token)[\"']?\s*[:=]"
+    content = re.sub(
+        "(?i:" + sensitive_name + r")\s*([\"']?)\{\{vk\.[A-Z_][A-Z0-9_]*\}\}\1(?=\s*(?:[,}\]&]|$))",
+        "", content,
+    )
     if SENSITIVE_HTTP_VALUE_PATTERN.search(content):
         raise ManifestValidationError(
             "O manifesto HTTP não pode conter token, senha, API key ou credencial."
         )
     if re.search(
-        r"[\"']?(?:api[._\- ]*key|authorization|credential|password|secret|senha|token)"
-        r"[\"']?\s*[:=]",
+        sensitive_name,
         content,
         re.IGNORECASE,
     ):
         raise ManifestValidationError(
             "O manifesto HTTP não pode conter token, senha, API key ou credencial."
         )
+
+
+def is_vault_placeholder_value(value: str) -> bool:
+    return bool(re.fullmatch(r"\{\{vk\.[A-Z_][A-Z0-9_]*\}\}", value))
 
 
 def _parse_runtime(

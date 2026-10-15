@@ -19,7 +19,14 @@
         "authorization": {
             "type": "none"
         },
-        "headers": [],
+        "headers": [
+            {
+                "key": "X-IRIS-Vault",
+                "value": "{{vk.TOKEN_NOTAS}}",
+                "description": "Token emitido pelo submódulo Login nas notas.",
+                "enabled": true
+            }
+        ],
         "body": {
             "mode": "none",
             "content": ""
@@ -29,5 +36,8 @@
             "post_response": ""
         }
     },
-    "variables": []
+    "variables": [],
+    "vault_keys": [
+        "TOKEN_NOTAS"
+    ]
 }

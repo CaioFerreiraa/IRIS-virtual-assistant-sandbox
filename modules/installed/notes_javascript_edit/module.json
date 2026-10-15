@@ -25,6 +25,12 @@
                 "value": "application/json",
                 "description": "Indica que o corpo contém JSON.",
                 "enabled": true
+            },
+            {
+                "key": "X-IRIS-Vault",
+                "value": "{{vk.TOKEN_NOTAS}}",
+                "description": "Token emitido pelo submódulo Login nas notas.",
+                "enabled": true
             }
         ],
         "body": {
@@ -36,5 +42,8 @@
             "post_response": ""
         }
     },
-    "variables": []
+    "variables": [],
+    "vault_keys": [
+        "TOKEN_NOTAS"
+    ]
 }

@@ -41,6 +41,7 @@ def validate_module_folder(
     *,
     check_runtime: bool = False,
 ) -> ValidatedModule:
+    """Valida também vault_keys pelo parser comum, sem acessar valores do Vault."""
     resolved_folder = folder.resolve()
     data: object = None
     try:

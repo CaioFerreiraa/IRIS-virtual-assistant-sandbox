@@ -3,7 +3,7 @@ from collections.abc import Callable, Mapping, Sequence
 import flet as ft
 import ui.home as ui
 
-from ui.theme.colors import PASTEL_BLUE, PASTEL_PURPLE, TEXT_PRIMARY, TEXT_SECONDARY
+from ui.theme.colors import PASTEL_BLUE, PASTEL_GREY_BLUE, PASTEL_PURPLE, TEXT_PRIMARY, TEXT_SECONDARY
 
 
 ArgumentOption = str | Mapping[str, object]
@@ -51,6 +51,37 @@ def build_argument_suggestion_controls(
     return [
         _build_argument_leaf(argument, on_select)
         for argument in sorted(arguments, key=lambda item: ui.text_utils.normalize(argument_label(item)))
+    ]
+
+
+def build_vault_key_suggestion_controls(
+    names: Sequence[str],
+    on_select: Callable[[str], None],
+) -> list[ft.Control]:
+    return [
+        ft.Container(
+            height=42,
+            padding=ft.Padding(left=12, top=0, right=12, bottom=0),
+            border_radius=12,
+            bgcolor=PASTEL_GREY_BLUE,
+            ink=True,
+            ink_color=PASTEL_BLUE,
+            on_click=lambda _, selected=name: on_select(selected),
+            content=ft.Row(
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Icon(ft.Icons.KEY_ROUNDED, size=18, color=PASTEL_PURPLE),
+                    ft.Text(
+                        f"{{{{vk.{name}}}}}",
+                        size=14,
+                        color=TEXT_PRIMARY,
+                        weight=ft.FontWeight.W_600,
+                    ),
+                ],
+            ),
+        )
+        for name in names
     ]
 
 

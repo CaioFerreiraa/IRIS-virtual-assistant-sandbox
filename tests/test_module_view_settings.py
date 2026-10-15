@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import flet as ft
 from sqlalchemy import create_engine
@@ -10,7 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 from database.db import Base, enable_sqlite_foreign_keys
 from database.models import Module, ModuleHttpRequest
-from services.module_service import get_module_detail
+from services.module_service import DEFAULT_MODULES_ROOT
+from services.module_service import get_module_detail, open_module_directory
 from ui.modules.views.module_view_state import ModuleViewState
 from ui.shared.components.result_card import MIN_RESULT_CARD_HEIGHT
 from ui.theme.colors import GREY_200, TEXT_PRIMARY
@@ -37,6 +38,7 @@ class ModuleViewSettingsTests(unittest.TestCase):
                 is_available=True,
                 request_method="GET",
                 request_url="https://example.com",
+                manifest_directory=self.temporary_directory.name,
             )
             db.add(module)
             db.commit()
@@ -115,12 +117,81 @@ class ModuleViewSettingsTests(unittest.TestCase):
         )
         self.assertEqual(MIN_RESULT_CARD_HEIGHT + 80, result_card.height)
 
-    def test_header_status_has_same_height_as_execute_button(self) -> None:
+    def test_header_status_and_folder_button_match_execute_height(self) -> None:
         state = self._build_state()
 
-        status_chip = state._build_header_trailing().controls[1]
+        trailing = state._build_header_trailing()
+        status_chip = trailing.controls[1]
+        folder_button = trailing.controls[2]
 
         self.assertEqual(state.execute_button.height, status_chip.height)
+        self.assertEqual(status_chip.height, folder_button.height)
+        self.assertEqual(folder_button.height, folder_button.width)
+        self.assertEqual(ft.Icons.FOLDER_OPEN_ROUNDED, folder_button.content.icon)
+        self.assertEqual("Abrir pasta do módulo", folder_button.tooltip)
+
+    def test_folder_button_opens_current_module_directory(self) -> None:
+        state = self._build_state()
+
+        with patch(
+            "ui.modules.views.module_view_state.open_module_directory"
+        ) as open_directory:
+            state.on_open_module_folder(SimpleNamespace())
+
+        open_directory.assert_called_once_with(self.temporary_directory.name)
+
+    def test_folder_button_uses_default_module_source_directory(self) -> None:
+        db = self.session_factory()
+        try:
+            module = Module(
+                module_public_key="test.default-source",
+                name="Fonte padrão",
+                call_name="fonte padrão",
+                readme_path=str(DEFAULT_MODULES_ROOT / "open" / "README.md"),
+            )
+            db.add(module)
+            db.commit()
+            module_id = module.id
+        finally:
+            db.close()
+
+        detail = get_module_detail(module_id, self.session_factory)
+        state = ModuleViewState(detail, None, self.session_factory)
+
+        with patch(
+            "ui.modules.views.module_view_state.open_module_directory"
+        ) as open_directory:
+            state.on_open_module_folder(SimpleNamespace())
+
+        open_directory.assert_called_once_with(
+            str((DEFAULT_MODULES_ROOT / "open").resolve())
+        )
+
+    def test_open_module_directory_uses_windows_explorer(self) -> None:
+        with patch("services.module_service.os.startfile") as startfile:
+            open_module_directory(self.temporary_directory.name)
+
+        startfile.assert_called_once_with(
+            str(Path(self.temporary_directory.name).resolve())
+        )
+
+    def test_folder_button_reports_missing_directory(self) -> None:
+        toaster = Mock()
+        detail = get_module_detail(self.module_id, self.session_factory)
+        detail["manifest_directory"] = ""
+        state = ModuleViewState(detail, toaster, self.session_factory)
+        detail["module_directory"] = ""
+
+        state.on_open_module_folder(SimpleNamespace())
+
+        toaster.show_error.assert_called_once_with(
+            "A pasta do módulo não foi encontrada.",
+            title="Módulo",
+        )
+
+    def test_open_module_directory_rejects_empty_path(self) -> None:
+        with self.assertRaisesRegex(ValueError, "pasta do módulo"):
+            open_module_directory("")
 
     def test_available_module_without_runtime_status_is_offline(self) -> None:
         with patch(
@@ -349,6 +420,31 @@ class ModuleViewSettingsTests(unittest.TestCase):
             self.assertTrue(request.is_customized)
         finally:
             db.close()
+
+    def test_http_response_vault_mapping_is_visible_and_editable(self) -> None:
+        self._add_http_request(argument_enabled=False, argument="")
+        with self.session_factory() as db:
+            db.query(Module).filter(Module.id == self.module_id).update(
+                {"vault_keys_json": '["TOKEN_NOTAS"]'}
+            )
+            request = db.query(ModuleHttpRequest).one()
+            request.response_vault_json = '{"key":"TOKEN_NOTAS","path":"data.token"}'
+            db.commit()
+
+        state = self._build_state()
+        state._build_execution_tab()
+        self.assertEqual("TOKEN_NOTAS", state.http_response_vault_key_field.value)
+        self.assertEqual("data.token", state.http_response_vault_path_field.value)
+        state.http_response_vault_path_field.value = "result.token"
+        state.on_execution_form_change()
+        self.assertTrue(state.execution_save_bar.is_visible)
+        state.on_save_execution(None)
+
+        with self.session_factory() as db:
+            self.assertEqual(
+                '{"key":"TOKEN_NOTAS","path":"result.token"}',
+                db.query(ModuleHttpRequest).one().response_vault_json,
+            )
 
     def test_http_parameter_rows_can_be_added_and_removed(self) -> None:
         self._add_http_request(argument_enabled=True, argument="Campinas")

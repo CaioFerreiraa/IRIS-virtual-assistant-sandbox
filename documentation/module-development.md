@@ -195,7 +195,9 @@ com a IRIS” é salva pelo usuário e só vale na próxima inicialização.
 O catálogo `notes.javascript` demonstra como um `start()` Python mínimo pode
 iniciar um backend Node.js separado. O runtime do manifesto permanece Python;
 não existe `runtime.type: "node"`. Os filhos HTTP continuam cadastrados pelo
-registry comum, sem migration ou seed específico.
+registry comum, sem migration ou seed específico. O filho Login nas notas é
+HTTP: usa referências às Vault Keys no body e mapeia o token JSON da resposta
+para `TOKEN_NOTAS`.
 
 ## Requisição HTTP opcional
 
@@ -230,6 +232,13 @@ O `module.json` fornece a definição inicial distribuível. Na aba “Execuçã
 
 Não combine runtime Python e `http_request` no mesmo módulo. Use Python para múltiplas requisições, regras complexas ou qualquer lógica personalizada. O `GET` legado persistido em `Module.request_method` continua abrindo uma URL no navegador e não é uma requisição HTTP declarativa.
 
+Opcionalmente, `http_request.response_vault` indica uma Vault Key de saída
+declarada pelo módulo e um caminho de campos JSON, por exemplo
+`{"key":"TOKEN_NOTAS","path":"data.token"}`. A chave deve existir e permitir
+alteração pela IRIS antes do envio. Só uma resposta HTTP bem-sucedida com
+string não vazia no caminho configurado atualiza a chave. O valor é ocultado
+do resultado e dos logs. Sem esse campo, a resposta não altera o Vault.
+
 ## `module.log`
 
 Cada pasta é descoberta isoladamente. A IRIS acrescenta informações a `module.log` quando ocorre falha de:
@@ -244,7 +253,10 @@ O arquivo inclui data e hora, etapa, tipo da exceção, mensagem e traceback. Er
 
 ## Dados proibidos nesta versão
 
-Não declare nem armazene senhas, tokens, logins, chaves de API, credenciais, dados privados, variáveis secretas ou valores criptografados. O Vault ainda não existe e texto no SQLite não é uma solução segura. Manifestações explícitas de variável secreta, privada ou criptografada são rejeitadas.
+Não declare valores de senhas, tokens ou chaves no manifesto, em `variables`,
+argumentos ou código. Use nomes em `vault_keys` e cadastre valores somente em
+Configurações → Vault Keys. Variáveis comuns secretas, privadas ou
+criptografadas continuam sendo rejeitadas.
 
 ## Como testar antes de distribuir
 
@@ -263,3 +275,75 @@ O exemplo Python mínimo está em
 [`modules/examples/minimal`](../modules/examples/minimal) e o exemplo HTTP em
 [`modules/examples/http_minimal`](../modules/examples/http_minimal). Eles não
 são descobertos nem instalados automaticamente.
+
+## Vault Keys para integrações
+
+O manifesto versão 1 recebe uma lista opcional raiz `vault_keys`, sem valores,
+descrição ou distinção obrigatório/opcional. Nomes são strings em maiúsculas,
+no padrão `^[A-Z_][A-Z0-9_]*$`, sem duplicados. Ausente equivale a `[]`.
+Templates Python já aceitam `vault=None`; módulos antigos continuam válidos.
+Validar ou sincronizar um módulo não cria chaves no Vault.
+
+Em Python, declare `"vault_keys": ["MINHA_CHAVE"]` e use:
+
+```python
+def execute(argument=None, variables=None, vault=None):
+    token = (vault or {}).get("MINHA_CHAVE")
+    if not token:
+        return {
+            "success": False,
+            "message": "Configure MINHA_CHAVE nas Vault Keys.",
+        }
+    # Use token somente na integração, sem imprimir ou devolver seu valor.
+    return {"success": True, "message": "Integração pronta para executar."}
+```
+
+Somente funções que aceitam `vault` ou `**kwargs` recebem chaves declaradas e
+existentes. Chaves ausentes não aparecem no dicionário. Não há alteração de
+`os.environ`, mistura com `variables`, entrega ao auto start ou cache global.
+
+Exemplo HTTP completo para uma pasta com `README.md`:
+
+```json
+{
+    "schema_version": 1,
+    "module": {
+        "module_public_key": "example.http.vault",
+        "name": "Exemplo HTTP",
+        "call_name": "exemplo http",
+        "parent_public_key": null,
+        "readme": "README.md"
+    },
+    "runtime": null,
+    "vault_keys": ["MINHA_CHAVE"],
+    "variables": [],
+    "http_request": {
+        "method": "POST",
+        "url": "https://api.example.com/items",
+        "argument_enabled": true,
+        "params": [],
+        "authorization": {"type": "none"},
+        "headers": [{"key": "X-API-Key", "value": "{{vk.MINHA_CHAVE}}", "description": "Referência ao Vault", "enabled": true}],
+        "body": {"mode": "raw_json", "content": "{\"text\":\"{{argument}}\"}"},
+        "scripts": {"pre_request": "", "post_response": ""}
+    }
+}
+```
+
+Placeholders são resolvidos somente nos campos textuais habilitados durante a
+execução. Toda referência usa o prefixo `vk.`, como `{{vk.MINHA_CHAVE}}`, e
+`{{argument}}` continua reservado. Nomes não declarados e chaves ausentes
+interrompem HTTP, sem enviar placeholders literais. Authorization permanece
+`none`; não há fluxo Bearer específico nem captura implícita de token. A
+captura de um campo JSON requer `response_vault` explícito.
+Teste ausência, chave incorreta, erros e resultados sem valor secreto.
+
+Nos campos de execução do módulo, digite `vk.` para listar as chaves declaradas
+e já cadastradas. A seleção insere a sintaxe completa. O mesmo autocomplete está
+disponível no campo de argumento. Uma referência ausente deixa o campo vermelho;
+`{{argument}}` recebe fundo azul acinzentado pastel.
+
+Veja o manifesto Python completo e o ciclo de vida em [Vault Keys](vault.md).
+Fernet protege o valor no banco, mas a chave está em um arquivo local:
+perdê-la impede a leitura. A proteção é básica para o MVP, sem garantia de
+segurança de produção; Windows Credential Manager fica para uma versão futura.
