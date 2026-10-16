@@ -144,8 +144,12 @@ Armazena uma variável global local. Campos: `id`, `name` obrigatório e único,
 booleano com padrão falso, `created_date` e `edited_date`. O nome é normalizado
 para maiúsculas e fica imutável após criar.
 
-O valor é criptografado com Fernet antes de persistir. A chave fica no arquivo
-local `.iris_vault.key`; perder esse arquivo impede a leitura dos valores.
+O valor continua criptografado com Fernet antes de persistir. Somente a chave
+mestra fica no Windows Credential Manager do usuário, com persistência local à
+máquina. O serviço migra `.iris_vault.key` sem recriptografar os dados e só remove
+o arquivo após validar a migração. Não há mudança no esquema nem nas migrations.
+Copiar apenas o banco para outro computador ou usuário não garante recuperar
+os valores; é necessário acesso à chave original.
 Não há coluna em texto puro nem tabela associativa. Módulos que usam uma chave
 são calculados por `Module.vault_keys_json`. Não há seed de Vault Keys.
 Veja as limitações de proteção básica do MVP em [Vault Keys](vault.md).

@@ -7,6 +7,7 @@ import shutil
 import socket
 import tempfile
 import unittest
+import httpx
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from unittest.mock import MagicMock, Mock, mock_open, patch
@@ -22,6 +23,7 @@ from services.module_loader import load_python_entrypoint
 from services.module_manifest import parse_module_manifest
 from services.module_registry_service import ModuleRegistryService
 from services.vault_service import VaultService
+from tests.vault_test_utils import MemoryKeyStore
 from tests.module_test_utils import copy_manifest_modules
 from services.module_runtime_service import ModuleRuntimeManager
 from services.module_service import get_module_detail
@@ -72,6 +74,46 @@ class NotesManifestAndRegistryTests(unittest.TestCase):
             self.installed_root,
             self.session_factory,
         )
+
+    def test_vault_login_and_crud_after_migration_without_network(self) -> None:
+        self.registry.sync()
+        key_store = MemoryKeyStore()
+        key_path = Path(self.temporary_directory.name) / '.iris_vault.key'
+        vault = VaultService(self.session_factory, key_path, key_store=key_store)
+        vault.create('LOGIN_NOTAS', 'demo-login')
+        vault.create('SENHA_NOTAS', 'demo-password')
+        vault.create('TOKEN_NOTAS', None, allow_iris_update=True)
+        # Reproduz a instalação anterior sem consultar nenhuma credencial real.
+        key_path.write_text(key_store.key, encoding='ascii')
+        key_store.key = None
+        token = 'demo-issued-token'
+        responses = [
+            httpx.Response(200, json={'data': {'token': token}}),
+            httpx.Response(201, json={'data': {'id': 1}}),
+            httpx.Response(200, json={'data': {'id': 1}}),
+            httpx.Response(200, json={'data': {'id': 1}}),
+        ]
+        with self.session_factory() as db:
+            modules = {module.module_public_key: module.id for module in db.query(Module)}
+            processor = CommandProcessor(ModuleRepository(db), self.session_factory, vault)
+            with patch('services.http_service.httpx.request', side_effect=responses) as request:
+                login = processor.execute_module_id(modules['notes.javascript.login'])
+                self.assertEqual({'login': 'demo-login', 'password': 'demo-password'},
+                                 request.call_args.kwargs['json'])
+                self.assertEqual(token, vault.get_value('TOKEN_NOTAS'))
+                self.assertFalse(key_path.exists())
+                self.assertNotIn(token, json.dumps(login))
+                for action, method, argument in (
+                    ('create', 'POST', 'Texto'), ('edit', 'PUT', '1'), ('delete', 'DELETE', '1'),
+                ):
+                    result = processor.execute_module_id(modules[f'notes.javascript.{action}'], argument)
+                    self.assertTrue(result['success'])
+                    self.assertEqual(method, request.call_args.args[0])
+                    self.assertEqual(token, request.call_args.kwargs['headers']['X-IRIS-Vault'])
+                self.assertEqual(4, request.call_count)
+            logs = str([log.message for log in db.query(Log)])
+            for secret in ('demo-login', 'demo-password', token):
+                self.assertNotIn(secret, logs)
 
     def test_all_six_manifests_are_valid(self) -> None:
         manifests = []
@@ -556,7 +598,8 @@ class NotesNodeServerIntegrationTests(unittest.TestCase):
             request.url = request.url.replace(":8765", f":{self.port}")
         db.commit()
 
-        vault = VaultService(session_factory, Path(temporary_directory.name) / ".iris_vault.key")
+        vault = VaultService(session_factory, Path(temporary_directory.name) / ".iris_vault.key",
+                             key_store=MemoryKeyStore())
         vault.create("login_notas", "admin")
         vault.create("senha_notas", "admin")
         vault.create("token_notas", None, allow_iris_update=True)

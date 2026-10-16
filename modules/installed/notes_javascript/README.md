@@ -75,7 +75,12 @@ token retornado apenas quando `TOKEN_NOTAS` existe e permite alteração pela
 IRIS. O token é renovado a cada login e deixa de funcionar após reiniciar o
 backend, até executar novo login.
 
-O valor fica criptografado no SQLite com Fernet. A chave fica no arquivo local
-`.iris_vault.key`: perdê-lo impede a leitura dos valores existentes. A proteção
-é básica para o MVP e não é segurança de produção. Windows Credential Manager
-ficará para uma versão futura.
+O valor continua criptografado no SQLite com Fernet. Somente a chave mestra
+fica no Windows Credential Manager do usuário que executa a IRIS, com
+persistência local à máquina. O arquivo legado `.iris_vault.key` é removido
+somente após migração validada, sem alterar os valores criptografados.
+Copiar apenas o banco para outro computador ou usuário não garante recuperar
+os valores. Essa proteção não isola segredos de código malicioso executado
+pelo mesmo usuário. O módulo continua usando os placeholders e `response_vault`
+atuais, sem acessar diretamente o Credential Manager. Veja
+[Vault Keys](../../../documentation/vault.md).

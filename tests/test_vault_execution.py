@@ -10,10 +10,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from core.command_processor import CommandProcessor
 from core.module_runner import ModuleRunner
+from core.routine_executor import RoutineExecutor
 from database.db import Base
-from database.models import Log, Module, ModuleHttpRequest, Routine
+from database.models import Log, Module, ModuleHttpRequest, Routine, RoutineAction
 from repositories.module_repository import ModuleRepository
 from services.vault_service import VaultService
+from tests.vault_test_utils import MemoryKeyStore
 
 
 def item(key, value, enabled=True):
@@ -29,7 +31,8 @@ class VaultExecutionTests(unittest.TestCase):
         self.addCleanup(self.engine.dispose)
         Base.metadata.create_all(self.engine)
         self.factory = sessionmaker(bind=self.engine)
-        self.vault = VaultService(self.factory, self.root / '.iris_vault.key')
+        self.key_store = MemoryKeyStore()
+        self.vault = VaultService(self.factory, self.root / '.iris_vault.key', key_store=self.key_store)
         self.secret = 'demo-private-value'
         self.vault.create('KEY', self.secret)
         self.vault.create('OTHER', 'other-demo-value')
@@ -419,3 +422,30 @@ class VaultExecutionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'com falha'):
                 self.execute(module_id)
         self.assertEqual(self.secret, self.vault.get_value('KEY'))
+
+
+    def test_routine_executor_uses_same_vault_and_reports_unavailable_credential(self):
+        module_id = self.create_http(headers=[item('Authorization', '{{vk.KEY}}')])
+        with self.factory() as db:
+            routine = Routine(name='Rotina Vault')
+            db.add(routine)
+            db.flush()
+            db.add(RoutineAction(routine_id=routine.id, module_id=module_id, argument='etapa'))
+            db.commit()
+            routine_id = routine.id
+        executor = RoutineExecutor(self.factory, processor_factory=lambda db:
+            CommandProcessor(ModuleRepository(db), self.factory, self.vault))
+        with patch('services.http_service.httpx.request', return_value=self.response()) as request:
+            result = executor.execute(routine_id)
+            self.assertEqual('success', result['status'])
+            self.assertEqual(self.secret, request.call_args.kwargs['headers']['Authorization'])
+            self.key_store.key = None
+            result = executor.execute(routine_id)
+            self.assertEqual('error', result['status'])
+            self.assertEqual(1, request.call_count)
+        self.assertNotIn(self.secret, str(result))
+        with self.factory() as db:
+            logs = db.query(Log).filter_by(routine_id=routine_id).all()
+            self.assertEqual(['success', 'error'], [log.status for log in logs])
+            self.assertIn('indisponível', logs[-1].message)
+            self.assertNotIn(self.secret, str([log.message for log in logs]))

@@ -375,8 +375,11 @@ A rota do módulo também agrega falhas técnicas dos submódulos na aba “Erro
 ## Vault Keys no MVP
 
 `VaultService` criptografa valores com Fernet e usa `VaultRepository` para
-acessar a tabela `vault_keys`. A chave Fernet fica em `.iris_vault.key` na raiz;
-é proteção local básica, sem garantia de segurança de produção. Não há nova
+acessar a tabela `vault_keys`. Somente a chave mestra Fernet fica no Windows
+Credential Manager do usuário, por uma instância explícita de `WinVaultKeyring`
+com persistência local à máquina. O arquivo legado `.iris_vault.key` é removido
+apenas após migração validada, sem alterar os valores criptografados. A proteção
+não isola código executado pelo mesmo usuário do Windows. Não há nova
 API de autenticação, providers ou relação N:N. As declarações ficam em
 `Module.vault_keys_json`.
 

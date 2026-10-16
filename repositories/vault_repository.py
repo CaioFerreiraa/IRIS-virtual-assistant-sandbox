@@ -30,6 +30,11 @@ class VaultRepository:
             VaultKey.encrypted_value.is_not(None)
         ).first() is not None
 
+    def list_encrypted_values(self) -> list[str]:
+        return [row.encrypted_value for row in self.db.query(VaultKey.encrypted_value).filter(
+            VaultKey.encrypted_value.is_not(None)
+        ).all()]
+
     def modules_using(self, name: str) -> list[dict[str, object]]:
         rows = self.db.query(Module.id, Module.name, Module.vault_keys_json).order_by(Module.name, Module.id).all()
         return [{"id": row.id, "name": row.name} for row in rows if name in load_vault_names(row.vault_keys_json)]

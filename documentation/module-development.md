@@ -344,6 +344,9 @@ disponível no campo de argumento. Uma referência ausente deixa o campo vermelh
 `{{argument}}` recebe fundo azul acinzentado pastel.
 
 Veja o manifesto Python completo e o ciclo de vida em [Vault Keys](vault.md).
-Fernet protege o valor no banco, mas a chave está em um arquivo local:
-perdê-la impede a leitura. A proteção é básica para o MVP, sem garantia de
-segurança de produção; Windows Credential Manager fica para uma versão futura.
+Fernet protege os valores no SQLite, e somente a chave mestra fica no Windows
+Credential Manager do usuário, com persistência local à máquina. O arquivo
+legado só é removido após migração validada. Copiar apenas o banco para outro
+computador ou usuário não garante recuperar os valores. Essa proteção não
+isola segredos de código malicioso executado no contexto do mesmo usuário.
+Módulos continuam usando os contratos acima, sem acessar o Credential Manager.

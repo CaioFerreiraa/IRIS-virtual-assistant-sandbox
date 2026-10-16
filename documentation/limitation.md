@@ -176,11 +176,15 @@ proibidas nos argumentos enquanto o Vault não estiver implementado.
 
 ## Credenciais
 
-O conceito BYOK faz parte da proposta, mas o cofre seguro ainda não está implementado.
+As Vault Keys usam Fernet no SQLite e guardam somente a chave mestra no Windows
+Credential Manager. O acesso depende do usuário do Windows; copiar apenas o
+banco para outro usuário ou computador não garante recuperar os valores.
+Não há isolamento contra código malicioso executado pelo mesmo usuário.
+A migração do arquivo legado só o remove após validação. Veja [Vault Keys](vault.md).
 
-Enquanto não houver armazenamento protegido:
+Regras atuais:
 
-- credenciais não devem ser inseridas no banco;
+- credenciais devem ser cadastradas nas Vault Keys, nunca em texto puro no banco;
 - segredos não devem ser incluídos no repositório;
 - tokens não devem aparecer em logs;
 - testes devem usar valores falsos.
@@ -193,7 +197,7 @@ Antes de oferecer instalação comunitária, a IRIS precisará definir mecanismo
 
 A versão atual não deve ser considerada uma sandbox de segurança para código desconhecido.
 
-O registry isola exceções Python durante descoberta e inicialização, mas isso não isola acesso a arquivos, rede ou recursos do sistema. A versão 1 também não possui Vault: variáveis secretas, tokens, senhas, logins e credenciais são incompatíveis e não podem ser persistidos nas configurações dos módulos.
+O registry isola exceções Python durante descoberta e inicialização, mas isso não isola acesso a arquivos, rede ou recursos do sistema. Variáveis secretas, tokens, senhas, logins e credenciais não podem ser persistidos nas configurações de texto dos módulos; use referências a Vault Keys declaradas.
 
 Auto start está disponível apenas para runtimes Python raiz que fornecem `start()`. O encerramento automático de processo externo depende de `start()` devolver o handle do processo criado pela própria IRIS.
 

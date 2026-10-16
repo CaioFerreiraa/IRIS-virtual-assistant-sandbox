@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database.db import Base
 from services.vault_service import VaultService
+from tests.vault_test_utils import MemoryKeyStore
 from ui.settings.vault_keys_tab import MASKED_VALUE_MARKER, VaultKeysTab
 from ui.settings.view import SETTINGS_TABS, SettingsViewState
 from ui.theme.colors import GREY_200, TEXT_PRIMARY
@@ -21,7 +22,8 @@ class VaultKeysTabTests(unittest.TestCase):
         engine = create_engine(f"sqlite:///{root / 'ui.db'}")
         self.addCleanup(engine.dispose)
         Base.metadata.create_all(engine)
-        self.vault = VaultService(sessionmaker(bind=engine), root / '.iris_vault.key')
+        self.vault = VaultService(sessionmaker(bind=engine), root / '.iris_vault.key',
+                                  key_store=MemoryKeyStore())
         self.toaster = Mock()
         self.tab = VaultKeysTab(self.toaster, self.vault)
         self.page = SimpleNamespace(overlay=[], update=Mock())
