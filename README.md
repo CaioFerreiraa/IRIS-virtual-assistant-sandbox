@@ -92,7 +92,6 @@ e também pode ser consultada pela tela Documentação da aplicação.
 
 ## Licença
 
-<!-- Decisão pendente do mantenedor: escolher e publicar a licença do projeto. -->
+A IRIS é um projeto de código aberto distribuído sob a licença MIT. É permitida a utilização, modificação e redistribuição do software, inclusive para fins comerciais, desde que sejam mantidos os avisos de direitos autorais e as condições da licença.
 
-A licença do projeto ainda não foi definida. Essa decisão é necessária antes
-de uma distribuição open source oficial.
+Consulte o arquivo [LICENSE](LICENSE) para mais informações.
